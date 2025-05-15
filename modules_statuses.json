@@ -1,0 +1,13 @@
+{
+    "Institution": true,
+    "Jury": true,
+    "Partners": true,
+    "RegistrationDesk": true,
+    "Reports": true,
+    "Secretary": true,
+    "Student": true,
+    "Teacher": true,
+    "Setting": true,
+    "Upload": true,
+    "User": true
+}
