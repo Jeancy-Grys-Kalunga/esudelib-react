@@ -1,0 +1,11 @@
+{
+    "name": "Jury",
+    "alias": "jury",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Jury\\Providers\\JuryServiceProvider"
+    ],
+    "files": []
+}

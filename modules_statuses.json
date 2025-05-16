@@ -9,5 +9,6 @@
     "Teacher": true,
     "Setting": true,
     "Upload": true,
-    "User": true
+    "User": true,
+    "Currency": true
 }
