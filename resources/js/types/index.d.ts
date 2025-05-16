@@ -1,6 +1,7 @@
-import { LucideIcon } from 'lucide-react';
+import { type LucideIcon } from 'lucide-react';
 import type { Config } from 'ziggy-js';
 
+// Types existants inchangés
 export interface Auth {
     user: User;
 }
@@ -8,18 +9,6 @@ export interface Auth {
 export interface BreadcrumbItem {
     title: string;
     href: string;
-}
-
-export interface NavGroup {
-    title: string;
-    items: NavItem[];
-}
-
-export interface NavItem {
-    title: string;
-    href: string;
-    icon?: LucideIcon | null;
-    isActive?: boolean;
 }
 
 export interface SharedData {
@@ -39,5 +28,36 @@ export interface User {
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;
-    [key: string]: unknown; // This allows for additional properties...
+    [key: string]: unknown;
+}
+
+// Nouveaux types pour la navigation
+export interface NavItem {
+  title: string;
+  href?: string;
+  icon?: LucideIcon;
+  items?: NavItem[];
+  permission?: string | string[];
+  isActive?: boolean;
+  color?: string;
+  isGrouped?: boolean;
+}
+
+export interface NavGroup {
+  groupTitle: string;
+  icon?: LucideIcon;
+  color?: string;
+  permission?: string | string[];
+  isActive?: boolean;
+  items: NavItem[];
+}
+
+export interface GroupedNavItem {
+  groupTitle: string;
+  items: NavItem[];
+  icon?: LucideIcon;
+  color?: string;
+  permission?: string | string[];
+  isActive?: boolean;
+  isGrouped?: boolean;
 }

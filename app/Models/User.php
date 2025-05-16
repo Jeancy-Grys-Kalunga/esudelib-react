@@ -13,6 +13,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\File;
 use Spatie\Permission\Traits\HasRoles;
 use Modules\Teacher\Entities\Teacher;
+use Spatie\Permission\Models\Permission;
 
 class User extends Authenticatable implements HasMedia
 {
@@ -73,5 +74,14 @@ class User extends Authenticatable implements HasMedia
     public function teacher()
     {
         return $this->belongsToMany(Teacher::class);
+    }
+
+    public function getAllPermissionsWithFallback()
+    {
+        if ($this->hasRole('Super Admin')) {
+            return Permission::all()->pluck('name');
+        }
+
+        return $this->getAllPermissions()->pluck('name');
     }
 }
