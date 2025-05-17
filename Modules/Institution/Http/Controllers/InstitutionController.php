@@ -11,6 +11,7 @@ use Modules\Institution\Http\Requests\InstitutionRequest;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
+use Spatie\Permission\Models\Permission;
 
 class InstitutionController extends Controller
 {
@@ -19,27 +20,34 @@ class InstitutionController extends Controller
      */
     public function index()
     {
-      
-        if (!auth()->check()) {
-        abort(403, 'Non authentifié');
-    }
+        if (!auth()->user()->hasPermissionTo('access_institutions')) {
+            abort(403, 'Action non autorisée');
+        }
 
-    $user = auth()->user();
-    $permissions = $user->getAllPermissionsWithFallback()->toArray();
+        $user = auth()->user();
+        
+        // Chargement explicite des relations de permissions
+        $user->load('permissions', 'roles.permissions');
+        
+        // Récupération des permissions avec fallback pour Super Admin
+        $permissions = $user->hasRole('Super Admin') 
+            ? Permission::pluck('name')->toArray() 
+            : $user->getAllPermissions()->pluck('name')->toArray();
 
-    // Liste des permissions à vérifier
-    $requiredPermissions = [
-        'create' => 'create_institutions',
-        'edit' => 'edit_institutions',
-        'delete' => 'delete_institutions'
-    ];
+        // Liste des permissions à vérifier
+        $requiredPermissions = [
+            'create' => 'create_institutions',
+            'edit' => 'edit_institutions',
+            'delete' => 'delete_institutions',
+            'access' => 'access_institutions'
+        ];
 
-    // Génération dynamique du tableau can
-    $can = array_map(
-        fn($permission) => in_array($permission, $permissions),
-        $requiredPermissions
-    );
-    
+        // Génération dynamique du tableau can
+        $can = array_map(
+            fn($permission) => in_array($permission, $permissions),
+            $requiredPermissions
+        );
+        
         return Inertia::render('institution/index', [
             'institutions' => Institution::orderBy('id', 'desc')
                 ->get()
@@ -54,22 +62,24 @@ class InstitutionController extends Controller
                         'created_at' => $institution->created_at ? $institution->created_at->format('d/m/Y') : null,
                     ];
                 }),
-           'can' => $can,
-        'permissions' => $permissions,
-            'flash' => [
+            'can' => $can,
+            'permissions' => $permissions,
+             'flash' => [
                 'message' => session('flash.message'),
                 'type' => session('flash.type')
             ]
         ]);
     }
 
-
     /**
      * Store a newly created resource in storage.
      */
     public function store(InstitutionRequest $request)
     {
-        // abort_if(Gate::denies('create_institutions'), 403);
+        // Vérification de permission avec Gate et fallback
+        if (!auth()->user()->hasPermissionTo('create_institutions')) {
+            abort(403, 'Action non autorisée');
+        }
 
         $institution = Institution::create($request->validated());
 
@@ -92,7 +102,10 @@ class InstitutionController extends Controller
      */
     public function update(InstitutionRequest $request, Institution $institution)
     {
-        // abort_if(Gate::denies('edit_institutions'), 403);
+        // Vérification de permission avec Gate et fallback
+        if (!auth()->user()->hasPermissionTo('edit_institutions')) {
+            abort(403, 'Action non autorisée');
+        }
 
         $institution->update($request->validated());
 
@@ -127,7 +140,10 @@ class InstitutionController extends Controller
      */
     public function destroy(Institution $institution)
     {
-        abort_if(Gate::denies('delete_institutions'), 403);
+        // Vérification de permission avec Gate et fallback
+        if (!auth()->user()->hasPermissionTo('delete_institutions')) {
+            abort(403, 'Action non autorisée');
+        }
 
         $institution->delete();
 
@@ -141,6 +157,15 @@ class InstitutionController extends Controller
 
     public function importDataToExcel(Request $request)
     {
+        // Vérification de permission avec Gate et fallback
+        if (!auth()->user()->hasPermissionTo('create_institutions')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $request->validate([
+            'excel_file' => 'required|file|mimes:xls,xlsx'
+        ]);
+
         Excel::import(new InstitutionImport, $request->file('excel_file'));
 
         return redirect()->route('institutions.index')->with([

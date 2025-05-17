@@ -84,4 +84,23 @@ class User extends Authenticatable implements HasMedia
 
         return $this->getAllPermissions()->pluck('name');
     }
+
+ 
+    public function getAllPermissions()
+    {
+        if (!$this->relationLoaded('permissions') || !$this->relationLoaded('roles')) {
+            $this->load('permissions', 'roles.permissions');
+        }
+
+        return parent::getAllPermissions();
+    }
+
+    public function hasPermissionTo($permission, $guardName = null)
+    {
+        if ($this->hasRole('Super Admin')) {
+            return true;
+        }
+
+        return parent::hasPermissionTo($permission, $guardName);
+    }
 }

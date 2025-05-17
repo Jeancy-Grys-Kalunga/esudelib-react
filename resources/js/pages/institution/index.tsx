@@ -1,7 +1,7 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { Trash2, Edit, Plus, Upload, X, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Trash2, Edit, Plus, Upload, X, Image as ImageIcon, Loader2, Search } from 'lucide-react';
 import Dropzone from 'react-dropzone';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogFooter,
+    DialogDescription,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 
@@ -35,7 +36,16 @@ interface Institution {
 }
 
 interface PageProps {
-    institutions: Institution[];
+    institutions: {
+        data: Institution[];
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        total: number;
+        from: number;
+        to: number;
+        links: Array<{ url: string | null; label: string; active: boolean }>;
+    };
     can: {
         create: boolean;
         edit: boolean;
@@ -46,14 +56,20 @@ interface PageProps {
         type: 'success' | 'error' | 'warning' | 'info';
         message: string;
     };
+    filters?: {
+        search?: string;
+    };
 }
 
-export default function InstitutionIndex({ institutions, can, permissions, flash }: PageProps) {
+export default function InstitutionIndex({ institutions, can, permissions, flash, filters }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentInstitution, setCurrentInstitution] = useState<Institution | null>(null);
     const [files, setFiles] = useState<File[]>([]);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [importFile, setImportFile] = useState<File | null>(null);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [institutionToDelete, setInstitutionToDelete] = useState<number | null>(null);
+    const [searchTerm, setSearchTerm] = useState(filters?.search || '');
 
     const { data, setData, post, put, processing, errors, reset } = useForm({
         name: '',
@@ -61,6 +77,7 @@ export default function InstitutionIndex({ institutions, can, permissions, flash
         address: '',
         description: '',
         document: [] as string[],
+        search: filters?.search || '',
     });
 
     // Vérification des permissions
@@ -96,6 +113,7 @@ export default function InstitutionIndex({ institutions, can, permissions, flash
                 address: currentInstitution.address || '',
                 description: currentInstitution.description || '',
                 document: [],
+                search: searchTerm,
             });
         } else {
             reset();
@@ -148,9 +166,27 @@ export default function InstitutionIndex({ institutions, can, permissions, flash
             return;
         }
 
-        if (confirm('Êtes-vous sûr de vouloir supprimer cette institution ?')) {
-            router.delete(route('institutions.destroy', id));
-        }
+        setInstitutionToDelete(id);
+        setIsDeleteModalOpen(true);
+    };
+
+    const confirmDelete = () => {
+        if (!institutionToDelete) return;
+        
+        router.delete(route('institutions.destroy', institutionToDelete), {
+            onSuccess: () => {
+                setIsDeleteModalOpen(false);
+                setInstitutionToDelete(null);
+            }
+        });
+    };
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        router.get(route('institutions.index'), { search: searchTerm }, {
+            preserveState: true,
+            replace: true,
+        });
     };
 
     const handleImportSubmit = (e: React.FormEvent) => {
@@ -215,74 +251,129 @@ export default function InstitutionIndex({ institutions, can, permissions, flash
                     </div>
                 </div>
 
+                {/* Barre de recherche */}
+                <div className="mb-6">
+                    <form onSubmit={handleSearch} className="flex gap-2">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                                type="search"
+                                placeholder="Rechercher par nom, téléphone ou adresse..."
+                                className="pl-10"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <Button type="submit" variant="secondary">
+                            Rechercher
+                        </Button>
+                        {searchTerm && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    router.get(route('institutions.index'));
+                                }}
+                            >
+                                Réinitialiser
+                            </Button>
+                        )}
+                    </form>
+                </div>
+
                 <div className="bg-white rounded-lg shadow overflow-hidden">
-                    {institutions.length > 0 ? (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Image</TableHead>
-                                    <TableHead>Nom</TableHead>
-                                    <TableHead>Téléphone</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>Adresse</TableHead>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {institutions.map((institution) => (
-                                    <TableRow key={institution.id}>
-                                        <TableCell>
-                                            {institution.image ? (
-                                                <img 
-                                                    src={institution.image} 
-                                                    alt={institution.name}
-                                                    className="w-12 h-12 rounded-md object-cover"
-                                                />
-                                            ) : (
-                                                <div className="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center">
-                                                    <ImageIcon className="w-5 h-5 text-gray-400" />
-                                                </div>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>{institution.name}</TableCell>
-                                        <TableCell>{institution.phone}</TableCell>
-                                        <TableCell className="max-w-xs truncate">
-                                            {institution.description || 'N/A'}
-                                        </TableCell>
-                                        <TableCell className="max-w-xs truncate">
-                                            {institution.address || 'N/A'}
-                                        </TableCell>
-                                        <TableCell>{institution.created_at}</TableCell>
-                                        <TableCell>
-                                            <div className="flex gap-2">
-                                                {can.edit && (
-                                                    <Button
-                                                        variant="outline"
-                                                        size="icon"
-                                                        onClick={() => openModal(institution)}
-                                                    >
-                                                        <Edit className="w-4 h-4" />
-                                                    </Button>
-                                                )}
-                                                {can.delete && (
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="icon"
-                                                        onClick={() => handleDelete(institution.id)}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </TableCell>
+                    {institutions.data.length > 0 ? (
+                        <>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Image</TableHead>
+                                        <TableHead>Nom</TableHead>
+                                        <TableHead>Téléphone</TableHead>
+                                        <TableHead>Description</TableHead>
+                                        <TableHead>Adresse</TableHead>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Actions</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {institutions.data.map((institution) => (
+                                        <TableRow key={institution.id}>
+                                            <TableCell>
+                                                {institution.image ? (
+                                                    <img 
+                                                        src={institution.image} 
+                                                        alt={institution.name}
+                                                        className="w-12 h-12 rounded-md object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center">
+                                                        <ImageIcon className="w-5 h-5 text-gray-400" />
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>{institution.name}</TableCell>
+                                            <TableCell>{institution.phone}</TableCell>
+                                            <TableCell className="max-w-xs truncate">
+                                                {institution.description || 'N/A'}
+                                            </TableCell>
+                                            <TableCell className="max-w-xs truncate">
+                                                {institution.address || 'N/A'}
+                                            </TableCell>
+                                            <TableCell>{new Date(institution.created_at).toLocaleDateString()}</TableCell>
+                                            <TableCell>
+                                                <div className="flex gap-2">
+                                                    {can.edit && (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            onClick={() => openModal(institution)}
+                                                        >
+                                                            <Edit className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
+                                                    {can.delete && (
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="icon"
+                                                            onClick={() => handleDelete(institution.id)}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+
+                            {/* Pagination */}
+                            <div className="flex items-center justify-between px-4 py-3 border-t">
+                                <div className="text-sm text-gray-500">
+                                    Affichage de {institutions.from} à {institutions.to} sur {institutions.total} institutions
+                                </div>
+                                <div className="flex gap-1">
+                                    {institutions.links.map((link, index) => (
+                                        <Button
+                                            key={index}
+                                            variant={link.active ? "default" : "outline"}
+                                            size="sm"
+                                            disabled={!link.url}
+                                            onClick={() => link.url && router.get(link.url)}
+                                        >
+                                            {index === 0 ? '« Précédent' : 
+                                             index === institutions.links.length - 1 ? 'Suivant »' : 
+                                             link.label}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
                     ) : (
                         <div className="p-8 text-center text-gray-500">
-                            Aucune institution enregistrée. {can.create && "Veuillez en créer une nouvelle."}
+                            Aucune institution trouvée. {can.create && "Veuillez en créer une nouvelle."}
                         </div>
                     )}
                 </div>
@@ -439,6 +530,32 @@ export default function InstitutionIndex({ institutions, can, permissions, flash
                                 </Button>
                             </DialogFooter>
                         </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal pour la confirmation de suppression */}
+                <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle>Êtes-vous absolument sûr ?</DialogTitle>
+                            <DialogDescription>
+                                Cette action ne peut pas être annulée. Cela supprimera définitivement l'institution et toutes ses données associées.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setIsDeleteModalOpen(false)}
+                            >
+                                Annuler
+                            </Button>
+                            <Button 
+                                variant="destructive"
+                                onClick={confirmDelete}
+                            >
+                                Supprimer
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
 
