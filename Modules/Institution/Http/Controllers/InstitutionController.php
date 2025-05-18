@@ -4,6 +4,7 @@ namespace Modules\Institution\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Imports\InstitutionImport;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Http\Request;
 use Modules\Institution\Entities\Institution;
@@ -12,117 +13,112 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use Spatie\Permission\Models\Permission;
+use Illuminate\Support\Facades\Validator;
 
 class InstitutionController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function index(Request $request)
     {
         if (!auth()->user()->hasPermissionTo('access_institutions')) {
             abort(403, 'Action non autorisée');
         }
 
         $user = auth()->user();
-        
-        // Chargement explicite des relations de permissions
         $user->load('permissions', 'roles.permissions');
-        
-        // Récupération des permissions avec fallback pour Super Admin
-        $permissions = $user->hasRole('Super Admin') 
-            ? Permission::pluck('name')->toArray() 
+
+        $permissions = $user->hasRole('Super Admin')
+            ? Permission::pluck('name')->toArray()
             : $user->getAllPermissions()->pluck('name')->toArray();
 
-        // Liste des permissions à vérifier
         $requiredPermissions = [
             'create' => 'create_institutions',
             'edit' => 'edit_institutions',
             'delete' => 'delete_institutions',
-            'access' => 'access_institutions'
+            'access' => 'access_institutions',
+            'import' => 'create_institutions'
         ];
 
-        // Génération dynamique du tableau can
         $can = array_map(
             fn($permission) => in_array($permission, $permissions),
             $requiredPermissions
         );
-        
+
+        // Récupérer TOUTES les institutions (pour la recherche côté client)
+        $allInstitutions = Institution::orderBy('created_at', 'desc')->get()
+            ->map(function ($institution) {
+                return [
+                    'id' => $institution->id,
+                    'name' => $institution->name,
+                    'phone' => $institution->phone,
+                    'address' => $institution->address,
+                    'description' => $institution->description,
+                    'image' => $institution->getFirstMediaUrl('images', 'thumb') ?: null,
+                    'created_at' => Carbon::parse($institution->created_at)->translatedFormat('d F Y'),
+                    'active' => $institution->active ?? true
+                ];
+            });
+
         return Inertia::render('institution/index', [
-            'institutions' => Institution::orderBy('id', 'desc')
-                ->get()
-                ->map(function ($institution) {
-                    return [
-                        'id' => $institution->id,
-                        'name' => $institution->name,
-                        'phone' => $institution->phone,
-                        'address' => $institution->address,
-                        'description' => $institution->description,
-                        'image' => $institution->getFirstMediaUrl('images', 'thumb') ?: null,
-                        'created_at' => $institution->created_at ? $institution->created_at->format('d/m/Y') : null,
-                    ];
-                }),
+            'allInstitutions' => $allInstitutions,
+            'paginatedInstitutions' => $allInstitutions->take(10), // Pour compatibilité initiale
             'can' => $can,
             'permissions' => $permissions,
-             'flash' => [
+            'filters' => $request->only(['search']),
+            'flash' => [
                 'message' => session('flash.message'),
                 'type' => session('flash.type')
             ]
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(InstitutionRequest $request)
     {
-        // Vérification de permission avec Gate et fallback
         if (!auth()->user()->hasPermissionTo('create_institutions')) {
             abort(403, 'Action non autorisée');
         }
 
         $institution = Institution::create($request->validated());
 
+        // Gestion des fichiers uploadés
         if ($request->has('document')) {
             foreach ($request->input('document', []) as $file) {
-                $institution->addMedia(Storage::path('temp/dropzone/' . $file))->toMediaCollection('images');
+                $institution->addMedia(storage_path('app/public/temp/dropzone/' . $file))
+                    ->toMediaCollection('images');
             }
         }
 
         return redirect()->route('institutions.index')->with([
             'flash' => [
                 'type' => 'success',
-                'message' => 'Institution enregistrée avec succès !'
+                'message' => '🏆 Institution créée avec succès !'
             ]
         ]);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(InstitutionRequest $request, Institution $institution)
     {
-        // Vérification de permission avec Gate et fallback
         if (!auth()->user()->hasPermissionTo('edit_institutions')) {
             abort(403, 'Action non autorisée');
         }
 
         $institution->update($request->validated());
 
+        // Gestion des médias
         if ($request->has('document')) {
-            if (count($institution->getMedia('images')) > 0) {
-                foreach ($institution->getMedia('images') as $media) {
-                    if (!in_array($media->file_name, $request->input('document', []))) {
-                        $media->delete();
-                    }
+            $media = $institution->getMedia('images')->pluck('file_name')->toArray();
+
+            // Supprimer les fichiers retirés
+            foreach ($institution->getMedia('images') as $mediaItem) {
+                if (!in_array($mediaItem->file_name, $request->input('document', []))) {
+                    $mediaItem->delete();
                 }
             }
 
-            $media = $institution->getMedia('images')->pluck('file_name')->toArray();
-
+            // Ajouter les nouveaux fichiers
             foreach ($request->input('document', []) as $file) {
-                if (count($media) === 0 || !in_array($file, $media)) {
-                    $institution->addMedia(Storage::path('temp/dropzone/' . $file))->toMediaCollection('images');
+                if (!in_array($file, $media)) {
+                    $institution->addMedia(storage_path('app/public/temp/dropzone/' . $file))
+                        ->toMediaCollection('images');
                 }
             }
         }
@@ -130,17 +126,13 @@ class InstitutionController extends Controller
         return redirect()->route('institutions.index')->with([
             'flash' => [
                 'type' => 'info',
-                'message' => 'Les informations de l\'institution sont modifiées avec succès !'
+                'message' => '🔄 Institution mise à jour avec succès !'
             ]
         ]);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Institution $institution)
     {
-        // Vérification de permission avec Gate et fallback
         if (!auth()->user()->hasPermissionTo('delete_institutions')) {
             abort(403, 'Action non autorisée');
         }
@@ -150,29 +142,48 @@ class InstitutionController extends Controller
         return redirect()->route('institutions.index')->with([
             'flash' => [
                 'type' => 'warning',
-                'message' => 'Institution supprimée avec succès !'
+                'message' => '🗑️ Institution supprimée avec succès !'
             ]
         ]);
     }
 
     public function importDataToExcel(Request $request)
     {
-        // Vérification de permission avec Gate et fallback
         if (!auth()->user()->hasPermissionTo('create_institutions')) {
             abort(403, 'Action non autorisée');
         }
 
-        $request->validate([
-            'excel_file' => 'required|file|mimes:xls,xlsx'
+        $validator = Validator::make($request->all(), [
+            'excel_file' => 'required|file|mimes:xls,xlsx|max:2048'
         ]);
 
-        Excel::import(new InstitutionImport, $request->file('excel_file'));
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->with('flash', [
+                    'type' => 'error',
+                    'message' => 'Le fichier doit être un Excel valide (max 2MB)'
+                ]);
+        }
 
-        return redirect()->route('institutions.index')->with([
-            'flash' => [
-                'type' => 'success',
-                'message' => 'Importation des institutions via Excel réussie !'
-            ]
-        ]);
+        try {
+            Excel::import(new InstitutionImport, $request->file('excel_file'));
+            
+            return redirect()->route('institutions.index')->with([
+                'flash' => [
+                    'type' => 'success',
+                    'message' => '📊 Importation Excel réussie ! ' . count($request->imported_rows) . ' institutions ajoutées'
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return redirect()->back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => '⚠️ Erreur lors de l\'import: ' . $e->getMessage()
+                ]
+            ]);
+        }
     }
+
+ 
 }
