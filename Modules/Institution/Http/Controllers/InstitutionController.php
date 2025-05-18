@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 use Spatie\Permission\Models\Permission;
 use Illuminate\Support\Facades\Validator;
+use Modules\Institution\Http\Requests\UpdateInstitutionRequest;
 
 class InstitutionController extends Controller
 {
@@ -90,7 +91,7 @@ class InstitutionController extends Controller
         return redirect()->route('institutions.index')->with([
             'flash' => [
                 'type' => 'success',
-                'message' => '🏆 Institution créée avec succès !'
+                'message' => 'Institution créée avec succès !'
             ]
         ]);
     }
@@ -126,7 +127,7 @@ class InstitutionController extends Controller
         return redirect()->route('institutions.index')->with([
             'flash' => [
                 'type' => 'info',
-                'message' => '🔄 Institution mise à jour avec succès !'
+                'message' => 'Institution mise à jour avec succès !'
             ]
         ]);
     }
@@ -142,7 +143,7 @@ class InstitutionController extends Controller
         return redirect()->route('institutions.index')->with([
             'flash' => [
                 'type' => 'warning',
-                'message' => '🗑️ Institution supprimée avec succès !'
+                'message' => 'Institution supprimée avec succès !'
             ]
         ]);
     }
@@ -179,7 +180,7 @@ class InstitutionController extends Controller
             return redirect()->back()->with([
                 'flash' => [
                     'type' => 'error',
-                    'message' => '⚠️ Erreur lors de l\'import: ' . $e->getMessage()
+                    'message' => 'Erreur lors de l\'import: ' . $e->getMessage()
                 ]
             ]);
         }
