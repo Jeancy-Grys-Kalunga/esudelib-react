@@ -32,6 +32,11 @@ class Course extends Model
         return $this->hasMany(Note::class, 'course_id', 'id');
     }
 
+    public function category()
+    {
+        return $this->belongsTo(CourseCategory::class, 'course_category_id');
+    }
+
     public function programs()
     {
         return $this->belongsToMany(Program::class);

@@ -78,7 +78,9 @@ class InstitutionController extends Controller
             abort(403, 'Action non autorisée');
         }
 
-        $institution = Institution::create($request->validated());
+
+
+        $institution = Institution::create($request->except('document', 'search'));
 
         // Gestion des fichiers uploadés
         if ($request->has('document')) {
