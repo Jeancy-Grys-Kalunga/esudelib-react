@@ -11,6 +11,8 @@ class InstitutionDatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // $this->call([]);
+        $this->call([
+            CourseCategoriesSeeder::class
+        ]);
     }
 }

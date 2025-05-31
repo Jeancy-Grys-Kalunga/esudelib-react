@@ -68,49 +68,30 @@ const teacherItems: NavItem[] = [
   }
 ];
 
-const secretaryGroups: NavItem[] = [
+const secretaryItems: NavItem[] = [
   {
-    title: 'Gestion des Cours',
-    items: [
-      {
-        title: 'Créer un cours',
-        href: '/courses/create',
-        icon: FilePlus,
-        isActive: route().current('courses.create'),
-        color: 'text-green-500',
-        permission: 'create_courses'
-      },
-      {
-        title: 'Liste des cours',
-        href: '/courses',
-        icon: Bookmark,
-        isActive: route().current('courses.index'),
-        color: 'text-indigo-500'
-      }
-    ]
+    title: 'Gérer cours',
+    href: '/courses',
+    icon: Bookmark,
+    isActive: route().current('courses.index'),
+    color: 'text-indigo-500'
   },
   {
-    title: 'Unités d\'Enseignement',
-    items: [
-      {
-        title: 'Créer une unité',
-        href: '/units-teachings/create',
-        icon: FilePlus,
-        isActive: route().current('units-teachings.create'),
-        color: 'text-green-500',
-        permission: 'create_unit_teachings'
-      },
-      {
-        title: 'Toutes les unités',
-        href: '/units-teachings',
-        icon: FileText,
-        isActive: route().current('units-teachings.index'),
-        color: 'text-purple-500'
-      }
-    ]
+    title: 'Créer une unité',
+    href: '/units-teachings/create',
+    icon: FilePlus,
+    isActive: route().current('units-teachings.create'),
+    color: 'text-green-500',
+    permission: 'create_unit_teachings'
+  },
+  {
+    title: 'Toutes les unités',
+    href: '/units-teachings',
+    icon: FileText,
+    isActive: route().current('units-teachings.index'),
+    color: 'text-purple-500'
   }
 ];
-
 const departmentItems: NavItem[] = [
   {
     title: 'Enregistrer département',
@@ -245,9 +226,9 @@ const groupedNavItems: GroupedNavItem[] = [
     groupTitle: 'Secrétariat Général',
     icon: ClipboardCheck,
     color: 'text-cyan-500',
-    items: secretaryGroups,
+    items: secretaryItems, 
     permission: 'access_secretary_features',
-    isGrouped: true
+    isActive: route().current('courses.*') || route().current('units-teachings.*')
   },
   {
     groupTitle: 'Départements',
