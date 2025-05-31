@@ -1,0 +1,30 @@
+{
+    "name": "nwidart/jury",
+    "description": "",
+    "authors": [
+        {
+            "name": "Nicolas Widart",
+            "email": "n.widart@gmail.com"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {
+
+            }
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Jury\\": "app/",
+            "Modules\\Jury\\Database\\Factories\\": "database/factories/",
+            "Modules\\Jury\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Jury\\Tests\\": "tests/"
+        }
+    }
+}

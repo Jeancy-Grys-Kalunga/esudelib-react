@@ -1,0 +1,11 @@
+{
+    "name": "Secretary",
+    "alias": "secretary",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Secretary\\Providers\\SecretaryServiceProvider"
+    ],
+    "files": []
+}

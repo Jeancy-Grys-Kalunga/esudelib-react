@@ -1,0 +1,11 @@
+{
+    "name": "RegistrationDesk",
+    "alias": "registrationdesk",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\RegistrationDesk\\Providers\\RegistrationDeskServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,26 @@
+<?php
+
+namespace Modules\Institution\Entities;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Modules\Institution\Database\factories\UnitsTeachingFactory;
+
+class UnitsTeaching extends Model
+{
+    use HasFactory;
+
+    /**
+     * The attributes that are mass assignable.
+     */
+    protected $fillable = [];
+    
+    public function course() {
+        return $this->belongsTo(Course::class, 'course_id', 'id');
+    }
+
+    public function promotion() {
+        return $this->belongsTo(Promotion::class, 'promotion_id', 'id');
+    }
+
+}
