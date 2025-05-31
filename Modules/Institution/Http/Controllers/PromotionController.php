@@ -2,127 +2,176 @@
 
 namespace Modules\Institution\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Faculty;
 use Modules\Institution\Entities\Promotion;
-use Modules\Institution\Entities\Institution;
 use Modules\Institution\Http\Requests\PromotionRequest;
+use Spatie\Permission\Models\Permission;
 
 class PromotionController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function index(Request $request)
     {
-        abort_if(Gate::denies('access_promotions'), 403);
-        $promotions = Promotion::orderBy('id', 'desc')->get();
-        return view('institution::promotions.index', [
-            'promotions' => $promotions
+        if (!auth()->user()->hasPermissionTo('access_promotions')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $user = auth()->user();
+        $user->load('permissions', 'roles.permissions');
+
+        // Gestion des permissions
+        $permissions = $user->hasRole('Super Admin')
+            ? Permission::pluck('name')->toArray()
+            : $user->getAllPermissions()->pluck('name')->toArray();
+
+        $requiredPermissions = [
+            'create' => 'create_promotions',
+            'edit'   => 'edit_promotions',
+            'delete' => 'delete_promotions',
+            'access' => 'access_promotions',
+        ];
+
+        $can = array_map(
+            fn($permission) => in_array($permission, $permissions),
+            $requiredPermissions
+        );
+
+        // Construction de la requête
+        $query = Promotion::with(['institution', 'faculty'])
+            ->orderByDesc('id');
+
+        if ($user->hasRole('Secrétaire Académique')) {
+            $institutionIds = $user->institutions()->pluck('id');
+            $query->whereIn('institution_id', $institutionIds);
+        }
+
+        $institutions = $user->hasRole('Secrétaire Académique')
+            ? $user->institutions()->pluck('id')
+            : Institution::pluck('id');
+
+        // Formatage des données pour Inertia
+        $promotions = $query->get()->map(function ($promotion) {
+            return [
+                'id' => $promotion->id,
+                'title' => $promotion->title,
+                'institution' => $promotion->institution->name,
+                'faculty' => $promotion->faculty->title,
+                'created_at' => $promotion->created_at->translatedFormat('d F Y'),
+            ];
+        });
+
+        return Inertia::render('promotion/index', [
+            'promotions' => $promotions,
+            'can' => $can,
+            'filters' => $request->only(['search']),
+            'flash' => $this->getFlashMessages(),
+            'institutions' => Institution::whereIn('id', $institutions)->get(['id', 'name']),
+            'faculties' => Faculty::all(['id', 'title']),
         ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        return view('institution::promotions.form', [
-            'promotion' => new Promotion(),
-            'institutions' => Institution::select('id', 'name')->get(),
-            'faculties' => Faculty::select('id', 'title')->get()
-        ]);
+        $user = auth()->user();
 
+        $institutions = Institution::when(
+            $user->hasRole('Secrétaire Académique'),
+            fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
+        )->get(['id', 'name']);
+
+        $faculties = Faculty::all(['id', 'title']);
+
+        return Inertia::render('Institution/Promotions/Form', [
+            'promotion' => new Promotion(),
+            'institutions' => $institutions,
+            'faculties' => $faculties,
+            'isEditing' => false,
+        ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(PromotionRequest $request)
     {
-        abort_if(Gate::denies('create_promotions'), 403);
-
-        $promotion = Promotion::create($request->validated());
-
-        if($promotion)
-        {
-            toast('Promotion enregistrée avec succès !', 'success');
-
-        }else{
-            toast("Une erreur survenue lors de l'enregistrement de la promotion", 'error');
+        if (!auth()->user()->hasPermissionTo('create_promotions')) {
+            abort(403, 'Action non autorisée');
         }
-    
-        return redirect()->route('promotions.index');
 
+        Promotion::create([
+            'title' => $request->title,
+            'institution_id' => $request->institution_id,
+            'faculty_id' => $request->faculty_id,
+        ]);
+
+        return redirect()->route('promotions.index')->with([
+            'flash' => [
+                'type' => 'success',
+                'message' => 'Promotion enregistrée avec succès !',
+            ],
+        ]);
     }
 
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('institution::show');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(Promotion $promotion)
     {
-        
-        abort_if(Gate::denies('edit_promotions'), 403);
-        $promotion = Promotion::findOrFail($promotion);
-        return view('institution::promotions.form', [
+        $user = auth()->user();
+
+        $institutions = Institution::when(
+            $user->hasRole('Secrétaire Académique'),
+            fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
+        )->get(['id', 'name']);
+
+        $faculties = Faculty::all(['id', 'title']);
+
+        return Inertia::render('Institution/Promotions/Form', [
             'promotion' => $promotion,
-            'institutions' => Institution::select('id', 'name')->get(),
-            'faculties' => Faculty::select('id', 'title')->get()
-        ]); 
-    
+            'institutions' => $institutions,
+            'faculties' => $faculties,
+            'isEditing' => true,
+        ]);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(PromotionRequest $request, Promotion $promotion)
     {
-        abort_if(Gate::denies('edit_promotions'), 403);
-
-        $promotion = Promotion::findOrFail($promotion);
-        $promotion->update($request->validated());
-
-        if($promotion)
-        {
-            toast('Promotion modifiée avec succès !', 'success');
-
-        }else{
-            toast("Une erreur survenue lors de la modification de la promotion", 'error');
+        if (!auth()->user()->hasPermissionTo('edit_promotions')) {
+            abort(403, 'Action non autorisée');
         }
-    
-        return redirect()->route('promotions.index');
+
+        $promotion->update([
+            'title' => $request->title,
+            'institution_id' => $request->institution_id,
+            'faculty_id' => $request->faculty_id,
+        ]);
+
+        return redirect()->route('promotions.index')->with([
+            'flash' => [
+                'type' => 'info',
+                'message' => 'Promotion modifiée avec succès !',
+            ],
+        ]);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Promotion $promotion)
     {
-        abort_if(Gate::denies('delete_promotions'), 403);
+        if (!auth()->user()->hasPermissionTo('delete_promotions')) {
+            abort(403, 'Action non autorisée');
+        }
 
-        $promotion = Promotion::findOrFail($promotion);
         $promotion->delete();
 
-        if($promotion)
-        {
-            toast('Promotion supprimée avec succès !', 'success');
+        return redirect()->route('promotions.index')->with([
+            'flash' => [
+                'type' => 'warning',
+                'message' => 'Promotion supprimée avec succès !',
+            ],
+        ]);
+    }
 
-        }else{
-            toast("Une erreur survenue lors de la suppression de la promotion", 'error');
-        }
-    
-        return redirect()->route('promotions.index');
+    private function getFlashMessages()
+    {
+        return [
+            'message' => session('flash.message'),
+            'type' => session('flash.type'),
+        ];
     }
 }

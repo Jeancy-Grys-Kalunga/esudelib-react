@@ -94,15 +94,7 @@ const secretaryItems: NavItem[] = [
 ];
 const departmentItems: NavItem[] = [
   {
-    title: 'Enregistrer département',
-    href: '/departments/create',
-    icon: PlusCircle,
-    isActive: route().current('departments.create'),
-    color: 'text-green-500',
-    permission: 'create_departments'
-  },
-  {
-    title: 'Tous les Départements',
+    title: 'Gérer Départements',
     href: '/departments',
     icon: DiamondIcon,
     isActive: route().current('departments.index'),
@@ -112,15 +104,7 @@ const departmentItems: NavItem[] = [
 
 const facultyItems: NavItem[] = [
   {
-    title: 'Enregistrer Faculté',
-    href: '/faculties/create',
-    icon: Building2,
-    isActive: route().current('faculties.create'),
-    color: 'text-green-500',
-    permission: 'create_faculties'
-  },
-  {
-    title: 'Toutes les Facultés',
+    title: 'Gérer Facultés',
     href: '/faculties',
     icon: Building,
     isActive: route().current('faculties.index'),
@@ -130,15 +114,7 @@ const facultyItems: NavItem[] = [
 
 const promotionItems: NavItem[] = [
   {
-    title: 'Enregistrer Promotion',
-    href: '/promotions/create',
-    icon: Plus,
-    isActive: route().current('promotions.create'),
-    color: 'text-green-500',
-    permission: 'create_promotions'
-  },
-  {
-    title: 'Toutes les promotions',
+    title: 'Gérer Promotions',
     href: '/promotions',
     icon: Users,
     isActive: route().current('promotions.index'),
@@ -148,14 +124,7 @@ const promotionItems: NavItem[] = [
 
 const userManagementItems: NavItem[] = [
   {
-    title: 'Créer un utilisateur',
-    href: '/users/create',
-    icon: Plus,
-    isActive: route().current('users.create'),
-    color: 'text-green-500'
-  },
-  {
-    title: 'Tous les utilisateurs',
+    title: 'Gérer Utilisateurs',
     href: '/users',
     icon: Users,
     isActive: route().current('users.*'),
@@ -272,18 +241,6 @@ const groupedNavItems: GroupedNavItem[] = [
   }
 ];
 
-const footerNavItems: NavItem[] = [
-  {
-    title: 'Repository',
-    href: 'https://github.com/laravel/react-starter-kit',
-    icon: Folder,
-  },
-  {
-    title: 'Documentation',
-    href: 'https://laravel.com/docs/starter-kits#react',
-    icon: BookOpen,
-  },
-];
 
 export function AppSidebar() {
   return (
@@ -305,7 +262,6 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <NavFooter items={footerNavItems} className="mt-auto" />
         <NavUser />
       </SidebarFooter>
     </Sidebar>

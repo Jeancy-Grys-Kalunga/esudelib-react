@@ -3,119 +3,164 @@
 namespace Modules\Institution\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Gate;
-use Modules\Institution\Entities\Faculty;
+use Inertia\Inertia;
 use Modules\Institution\Entities\Institution;
+use Modules\Institution\Entities\Faculty;
 use Modules\Institution\Http\Requests\FacultyRequest;
-use RealRashid\SweetAlert\Facades\Alert;
+use Spatie\Permission\Models\Permission;
 
 class FacultyController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function index(Request $request)
     {
-        abort_if(Gate::denies('access_faculties'), 403);
-        $faculties = Faculty::orderBy('id', 'desc')->get();
-        return view('institution::faculties.index', [
-            'faculties' => $faculties
+        if (!auth()->user()->hasPermissionTo('access_faculties')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $user = auth()->user();
+        $user->load('permissions', 'roles.permissions');
+
+        // Gestion des permissions
+        $permissions = $user->hasRole('Super Admin')
+            ? Permission::pluck('name')->toArray()
+            : $user->getAllPermissions()->pluck('name')->toArray();
+
+        $requiredPermissions = [
+            'create' => 'create_faculties',
+            'edit'   => 'edit_faculties',
+            'delete' => 'delete_faculties',
+            'access' => 'access_faculties',
+        ];
+
+        $can = array_map(
+            fn($permission) => in_array($permission, $permissions),
+            $requiredPermissions
+        );
+
+        // Construction de la requête
+        $query = Faculty::with(['institution'])
+            ->orderByDesc('id');
+
+        if ($user->hasRole('Secrétaire Académique')) {
+            $institutionIds = $user->institutions()->pluck('id');
+            $query->whereIn('institution_id', $institutionIds);
+        }
+
+        $institutions = $user->hasRole('Secrétaire Académique')
+            ? $user->institutions()->pluck('id')
+            : Institution::pluck('id');
+
+        // Formatage des données pour Inertia
+        $faculties = $query->get()->map(function ($faculty) {
+            return [
+                'id' => $faculty->id,
+                'title' => $faculty->title,
+                'institution' => $faculty->institution->name,
+                'created_at' => $faculty->created_at->translatedFormat('d F Y'),
+            ];
+        });
+
+        return Inertia::render('faculty/index', [
+            'faculties' => $faculties,
+            'can' => $can,
+            'filters' => $request->only(['search']),
+            'flash' => $this->getFlashMessages(),
+            'institutions' => Institution::whereIn('id', $institutions)->get(['id', 'name']),
         ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        abort_if(Gate::denies('create_faculties'), 403);
-        return view('institution::faculties.form', [
+        $user = auth()->user();
+
+        $institutions = Institution::when(
+            $user->hasRole('Secrétaire Académique'),
+            fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
+        )->get(['id', 'name']);
+
+        return Inertia::render('Institution/Faculties/Form', [
             'faculty' => new Faculty(),
-            'institutions' => Institution::select('id', 'name')->get()
+            'institutions' => $institutions,
+            'isEditing' => false,
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(FacultyRequest $request)
     {
-        abort_if(Gate::denies('create_faculties'), 403);
-
-        $faculty = Faculty::create($request->validated());
-
-        if ($faculty) {
-              Alert::toast('Faculté enregistrée avec succès !', 'success');
-        } else {
-              Alert::toast("Une erreur survenue lors de l'enregistrement de la faculté", 'error');
+        if (!auth()->user()->hasPermissionTo('create_faculties')) {
+            abort(403, 'Action non autorisée');
         }
 
-        return redirect()->route('faculties.index');
+        Faculty::create([
+            'title' => $request->title,
+            'institution_id' => $request->institution_id,
+        ]);
+
+        return redirect()->route('faculties.index')->with([
+            'flash' => [
+                'type' => 'success',
+                'message' => 'Faculté enregistrée avec succès !',
+            ],
+        ]);
     }
 
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('institution::show');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(Faculty $faculty)
     {
-        abort_if(Gate::denies('edit_faculties'), 403);
-        $faculty = Faculty::findOrFail($faculty->id);
-        return view('institution::faculties.form', [
+        $user = auth()->user();
+
+        $institutions = Institution::when(
+            $user->hasRole('Secrétaire Académique'),
+            fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
+        )->get(['id', 'name']);
+
+        return Inertia::render('faculty/index', [
             'faculty' => $faculty,
-            'institutions' => Institution::select('id', 'name')->get()
-        ]); 
+            'institutions' => $institutions,
+            'isEditing' => true,
+        ]);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(FacultyRequest $request, Faculty $faculty)
     {
-        abort_if(Gate::denies('edit_faculties'), 403);
-
-        $faculty = Faculty::findOrFail($faculty->id);
-        $faculty->update($request->validated());
-
-        if($faculty)
-        {
-              Alert::toast('Les infos de la faculté modifié  avec succès !', 'success');
-
-        }else{
-              Alert::toast("Une erreur survenue lors de la modification des infos de la faculté", 'error');
+        if (!auth()->user()->hasPermissionTo('edit_faculties')) {
+            abort(403, 'Action non autorisée');
         }
-    
-        return redirect()->route('faculties.index');
+
+        $faculty->update([
+            'title' => $request->title,
+            'institution_id' => $request->institution_id,
+        ]);
+
+        return redirect()->route('faculties.index')->with([
+            'flash' => [
+                'type' => 'info',
+                'message' => 'Faculté modifiée avec succès !',
+            ],
+        ]);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Faculty $faculty)
     {
-        abort_if(Gate::denies('delete_faculties'), 403);
+        if (!auth()->user()->hasPermissionTo('delete_faculties')) {
+            abort(403, 'Action non autorisée');
+        }
 
-        $faculty = Faculty::findOrFail($faculty);
         $faculty->delete();
 
-        if($faculty)
-        {
-              Alert::toast('Faculté supprimée avec succès !', 'success');
+        return redirect()->route('faculties.index')->with([
+            'flash' => [
+                'type' => 'warning',
+                'message' => 'Faculté supprimée avec succès !',
+            ],
+        ]);
+    }
 
-        }else{
-              Alert::toast("Une erreur survenue lors de la suppression de la faculté", 'error');
-        }
-    
-        return redirect()->route('faculties.index');
+    private function getFlashMessages()
+    {
+        return [
+            'message' => session('flash.message'),
+            'type' => session('flash.type'),
+        ];
     }
 }
