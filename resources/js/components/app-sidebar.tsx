@@ -47,16 +47,9 @@ const mainNavItems: NavItem[] = [
 ];
 
 const institutionItems: NavItem[] = [
+  
   {
-    title: 'Créer une Institution',
-    href: '/institutions/create',
-    icon: PlusCircle,
-    isActive: route().current('institutions.create'),
-    color: 'text-green-500',
-    permission: 'create_institutions'
-  },
-  {
-    title: 'Toutes les institutions',
+    title: 'Gérer Institutions',
     href: '/institutions',
     icon: Building,
     isActive: route().current('institutions.index'),
@@ -65,16 +58,9 @@ const institutionItems: NavItem[] = [
 ];
 
 const teacherItems: NavItem[] = [
+ 
   {
-    title: 'Enregistrer Enseignant',
-    href: '/teachers/create',
-    icon: Plus,
-    isActive: route().current('teachers.create'),
-    color: 'text-teal-500',
-    permission: 'create_teachers'
-  },
-  {
-    title: 'Tous les enseignants',
+    title: 'Gérer Enseignants',
     href: '/teachers',
     icon: Users,
     isActive: route().current('teachers.index'),

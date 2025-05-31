@@ -2,24 +2,23 @@
 
 namespace Modules\Teacher\Http\Controllers;
 
-use Inertia\Inertia;
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Modules\Teacher\Entities\Teacher;
+use Inertia\Inertia;
 use Modules\Institution\Entities\Institution;
+use Modules\Teacher\Entities\Teacher;
 use Modules\Teacher\Http\Requests\StoreTeacherRequest;
 use Modules\Teacher\Http\Requests\UpdateTeacherRequest;
-use Spatie\Permission\Models\Role;
-use Illuminate\Support\Facades\Storage;
+use Spatie\Permission\Models\Permission;
 
 class TeacherController extends Controller
 {
     public function index(Request $request)
     {
-        if (!auth()->user()->hasPermissionTo('access_teachers')) {
+        if (! auth()->user()->hasPermissionTo('access_teachers')) {
             abort(403, 'Action non autorisée');
         }
 
@@ -28,14 +27,21 @@ class TeacherController extends Controller
 
         // Gestion des permissions
         $permissions = $user->hasRole('Super Admin')
-            ? Role::findByName('Enseignant')->permissions->pluck('name')
-            : $user->getAllPermissions()->pluck('name');
+            ? Permission::pluck('name')->toArray()
+            : $user->getAllPermissions()->pluck('name')->toArray();
 
-        $can = [
-            'create' => $user->can('create_teachers'),
-            'edit' => $user->can('edit_teachers'),
-            'delete' => $user->can('delete_teachers'),
+        $requiredPermissions = [
+            'create' => 'create_teachers',
+            'edit'   => 'edit_teachers',
+            'delete' => 'delete_teachers',
+            'access' => 'access_teachers',
+            'import' => 'create_teachers',
         ];
+
+        $can = array_map(
+            fn($permission) => in_array($permission, $permissions),
+            $requiredPermissions
+        );
 
         // Construction de la requête
         $query = Teacher::with('institutions')
@@ -46,48 +52,61 @@ class TeacherController extends Controller
             $query->whereHas('institutions', fn($q) => $q->whereIn('id', $institutionIds));
         }
 
+        $institutions = $user->hasRole('Secrétaire Académique')
+            ? $user->institutions()->pluck('id')
+            : Institution::pluck('id');
+
         // Formatage des données pour Inertia
         $teachers = $query->get()->map(function ($teacher) {
             return [
-                'id' => $teacher->id,
-                'name' => $teacher->name,
-                'email' => $teacher->email,
-                'phone' => $teacher->phone,
-                'institutions' => $teacher->institutions->map(fn($i) => $i->name),
-                'created_at' => $teacher->created_at->translatedFormat('d F Y'),
-                'documents' => $teacher->getMedia('images')->map(fn($media) => [
-                    'url' => $media->getUrl(),
-                    'thumb' => $media->getUrl('thumb')
-                ])
+                'id'             => $teacher->id,
+                'matricule'      => $teacher->matricule,
+                'name'           => $teacher->name,
+                'gendre'         => $teacher->gendre,
+                'date_of_birth'  => $teacher->date_of_birth,
+                'grade'          => $teacher->grade,
+                'academic_level' => $teacher->academic_level,
+                'date_of_hire'   => $teacher->date_of_hire,
+                'specialty'      => $teacher->specialty,
+                'address'        => $teacher->address,
+                'phone'          => $teacher->phone,
+                'institutions'   => $teacher->institutions->map(fn($i) => $i->name),
+                'created_at'     => $teacher->created_at->translatedFormat('d F Y'),
+                'documents'      => $teacher->getMedia('images')->map(fn($media) => [
+                    'url'   => $media->getUrl(),
+                    'thumb' => $media->getUrl('thumb'),
+                ]),
             ];
         });
 
-        return Inertia::render('teacher::teachers/Index', [
-            'teachers' => $teachers,
-            'can' => $can,
-            'filters' => $request->only(['search']),
-            'flash' => $this->getFlashMessages()
+        return Inertia::render('teacher/index', [
+            'teachers'     => $teachers,
+            'can'          => $can,
+            'filters'      => $request->only(['search']),
+            'flash'        => $this->getFlashMessages(),
+            'institutions' => Institution::whereIn('id', $institutions)->get(['id', 'name']),
         ]);
     }
 
     public function create()
     {
         $user = auth()->user();
-        
-        $institutions = Institution::when($user->hasRole('Secrétaire Académique'), 
+
+        $institutions = Institution::when(
+            $user->hasRole('Secrétaire Académique'),
             fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
         )->get(['id', 'name']);
 
         return Inertia::render('teacher::teachers/Form', [
-            'teacher' => new Teacher(),
+            'teacher'      => new Teacher(),
             'institutions' => $institutions,
-            'documentUrls' => []
+            'documentUrls' => [],
         ]);
     }
 
     public function store(StoreTeacherRequest $request)
     {
-        if (!auth()->user()->hasPermissionTo('create_teachers')) {
+        if (! auth()->user()->hasPermissionTo('create_teachers')) {
             abort(403, 'Action non autorisée');
         }
 
@@ -99,33 +118,34 @@ class TeacherController extends Controller
 
         return redirect()->route('teachers.index')->with([
             'flash' => [
-                'type' => 'success',
-                'message' => 'Enseignant enregistré avec succès !'
-            ]
+                'type'    => 'success',
+                'message' => 'Enseignant enregistré avec succès !',
+            ],
         ]);
     }
 
     public function edit(Teacher $teacher)
     {
         $user = auth()->user();
-        
-        $institutions = Institution::when($user->hasRole('Secrétaire Académique'), 
+
+        $institutions = Institution::when(
+            $user->hasRole('Secrétaire Académique'),
             fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
         )->get(['id', 'name']);
 
-        return Inertia::render('teacher::teachers/Form', [
-            'teacher' => $teacher->load('institutions'),
+        return Inertia::render('teachers.index', [
+            'teacher'      => $teacher->load('institutions'),
             'institutions' => $institutions,
             'documentUrls' => $teacher->getMedia('images')->map(fn($m) => [
                 'name' => $m->file_name,
-                'url' => $m->getUrl()
-            ])
+                'url'  => $m->getUrl(),
+            ]),
         ]);
     }
 
     public function update(UpdateTeacherRequest $request, Teacher $teacher)
     {
-        if (!auth()->user()->hasPermissionTo('edit_teachers')) {
+        if (! auth()->user()->hasPermissionTo('edit_teachers')) {
             abort(403, 'Action non autorisée');
         }
 
@@ -133,28 +153,36 @@ class TeacherController extends Controller
         $this->syncInstitutions($teacher, $request->institutions);
         $this->handleMediaUpload($teacher, $request->document);
 
+        // Mise à jour du nom pour tous les utilisateurs associés
+        foreach ($teacher->institutions as $institution) {
+            $email = Str::slug($teacher->name) . Str::slug($institution->name) . '@esudelib.com';
+            $user  = User::where('email', $email)->first();
+            if ($user) {
+                $user->update(['name' => $teacher->name]);
+            }
+        }
+
         return redirect()->route('teachers.index')->with([
             'flash' => [
-                'type' => 'info',
-                'message' => 'Enseignant modifié avec succès !'
-            ]
+                'type'    => 'info',
+                'message' => 'Enseignant modifié avec succès !',
+            ],
         ]);
     }
 
     public function destroy(Teacher $teacher)
     {
-        if (!auth()->user()->hasPermissionTo('delete_teachers')) {
+        if (! auth()->user()->hasPermissionTo('delete_teachers')) {
             abort(403, 'Action non autorisée');
         }
 
-        $teacher->users()->delete();
         $teacher->delete();
 
         return redirect()->route('teachers.index')->with([
             'flash' => [
-                'type' => 'warning',
-                'message' => 'Enseignant supprimé avec succès !'
-            ]
+                'type'    => 'warning',
+                'message' => 'Enseignant supprimé avec succès !',
+            ],
         ]);
     }
 
@@ -162,12 +190,12 @@ class TeacherController extends Controller
     {
         foreach ($institutionIds as $institutionId) {
             $institution = Institution::find($institutionId);
-            $email = Str::slug($teacher->name) . Str::slug($institution->name) . '@esudelib.com';
+            $email       = Str::slug($teacher->name) . Str::slug($institution->name) . '@esudelib.com';
 
             $user = User::create([
-                'name' => $teacher->name,
-                'email' => strtolower($email),
-                'password' => Hash::make(1234),
+                'name'      => $teacher->name,
+                'email'     => strtolower($email),
+                'password'  => Hash::make(1234),
                 'is_active' => true,
             ]);
 
@@ -179,17 +207,60 @@ class TeacherController extends Controller
     private function syncInstitutions(Teacher $teacher, array $newInstitutions)
     {
         $currentInstitutions = $teacher->institutions()->pluck('id');
-        
-        $added = collect($newInstitutions)->diff($currentInstitutions);
+
+        $added   = collect($newInstitutions)->diff($currentInstitutions);
         $removed = $currentInstitutions->diff($newInstitutions);
 
         $this->handleRemovedInstitutions($teacher, $removed);
         $this->handleAddedInstitutions($teacher, $added);
     }
 
+
+    private function handleAddedInstitutions(Teacher $teacher, $added)
+    {
+        if ($added->isEmpty()) return;
+
+        foreach ($added as $institutionId) {
+            $institution = Institution::findOrFail($institutionId);
+            $email = Str::slug($teacher->name) . Str::slug($institution->name) . '@esudelib.com';
+
+            $user = User::firstOrCreate(
+                ['email' => $email],
+                [
+                    'name' => $teacher->name,
+                    'password' => Hash::make(1234),
+                    'is_active' => true,
+                ]
+            );
+
+            $user->assignRole('Enseignant');
+            $user->institutions()->attach($institutionId);
+        }
+
+        $teacher->institutions()->attach($added);
+    }
+
+    private function handleRemovedInstitutions(Teacher $teacher, $removed)
+    {
+        if ($removed->isEmpty()) return;
+
+        foreach ($removed as $institutionId) {
+            $institution = Institution::findOrFail($institutionId);
+            $email = Str::slug($teacher->name) . Str::slug($institution->name) . '@esudelib.com';
+
+            if ($user = User::where('email', $email)->first()) {
+                $user->delete();
+            }
+        }
+
+        $teacher->institutions()->detach($removed);
+    }
+
     private function handleMediaUpload(Teacher $teacher, ?array $documents)
     {
-        if (!$documents) return;
+        if (! $documents) {
+            return;
+        }
 
         $media = $teacher->getMedia('images')->pluck('file_name');
 
@@ -201,7 +272,8 @@ class TeacherController extends Controller
         // Ajout des nouveaux médias
         collect($documents)
             ->diff($media)
-            ->each(fn($file) => 
+            ->each(
+                fn($file) =>
                 $teacher->addMedia(storage_path("app/public/temp/dropzone/$file"))
                     ->toMediaCollection('images')
             );
@@ -211,7 +283,7 @@ class TeacherController extends Controller
     {
         return [
             'message' => session('flash.message'),
-            'type' => session('flash.type')
+            'type'    => session('flash.type'),
         ];
     }
 }
