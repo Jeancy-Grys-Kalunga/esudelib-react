@@ -45,11 +45,11 @@ class PermissionsTableSeeder extends Seeder
             'delete_academic_years',
 
              //Departments
-            'access_departements',
-            'create_departements',
-            'show_departements',
-            'edit_departements',
-            'delete_departements',
+            'access_departments',
+            'create_departments',
+            'show_departments',
+            'edit_departments',
+            'delete_departments',
 
             // Palmares
             'access_palmares',
@@ -159,8 +159,15 @@ class PermissionsTableSeeder extends Seeder
             'edit_programs',
             'delete_programs',
             'show_programs',
-            'create_programs'
+            'create_programs',
 
+            // attributions
+
+            'access_attributions',
+            'create_attributions',
+            'show_attributions',             
+            'edit_attributions',
+            'delete_attributions' 
 
         ];
 

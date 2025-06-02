@@ -3,131 +3,175 @@
 namespace Modules\Institution\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Gate;
-use Modules\Institution\Entities\Department;
+use Inertia\Inertia;
 use Modules\Institution\Entities\Institution;
-use Modules\Institution\Http\Requests\DepartmentRequest;
-use RealRashid\SweetAlert\Facades\Alert;
+use Modules\Institution\Entities\Department; 
+use Modules\Institution\Http\Requests\DepartmentRequest; 
+use Spatie\Permission\Models\Permission;
 
-class DepartmentController extends Controller
+class DepartmentController extends Controller 
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function index(Request $request)
     {
-        abort_if(Gate::denies('access_departements'), 403);
-        $departments = Department::orderBy('id', 'desc')->get();
-        return view('institution::departments.index', [
-            'departments' => $departments
+        // Mise à jour des permissions
+        if (!auth()->user()->hasPermissionTo('access_departments')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $user = auth()->user();
+        $user->load('permissions', 'roles.permissions');
+
+        // Mise à jour des permissions
+        $permissions = $user->hasRole('Super Admin')
+            ? Permission::pluck('name')->toArray()
+            : $user->getAllPermissions()->pluck('name')->toArray();
+
+        $requiredPermissions = [
+            'create' => 'create_departments',
+            'edit'   => 'edit_departments',
+            'delete' => 'delete_departments',
+            'access' => 'access_departments',
+        ];
+
+        $can = array_map(
+            fn($permission) => in_array($permission, $permissions),
+            $requiredPermissions
+        );
+
+        // Mise à jour de la requête pour Department
+        $query = Department::with(['institution'])
+            ->orderByDesc('id');
+
+        if ($user->hasRole('Secrétaire Académique')) {
+            $institutionIds = $user->institutions()->pluck('id');
+            $query->whereIn('institution_id', $institutionIds);
+        }
+
+        $institutions = $user->hasRole('Secrétaire Académique')
+            ? $user->institutions()->pluck('id')
+            : Institution::pluck('id');
+
+        // Mise à jour des données pour Department
+        $departments = $query->get()->map(function ($department) {
+            return [
+                'id' => $department->id,
+                'title' => $department->title,
+                'institution' => $department->institution->name,
+                'created_at' => $department->created_at->translatedFormat('d F Y'),
+            ];
+        });
+
+        // Mise à jour du nom de la vue et des variables
+        return Inertia::render('department/index', [
+            'departments' => $departments,
+            'can' => $can,
+            'filters' => $request->only(['search']),
+            'flash' => $this->getFlashMessages(),
+            'institutions' => Institution::whereIn('id', $institutions)->get(['id', 'name']),
         ]);
-    
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        return view('institution::departments.form', [
+        $user = auth()->user();
+
+        $institutions = Institution::when(
+            $user->hasRole('Secrétaire Académique'),
+            fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
+        )->get(['id', 'name']);
+
+        // Mise à jour du nom de la vue et du modèle
+        return Inertia::render('Institution/Departments/Form', [
             'department' => new Department(),
-            'institutions' => Institution::select('id', 'name')->get()
+            'institutions' => $institutions,
+            'isEditing' => false,
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(DepartmentRequest $request)
+    public function store(DepartmentRequest $request) // Changement de Request
     {
-        abort_if(Gate::denies('create_departements'), 403);
-
-
-        $department = Department::create([
-            'title' => $request->title,
-            'institution_id' => $request->institution_id
-        ]);
-
-        if($department)
-        {
-              Alert::toast('Enseignant enregistré avec succès !', 'success');
-
-        }else{
-              Alert::toast("Une erreur survenue lors de l'enregistrement du départment", 'error');
+        // Mise à jour de la permission
+        if (!auth()->user()->hasPermissionTo('create_departments')) {
+            abort(403, 'Action non autorisée');
         }
-    
-        return redirect()->route('departments.index');
-    }
 
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('institution::show');
-    }
+        // Création d'un Department
+        Department::create([
+            'title' => $request->title,
+            'institution_id' => $request->institution_id,
+        ]);
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Department $department)
-    {
-        abort_if(Gate::denies('edit_departements'), 403);
-
-        $institutions = Institution::select('id', 'name')->get();
-
-        return view('institution::departments.form', [
-            'department' => $department,
-            'institutions' => $institutions
+        // Mise à jour du nom de la route et du message
+        return redirect()->route('departments.index')->with([
+            'flash' => [
+                'type' => 'success',
+                'message' => 'Département enregistré avec succès !',
+            ],
         ]);
     }
-   
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(DepartmentRequest $request, Department $department)
+    public function edit(Department $department) // Changement de modèle
     {
-        abort_if(Gate::denies('edit_departements'), 403);
+        $user = auth()->user();
 
-        $department = Department::findOrFail($department->id);
+        $institutions = Institution::when(
+            $user->hasRole('Secrétaire Académique'),
+            fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
+        )->get(['id', 'name']);
+
+        // Mise à jour du nom de la vue et des variables
+        return Inertia::render('Institution/Departments/Form', [
+            'department' => $department,
+            'institutions' => $institutions,
+            'isEditing' => true,
+        ]);
+    }
+
+    public function update(DepartmentRequest $request, Department $department) // Changement de Request et modèle
+    {
+        // Mise à jour de la permission
+        if (!auth()->user()->hasPermissionTo('edit_departments')) {
+            abort(403, 'Action non autorisée');
+        }
+
         $department->update([
             'title' => $request->title,
-            'institution_id' => $request->institution_id
+            'institution_id' => $request->institution_id,
         ]);
 
-        if($department)
-        {
-              Alert::toast('Les infos du département modifié  avec succès !', 'success');
-
-        }else{
-              Alert::toast("Une erreur survenue lors de la modification des infos du départment", 'error');
-        }
-    
-        return redirect()->route('departments.index');
+        // Mise à jour du nom de la route et du message
+        return redirect()->route('departments.index')->with([
+            'flash' => [
+                'type' => 'info',
+                'message' => 'Département modifié avec succès !',
+            ],
+        ]);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Department $department)
+    public function destroy(Department $department) // Changement de modèle
     {
-        abort_if(Gate::denies('delete_departements'), 403);
+        // Mise à jour de la permission
+        if (!auth()->user()->hasPermissionTo('delete_departments')) {
+            abort(403, 'Action non autorisée');
+        }
 
-        $department = Department::findOrFail($department->id);
         $department->delete();
 
-        if($department)
-        {
-              Alert::toast('Le département supprimé avec succès !', 'success');
+        // Mise à jour du nom de la route et du message
+        return redirect()->route('departments.index')->with([
+            'flash' => [
+                'type' => 'warning',
+                'message' => 'Département supprimé avec succès !',
+            ],
+        ]);
+    }
 
-        }else{
-              Alert::toast("Une erreur survenue lors de la suppression du départment", 'error');
-        }
-    
-        return redirect()->route('departments.index');
+    private function getFlashMessages()
+    {
+        return [
+            'message' => session('flash.message'),
+            'type' => session('flash.type'),
+        ];
     }
 }
