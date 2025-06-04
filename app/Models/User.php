@@ -15,6 +15,7 @@ use Spatie\Permission\Traits\HasRoles;
 use Modules\Teacher\Entities\Teacher;
 use Spatie\Permission\Models\Permission;
 
+
 class User extends Authenticatable implements HasMedia
 {
     use HasFactory, Notifiable, HasRoles, InteractsWithMedia;
@@ -78,29 +79,16 @@ class User extends Authenticatable implements HasMedia
 
     public function getAllPermissionsWithFallback()
     {
-        if ($this->hasRole('Super Admin')) {
-            return Permission::all()->pluck('name');
-        }
-
         return $this->getAllPermissions()->pluck('name');
     }
 
- 
-    public function getAllPermissions()
-    {
-        if (!$this->relationLoaded('permissions') || !$this->relationLoaded('roles')) {
-            $this->load('permissions', 'roles.permissions');
-        }
-
-        return parent::getAllPermissions();
-    }
-
+    
     public function hasPermissionTo($permission, $guardName = null)
     {
         if ($this->hasRole('Super Admin')) {
             return true;
         }
 
-        return parent::hasPermissionTo($permission, $guardName);
+        return $this->getAllPermissions()->contains('name', $permission);
     }
 }

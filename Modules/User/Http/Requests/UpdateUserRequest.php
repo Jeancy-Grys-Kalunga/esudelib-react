@@ -4,7 +4,7 @@ namespace Modules\User\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class UserRequest extends FormRequest
+class UpdateUserRequest extends FormRequest
 {
     /**
      * Get the validation rules that apply to the request.
@@ -13,8 +13,7 @@ class UserRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:users,email',
-            'password' => 'required|string|min:4|max:255|confirmed',
+            'email' => 'required|email|max:255|unique:users,email,' . $this->route('user')->id,
             'role' => 'required|exists:roles,id',
             'institutions' => ['exists:institutions,id']
         ];
@@ -33,11 +32,6 @@ class UserRequest extends FormRequest
             'email.email' => 'L\'adresse e-mail doit être valide.',
             'email.max' => 'L\'adresse e-mail ne peut pas dépasser 255 caractères.',
             'email.unique' => 'Cette adresse e-mail est déjà utilisée.',
-            'password.required' => 'Le mot de passe est obligatoire.',
-            'password.string' => 'Le mot de passe doit être une chaîne de caractères.',
-            'password.min' => 'Le mot de passe doit contenir au moins 4 caractères.',
-            'password.max' => 'Le mot de passe ne peut pas dépasser 255 caractères.',
-            'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
             'role.required' => 'Le rôle est obligatoire.',
             'role.exists' => 'Le rôle sélectionné est invalide.',
             'institutions.exists' => 'L\'institution sélectionnée est invalide.',

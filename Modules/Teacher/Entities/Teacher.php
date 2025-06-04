@@ -5,6 +5,7 @@ namespace Modules\Teacher\Entities;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Modules\Institution\Entities\Assignment;
 use Modules\Institution\Entities\Institution;
 use Modules\Teacher\Database\factories\TeacherFactory;
 use Spatie\MediaLibrary\HasMedia;
@@ -30,5 +31,15 @@ class Teacher extends Model implements HasMedia
     public function users()
     {
         return $this->belongsToMany(User::class);
+    }
+
+    public function holderAssignments()
+    {
+        return $this->hasMany(Assignment::class, 'holder_id');
+    }
+
+    public function collaboratorAssignments()
+    {
+        return $this->hasMany(Assignment::class, 'collaborator_id');
     }
 }
