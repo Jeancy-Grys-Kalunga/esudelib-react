@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { ChevronDown, Edit, Loader2, Plus, Search, Trash2, Users, X } from 'lucide-react';
+import { Edit, Loader2, Plus, Search, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -12,8 +12,8 @@ import AppLayout from '@/layouts/app-layout';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
 import { useDropzone } from 'react-dropzone';
 
@@ -56,9 +56,9 @@ export default function UsersIndex({ users: allUsers, institutions, roles, can, 
     const [filteredUsers, setFilteredUsers] = useState<User[]>(allUsers);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
-    const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
-    const { data, setData, post, put, errors, processing, reset } = useForm({
+    const { data, setData, post, put, errors, processing, reset, clearErrors } = useForm({
         name: '',
         email: '',
         password: '',
@@ -66,20 +66,33 @@ export default function UsersIndex({ users: allUsers, institutions, roles, can, 
         role: '',
         is_active: true as boolean,
         institutions: [] as number[],
-        document: [] as string[],
+        avatar: null as File | null,
     });
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         accept: {
-            'image/*': ['.jpeg', '.jpg', '.png']
+            'image/*': ['.jpeg', '.jpg', '.png'],
         },
         maxFiles: 1,
-        maxSize: 500 * 1024, // 500KB
+        maxSize: 1024 * 1024, // 1MB
         onDrop: (acceptedFiles) => {
-            setUploadedFiles(acceptedFiles);
-            setData('document', [URL.createObjectURL(acceptedFiles[0])]);
-        }
+            if (acceptedFiles?.[0]) {
+                // Libérer l'ancienne URL si existante
+                if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+
+                const newFile = acceptedFiles[0];
+                setData('avatar', newFile);
+                setAvatarPreview(URL.createObjectURL(newFile));
+            }
+        },
     });
+
+    // Cleanup des URL d'aperçu
+    useEffect(() => {
+        return () => {
+            if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+        };
+    }, [avatarPreview]);
 
     // Gestion de la recherche
     const handleSearch = useMemo(() => {
@@ -93,7 +106,7 @@ export default function UsersIndex({ users: allUsers, institutions, roles, can, 
                 (user) =>
                     user.name.toLowerCase().includes(term.toLowerCase()) ||
                     user.email.toLowerCase().includes(term.toLowerCase()) ||
-                    user.role.toLowerCase().includes(term.toLowerCase())
+                    user.role.toLowerCase().includes(term.toLowerCase()),
             );
             setFilteredUsers(results);
             setCurrentPage(1);
@@ -130,22 +143,29 @@ export default function UsersIndex({ users: allUsers, institutions, roles, can, 
     // Pré-remplir le formulaire quand on édite un utilisateur
     useEffect(() => {
         if (currentUser) {
+            // Trouver l'ID du rôle correspondant au nom
+            const roleId = roles.find((r) => r.name === currentUser.role)?.id.toString() || '';
+
             setData({
                 name: currentUser.name,
                 email: currentUser.email,
                 password: '',
                 password_confirmation: '',
-                role: currentUser.role,
+                role: roleId,
                 is_active: currentUser.is_active,
-                institutions: currentUser.institutions.map(i => i.id),
-                document: currentUser.avatar ? [currentUser.avatar] : [],
+                institutions: currentUser.institutions.map((i) => i.id),
+                avatar: null,
             });
             if (currentUser.avatar) {
-                setUploadedFiles([]);
+                // Vérifier si c'est une URL complète ou un chemin relatif
+                const isFullUrl = /^https?:\/\//.test(currentUser.avatar);
+                setAvatarPreview(isFullUrl ? currentUser.avatar : `/storage/${currentUser.avatar}`);
+            } else {
+                setAvatarPreview(null);
             }
         } else {
             reset();
-            setUploadedFiles([]);
+            setAvatarPreview(null);
         }
     }, [currentUser]);
 
@@ -162,40 +182,37 @@ export default function UsersIndex({ users: allUsers, institutions, roles, can, 
         setIsModalOpen(false);
         setCurrentUser(null);
         reset();
-        setUploadedFiles([]);
+        clearErrors();
+        setAvatarPreview(null);
+        // Réinitialiser spécifiquement les institutions
+        setData('institutions', []);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         try {
-            const formData = new FormData();
-            formData.append('name', data.name);
-            formData.append('email', data.email);
-            formData.append('role', data.role);
-            formData.append('is_active', data.is_active ? '1' : '0');
-            formData.append('institutions', JSON.stringify(data.institutions));
-            
-            if (data.password) {
-                formData.append('password', data.password);
-                formData.append('password_confirmation', data.password_confirmation);
-            }
-            
-            if (uploadedFiles.length > 0) {
-                formData.append('avatar', uploadedFiles[0]);
-            }
-
+            const cleanData = {
+                ...data,
+                is_active: data.is_active ? 1 : 0,
+                institutions: data.institutions,
+                document: data.avatar ? [data.avatar.name] : [],
+            };
             if (currentUser) {
-                await router.put(route('users.update', currentUser.id), formData, {
+                await put(route('users.update', currentUser.id), {
+                    ...cleanData,
                     onSuccess: () => closeModal(),
+                    onError: () => setIsModalOpen(true),
                 });
             } else {
-                formData.append('password', data.password);
-                await router.post(route('users.store'), formData, {
+                await post(route('users.store'), {
+                    ...cleanData,
                     onSuccess: () => closeModal(),
+                    onError: () => setIsModalOpen(true),
                 });
             }
         } catch (error) {
+            setIsModalOpen(true);
             console.error('Error submitting form:', error);
         }
     };
@@ -227,8 +244,8 @@ export default function UsersIndex({ users: allUsers, institutions, roles, can, 
     };
 
     const removeAvatar = () => {
-        setUploadedFiles([]);
-        setData('document', []);
+        setData('avatar', null);
+        setAvatarPreview(null);
     };
 
     if (!can.access) {
@@ -323,26 +340,49 @@ export default function UsersIndex({ users: allUsers, institutions, roles, can, 
                                                 <TableRow key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                                     <TableCell>
                                                         {user.avatar && (
-                                                            <img 
-                                                                src={user.avatar} 
-                                                                alt={user.name} 
-                                                                className="h-10 w-10 rounded-full object-cover"
-                                                            />
+                                                            <img src={user.avatar} alt={user.name} className="h-10 w-10 rounded-full object-cover" />
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="font-medium">{user.name}</TableCell>
                                                     <TableCell>{user.email}</TableCell>
                                                     <TableCell>{user.role}</TableCell>
                                                     <TableCell>
-                                                        {user.institutions.slice(0, 2).map(inst => inst.name).join(', ')}
-                                                        {user.institutions.length > 2 && ` +${user.institutions.length - 2}`}
+                                                        <div className="group relative">
+                                                            <div className="flex flex-col">
+                                                                {user.institutions.slice(0, 2).map((inst) => (
+                                                                    <span key={inst.id} className="py-0.5 text-xs">
+                                                                        {inst.name}
+                                                                    </span>
+                                                                ))}
+                                                                {user.institutions.length > 2 && (
+                                                                    <span className="text-muted-foreground mt-1 text-xs">
+                                                                        +{user.institutions.length - 2} autres
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {user.institutions.length > 0 && (
+                                                                <div className="absolute z-10 hidden rounded border border-gray-200 bg-white p-2 shadow-lg group-hover:block dark:border-gray-700 dark:bg-gray-800">
+                                                                    <div className="mb-1 text-xs font-medium">Institutions:</div>
+                                                                    <ul className="space-y-1">
+                                                                        {user.institutions.map((inst) => (
+                                                                            <li key={inst.id} className="text-xs">
+                                                                                {inst.name}
+                                                                            </li>
+                                                                        ))}
+                                                                    </ul>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <span className={`px-2 py-1 rounded-full text-xs ${
-                                                            user.is_active 
-                                                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' 
-                                                                : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                                        }`}>
+                                                        <span
+                                                            className={`rounded-full px-2 py-1 text-xs ${
+                                                                user.is_active
+                                                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                                                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                                            }`}
+                                                        >
                                                             {user.is_active ? 'Actif' : 'Inactif'}
                                                         </span>
                                                     </TableCell>
@@ -436,244 +476,257 @@ export default function UsersIndex({ users: allUsers, institutions, roles, can, 
 
                 {/* Modal pour créer/modifier un utilisateur */}
                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-3xl">
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2 text-xl">
+                    <DialogContent className="flex max-h-[90dvh] flex-col overflow-hidden !p-0 sm:max-w-2xl">
+                        <DialogHeader className="border-b border-gray-100 px-8 pt-8 pb-2 dark:border-gray-800">
+                            <DialogTitle className="flex items-center gap-2 text-2xl font-bold">
                                 {currentUser ? 'Modifier Utilisateur' : 'Nouvel Utilisateur'}
                             </DialogTitle>
-                            <DialogDescription>
-                                {currentUser 
-                                    ? 'Modifiez les informations de l\'utilisateur' 
+                            <DialogDescription className="text-base">
+                                {currentUser
+                                    ? "Modifiez les informations de l'utilisateur"
                                     : 'Remplissez les informations pour créer un nouvel utilisateur'}
                             </DialogDescription>
                         </DialogHeader>
 
                         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-                            {/* Bloc d'erreurs globales */}
-                            {Object.keys(errors).length > 0 && (
-                                <div className="mb-4 rounded-md bg-red-50 p-4 dark:bg-red-900/20">
-                                    <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
-                                        Erreurs de validation
-                                    </h3>
-                                    <ul className="mt-2 list-disc space-y-1 pl-5">
-                                        {Object.entries(errors).map(([key, error]) => (
-                                            <li key={key} className="text-sm text-red-700 dark:text-red-300">
-                                                {error}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-
-                            <ScrollArea.Root className="flex-1 overflow-hidden" type="auto">
-                                <ScrollArea.Viewport className="h-full w-full pr-4">
-                                    <div className="space-y-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="space-y-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="name">Nom complet *</Label>
-                                                    <Input 
-                                                        id="name" 
-                                                        value={data.name} 
-                                                        onChange={(e) => setData('name', e.target.value)} 
-                                                        required 
-                                                        className={errors.name ? 'border-red-500 dark:border-red-500' : ''}
-                                                    />
-                                                    {errors.name && <p className="text-sm text-red-500 dark:text-red-400">{errors.name}</p>}
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="email">Email *</Label>
-                                                    <Input 
-                                                        id="email" 
-                                                        type="email"
-                                                        value={data.email} 
-                                                        onChange={(e) => setData('email', e.target.value)} 
-                                                        required 
-                                                        className={errors.email ? 'border-red-500 dark:border-red-500' : ''}
-                                                    />
-                                                    {errors.email && <p className="text-sm text-red-500 dark:text-red-400">{errors.email}</p>}
-                                                </div>
-
-                                                {!currentUser && (
-                                                    <>
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="password">Mot de passe *</Label>
-                                                            <Input 
-                                                                id="password" 
-                                                                type="password"
-                                                                value={data.password} 
-                                                                onChange={(e) => setData('password', e.target.value)} 
-                                                                required={!currentUser}
-                                                                className={errors.password ? 'border-red-500 dark:border-red-500' : ''}
-                                                            />
-                                                            {errors.password && <p className="text-sm text-red-500 dark:text-red-400">{errors.password}</p>}
-                                                        </div>
-
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="password_confirmation">Confirmer le mot de passe *</Label>
-                                                            <Input 
-                                                                id="password_confirmation" 
-                                                                type="password"
-                                                                value={data.password_confirmation} 
-                                                                onChange={(e) => setData('password_confirmation', e.target.value)} 
-                                                                required={!currentUser}
-                                                                className={errors.password_confirmation ? 'border-red-500 dark:border-red-500' : ''}
-                                                            />
-                                                            {errors.password_confirmation && <p className="text-sm text-red-500 dark:text-red-400">{errors.password_confirmation}</p>}
-                                                        </div>
-                                                    </>
-                                                )}
+                            <div className="min-h-0 flex-1">
+                                <ScrollArea.Root className="h-full w-full" type="auto">
+                                    <ScrollArea.Viewport className="max-h-[60vh] w-full px-8 py-6">
+                                        {/* Bloc d'erreurs globales */}
+                                        {Object.keys(errors).length > 0 && (
+                                            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 shadow dark:border-red-700 dark:bg-red-900/20">
+                                                <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">Erreurs de validation</h3>
+                                                <ul className="mt-2 list-disc space-y-1 pl-5">
+                                                    {Object.entries(errors).map(([key, error]) => (
+                                                        <li key={key} className="text-sm text-red-700 dark:text-red-300">
+                                                            {error}
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             </div>
+                                        )}
 
-                                            <div className="space-y-4">
-                                                <div className="space-y-2">
-                                                    <Label>Rôle *</Label>
-                                                    <Select 
-                                                        value={data.role} 
-                                                        onValueChange={(value) => setData('role', value)} 
-                                                        required
-                                                    >
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Sélectionner un rôle">
-                                                                {roles.find(r => r.id.toString() === data.role)?.name || 'Sélectionner un rôle'}
-                                                            </SelectValue>
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {roles.map((role) => (
-                                                                <SelectItem key={role.id} value={role.id.toString()}>
-                                                                    {role.name}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    {errors.role && <p className="text-sm text-red-500 dark:text-red-400">{errors.role}</p>}
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label>Statut *</Label>
-                                                    <Select 
-                                                        value={data.is_active ? '1' : '0'} 
-                                                        onValueChange={(value) => setData('is_active', value === '1')} 
-                                                        required
-                                                    >
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Sélectionner un statut">
-                                                                {data.is_active ? 'Actif' : 'Inactif'}
-                                                            </SelectValue>
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="1">Actif</SelectItem>
-                                                            <SelectItem value="0">Inactif</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label>Institutions</Label>
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                                {institutions.map((institution) => (
-                                                    <div key={institution.id} className="flex items-center space-x-2">
-                                                        <Checkbox
-                                                            id={`institution-${institution.id}`}
-                                                            checked={data.institutions.includes(institution.id)}
-                                                            onCheckedChange={(checked) => {
-                                                                setData('institutions', 
-                                                                    checked 
-                                                                        ? [...data.institutions, institution.id] 
-                                                                        : data.institutions.filter(id => id !== institution.id)
-                                                                );
-                                                            }}
+                                        <div className="space-y-6">
+                                            <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+                                                <div className="space-y-5">
+                                                    <div className="space-y-1.5">
+                                                        <Label htmlFor="name" className="font-semibold text-gray-700 dark:text-gray-200">
+                                                            Nom complet *
+                                                        </Label>
+                                                        <Input
+                                                            id="name"
+                                                            value={data.name}
+                                                            onChange={(e) => setData('name', e.target.value)}
+                                                            required
+                                                            className={`rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 ${errors.name ? 'border-red-500 dark:border-red-500' : ''}`}
                                                         />
-                                                        <label
-                                                            htmlFor={`institution-${institution.id}`}
-                                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                                        >
-                                                            {institution.name}
-                                                        </label>
+                                                        {errors.name && <p className="text-xs text-red-500 dark:text-red-400">{errors.name}</p>}
                                                     </div>
-                                                ))}
-                                            </div>
-                                        </div>
 
-                                        <div className="space-y-2">
-                                            <Label>Photo de profil</Label>
-                                            <div 
-                                                {...getRootProps()} 
-                                                className={`border-2 border-dashed rounded-md p-4 text-center cursor-pointer ${
-                                                    isDragActive ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-300'
-                                                }`}
-                                            >
-                                                <input {...getInputProps()} />
-                                                {data.document.length > 0 ? (
-                                                    <div className="flex flex-col items-center">
-                                                        <img 
-                                                            src={data.document[0]} 
-                                                            alt="Preview" 
-                                                            className="h-24 w-24 rounded-full object-cover mb-2"
+                                                    <div className="space-y-1.5">
+                                                        <Label htmlFor="email" className="font-semibold text-gray-700 dark:text-gray-200">
+                                                            Email *
+                                                        </Label>
+                                                        <Input
+                                                            id="email"
+                                                            type="email"
+                                                            value={data.email}
+                                                            onChange={(e) => setData('email', e.target.value)}
+                                                            required
+                                                            className={`rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 ${errors.email ? 'border-red-500 dark:border-red-500' : ''}`}
                                                         />
-                                                        <Button 
-                                                            variant="destructive" 
-                                                            size="sm"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                removeAvatar();
-                                                            }}
-                                                        >
-                                                            <Trash2 className="h-4 w-4 mr-1" />
-                                                            Supprimer
-                                                        </Button>
+                                                        {errors.email && <p className="text-xs text-red-500 dark:text-red-400">{errors.email}</p>}
                                                     </div>
-                                                ) : (
-                                                    <>
-                                                        <div className="flex flex-col items-center justify-center gap-1">
-                                                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-                                                                <Users className="h-6 w-6 text-gray-400" />
+
+                                                    {!currentUser && (
+                                                        <>
+                                                            <div className="space-y-1.5">
+                                                                <Label htmlFor="password" className="font-semibold text-gray-700 dark:text-gray-200">
+                                                                    Mot de passe *
+                                                                </Label>
+                                                                <Input
+                                                                    id="password"
+                                                                    type="password"
+                                                                    value={data.password}
+                                                                    onChange={(e) => setData('password', e.target.value)}
+                                                                    required={!currentUser}
+                                                                    className={`rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 ${errors.password ? 'border-red-500 dark:border-red-500' : ''}`}
+                                                                />
+                                                                {errors.password && (
+                                                                    <p className="text-xs text-red-500 dark:text-red-400">{errors.password}</p>
+                                                                )}
                                                             </div>
-                                                            <p className="text-sm text-muted-foreground">
-                                                                {isDragActive 
-                                                                    ? 'Déposez votre fichier ici...' 
-                                                                    : 'Glissez-déposez votre fichier ici, ou cliquez pour sélectionner'
-                                                                }
+
+                                                            <div className="space-y-1.5">
+                                                                <Label
+                                                                    htmlFor="password_confirmation"
+                                                                    className="font-semibold text-gray-700 dark:text-gray-200"
+                                                                >
+                                                                    Confirmer le mot de passe *
+                                                                </Label>
+                                                                <Input
+                                                                    id="password_confirmation"
+                                                                    type="password"
+                                                                    value={data.password_confirmation}
+                                                                    onChange={(e) => setData('password_confirmation', e.target.value)}
+                                                                    required={!currentUser}
+                                                                    className={`rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 ${errors.password_confirmation ? 'border-red-500 dark:border-red-500' : ''}`}
+                                                                />
+                                                                {errors.password_confirmation && (
+                                                                    <p className="text-xs text-red-500 dark:text-red-400">
+                                                                        {errors.password_confirmation}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+
+                                                <div className="space-y-5">
+                                                    <div className="space-y-1.5">
+                                                        <Label className="font-semibold text-gray-700 dark:text-gray-200">Rôle *</Label>
+                                                        <Select value={data.role} onValueChange={(value) => setData('role', value)} required>
+                                                            <SelectTrigger className="rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400">
+                                                                <SelectValue placeholder="Sélectionner un rôle">
+                                                                    {roles.find((r) => r.id.toString() === data.role)?.name || 'Sélectionner un rôle'}
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {roles.map((role) => (
+                                                                    <SelectItem key={role.id} value={role.id.toString()}>
+                                                                        {role.name}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        {errors.role && <p className="text-xs text-red-500 dark:text-red-400">{errors.role}</p>}
+                                                    </div>
+
+                                                    <div className="space-y-1.5">
+                                                        <Label className="font-semibold text-gray-700 dark:text-gray-200">Statut *</Label>
+                                                        <Select
+                                                            value={data.is_active ? '1' : '0'}
+                                                            onValueChange={(value) => setData('is_active', value === '1')}
+                                                            required
+                                                        >
+                                                            <SelectTrigger className="rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400">
+                                                                <SelectValue placeholder="Sélectionner un statut">
+                                                                    {data.is_active ? 'Actif' : 'Inactif'}
+                                                                </SelectValue>
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="1">Actif</SelectItem>
+                                                                <SelectItem value="0">Inactif</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="font-semibold text-gray-700 dark:text-gray-200">Institutions</Label>
+                                                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                                                    {institutions.map((institution) => (
+                                                        <div key={institution.id} className="flex items-center space-x-2">
+                                                            <Checkbox
+                                                                id={`institution-${institution.id}`}
+                                                                checked={data.institutions.includes(institution.id)}
+                                                                onCheckedChange={(checked) => {
+                                                                    setData(
+                                                                        'institutions',
+                                                                        checked
+                                                                            ? [...data.institutions, institution.id]
+                                                                            : data.institutions.filter((id) => id !== institution.id),
+                                                                    );
+                                                                }}
+                                                            />
+                                                            <label
+                                                                htmlFor={`institution-${institution.id}`}
+                                                                className="text-sm leading-none font-medium text-gray-600 peer-disabled:cursor-not-allowed peer-disabled:opacity-70 dark:text-gray-300"
+                                                            >
+                                                                {institution.name}
+                                                            </label>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label className="font-semibold text-gray-700 dark:text-gray-200">Photo de profil</Label>
+                                                <div
+                                                    {...getRootProps()}
+                                                    className={`cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-all duration-200 ${
+                                                        isDragActive
+                                                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                                            : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
+                                                    } hover:border-blue-400 hover:bg-blue-50/50`}
+                                                >
+                                                    <input {...getInputProps()} />
+                                                    {avatarPreview ? (
+                                                        <div className="flex flex-col items-center">
+                                                            <img
+                                                                src={avatarPreview}
+                                                                alt="Preview"
+                                                                className="mb-2 h-24 w-24 rounded-full border-4 border-blue-200 object-cover shadow-lg dark:border-blue-900"
+                                                            />
+                                                            <Button
+                                                                variant="destructive"
+                                                                size="sm"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    removeAvatar();
+                                                                }}
+                                                                className="mt-1"
+                                                            >
+                                                                <Trash2 className="mr-1 h-4 w-4" />
+                                                                Supprimer
+                                                            </Button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center justify-center gap-2">
+                                                            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-blue-300 shadow dark:from-blue-900 dark:to-blue-800">
+                                                                <Users className="h-8 w-8 text-blue-400 dark:text-blue-200" />
+                                                            </div>
+                                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                                {isDragActive
+                                                                    ? 'Déposez votre fichier ici...'
+                                                                    : 'Glissez-déposez ou cliquez pour sélectionner une image'}
                                                             </p>
-                                                            <p className="text-xs text-muted-foreground mt-1">
-                                                                Formats acceptés: JPG, PNG (max 500KB)
+                                                            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                                                Formats acceptés: JPG, PNG (max 1Mo)
                                                             </p>
                                                         </div>
-                                                    </>
-                                                )}
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </ScrollArea.Viewport>
-                                <ScrollArea.Scrollbar
-                                    orientation="vertical"
-                                    className="flex w-2.5 touch-none select-none bg-gray-100 transition-colors duration-150 ease-in-out hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700"
-                                >
-                                    <ScrollArea.Thumb className="relative flex-1 rounded-full bg-gray-300 before:absolute before:top-1/2 before:left-1/2 before:h-full before:min-h-[44px] before:w-full before:min-w-[44px] before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] dark:bg-gray-600" />
-                                </ScrollArea.Scrollbar>
-                                <ScrollArea.Corner />
-                            </ScrollArea.Root>
+                                    </ScrollArea.Viewport>
+                                    <ScrollArea.Scrollbar
+                                        orientation="vertical"
+                                        className="flex w-2.5 touch-none rounded-full bg-gray-100 transition-colors duration-150 ease-in-out select-none hover:bg-blue-200 dark:bg-gray-800 dark:hover:bg-blue-900"
+                                    >
+                                        <ScrollArea.Thumb className="relative flex-1 rounded-full bg-blue-300 dark:bg-blue-700" />
+                                    </ScrollArea.Scrollbar>
+                                </ScrollArea.Root>
+                            </div>
 
                             {/* Footer */}
-                            <DialogFooter className="bg-background mt-6 py-4">
+                            <DialogFooter className="border-t border-gray-100 px-8 py-5 dark:border-gray-800">
                                 <div className="flex justify-end gap-2">
                                     <Button type="button" variant="outline" onClick={closeModal} disabled={processing}>
                                         Annuler
                                     </Button>
-                                    <Button type="submit" disabled={processing} className="gap-2">
+                                    <Button type="submit" disabled={processing} className="bg-blue-600 text-white hover:bg-blue-700">
                                         {processing ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                         ) : currentUser ? (
                                             <>
-                                                <Edit className="h-4 w-4" />
+                                                <Edit className="mr-2 h-4 w-4" />
                                                 Mettre à jour
                                             </>
                                         ) : (
                                             <>
-                                                <Plus className="h-4 w-4" />
+                                                <Plus className="mr-2 h-4 w-4" />
                                                 Créer l'utilisateur
                                             </>
                                         )}

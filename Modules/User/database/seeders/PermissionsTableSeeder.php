@@ -163,11 +163,11 @@ class PermissionsTableSeeder extends Seeder
 
             // attributions
 
-            'access_attributions',
-            'create_attributions',
-            'show_attributions',             
-            'edit_attributions',
-            'delete_attributions' 
+            'access_assignments',
+            'create_assignments',
+            'show_assignments',             
+            'edit_assignments',
+            'delete_assignments' 
 
         ];
 

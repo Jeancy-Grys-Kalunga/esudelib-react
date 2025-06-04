@@ -34,6 +34,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::resource('assignments', AssignmentController::class)->names('assignments');
 
+    Route::post('assignments', [AssignmentController::class, 'bulkStore'])->name('assignments.bulk');
+
     Route::resource('programs', ProgramController::class)->names('programs');
 
     Route::get('units-teachings-mass-create', [UnitsTeachingController::class, 'mass_create'])->name('units-teachings.mass-create');

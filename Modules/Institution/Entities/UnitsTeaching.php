@@ -13,14 +13,22 @@ class UnitsTeaching extends Model
     /**
      * The attributes that are mass assignable.
      */
-    protected $fillable = [];
-    
-    public function course() {
-        return $this->belongsTo(Course::class, 'course_id', 'id');
+    protected $guarded = [];
+
+
+
+    public function courses()
+    {
+        return $this->belongsToMany(Course::class);
     }
 
-    public function promotion() {
+    public function promotion()
+    {
         return $this->belongsTo(Promotion::class, 'promotion_id', 'id');
     }
 
+    public function assignments()
+    {
+        return $this->hasMany(Assignment::class);
+    }
 }

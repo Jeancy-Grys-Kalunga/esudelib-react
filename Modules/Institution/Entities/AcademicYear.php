@@ -17,20 +17,28 @@ class AcademicYear extends Model
      */
     protected $fillable = [];
 
-    public function inscriptions() {
-        return $this->hasMany(Inscription::class, 'academic_year_id', 'id');
-    }
+    // public function inscriptions()
+    // {
+    //     return $this->hasMany(Inscription::class, 'academic_year_id', 'id');
+    // }
 
-    public function palmares() {
+    public function palmares()
+    {
         return $this->hasMany(Palmares::class, 'academic_year_id', 'id');
     }
 
-    public function notes() {
+    public function notes()
+    {
         return $this->hasMany(Note::class, 'academic_year_id', 'id');
     }
-    
-    public function juries() {
+
+    public function juries()
+    {
         return $this->hasMany(Jury::class, 'academic_year_id', 'id');
     }
 
+    public function assignments()
+    {
+        return $this->hasMany(Assignment::class, 'academic_year_id', 'id');
+    }
 }

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
 use Modules\Institution\Entities\Institution;
+use Modules\User\Http\Requests\UpdateUserRequest;
 use Modules\User\Http\Requests\UserRequest;
 use Spatie\Permission\Models\Permission;
 
@@ -41,21 +42,25 @@ class UsersController extends Controller
         );
 
         $users = User::with(['roles', 'institutions'])
-            ->where('id', '!=', auth()->id())
-            ->orderByDesc('id')
-            ->get()
-            ->map(function ($user) {
-                return [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'is_active' => $user->is_active,
-                    'avatar' => $user->getFirstMediaUrl('avatars'),
-                    'role' => $user->roles->first()->name ?? null,
-                    'institutions' => $user->institutions->pluck('name'),
-                    'created_at' => $user->created_at->translatedFormat('d F Y'),
-                ];
-            });
+        ->where('id', '!=', auth()->id())
+        ->orderByDesc('id')
+        ->get()
+        ->map(function ($user) {
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'is_active' => $user->is_active,
+                'avatar' => $user->getFirstMediaUrl('avatars'),
+                'role' => $user->roles->first()->name ?? null,
+                // Modification ici: retourner des objets au lieu de noms
+                'institutions' => $user->institutions->map(fn($inst) => [
+                    'id' => $inst->id,
+                    'name' => $inst->name
+                ]),
+                'created_at' => $user->created_at->translatedFormat('d F Y'),
+            ];
+        });
 
         return Inertia::render('user/users', [
             'users' => $users,
@@ -69,11 +74,9 @@ class UsersController extends Controller
 
     public function store(UserRequest $request)
     {
-       
         if (!auth()->user()->hasPermissionTo('create_users')) {
             abort(403, 'Action non autorisée');
         }
-
 
         $user = User::create([
             'name' => $request->name,
@@ -82,8 +85,12 @@ class UsersController extends Controller
             'is_active' => $request->is_active,
         ]);
 
-        $user->assignRole($request->role);
+        // Assigner le rôle à l'utilisateur
 
+        $role = Role::findOrFail($request->role);
+
+        $user->assignRole($role->name);
+   
         if ($request->has('institutions')) {
             $user->institutions()->sync($request->institutions);
         }
@@ -98,34 +105,16 @@ class UsersController extends Controller
         return redirect()->route('users.index')->with([
             'flash' => [
                 'type' => 'success',
-                'message' => "Utilisateur enregistré avec succès avec le rôle '$request->role' !",
+                'message' => "Utilisateur enregistré avec succès avec le rôle '$role' !",
             ],
         ]);
     }
 
-    public function update(Request $request, User $user)
+    public function update(UpdateUserRequest $request, User $user)
     {
-         if (!auth()->user()->hasPermissionTo('edit_users')) {
+        if (!auth()->user()->hasPermissionTo('edit_users')) {
             abort(403, 'Action non autorisée');
         }
-
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:users,email,' . $user->id,
-            'password' => 'nullable|string|min:4|max:255|confirmed',
-        ], [
-            'name.required' => 'Le nom est obligatoire.',
-            'name.string' => 'Le nom doit être une chaîne de caractères.',
-            'name.max' => 'Le nom ne doit pas dépasser 255 caractères.',
-            'email.required' => 'L\'adresse e-mail est obligatoire.',
-            'email.email' => 'L\'adresse e-mail doit être valide.',
-            'email.max' => 'L\'adresse e-mail ne doit pas dépasser 255 caractères.',
-            'email.unique' => 'Cette adresse e-mail est déjà utilisée.',
-            'password.string' => 'Le mot de passe doit être une chaîne de caractères.',
-            'password.min' => 'Le mot de passe doit contenir au moins 4 caractères.',
-            'password.max' => 'Le mot de passe ne doit pas dépasser 255 caractères.',
-            'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
-        ]);
 
         $updateData = [
             'name' => $request->name,
@@ -138,7 +127,10 @@ class UsersController extends Controller
         }
 
         $user->update($updateData);
-        $user->syncRoles($request->role);
+
+        $role = Role::findOrFail($request->role);
+
+        $user->syncRoles($role);
 
         if ($request->has('institutions')) {
             $user->institutions()->sync($request->institutions);
