@@ -45,4 +45,9 @@ class Course extends Model
     {
         return $this->belongsToMany(UnitsTeaching::class, 'course_units_teaching', 'course_id', 'units_teaching_id');
     }
+
+    public function assignments()
+    {
+        return $this->hasMany(Assignment::class, 'course_id', 'id');
+    }
 }

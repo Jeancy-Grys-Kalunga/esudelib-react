@@ -27,8 +27,5 @@ class UnitsTeaching extends Model
         return $this->belongsTo(Promotion::class, 'promotion_id', 'id');
     }
 
-    public function assignments()
-    {
-        return $this->hasMany(Assignment::class);
-    }
+
 }

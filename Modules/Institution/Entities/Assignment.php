@@ -16,7 +16,7 @@ class Assignment extends Model
     protected $fillable = [
         'holder_id',
         'collaborator_id',
-        'teaching_unit_id',
+        'course_id',
         'academic_year_id',
         'observation',
         'institution_id'
@@ -41,9 +41,9 @@ class Assignment extends Model
     /**
      * Relation avec l'unité d'enseignement
      */
-    public function teachingUnit()
+    public function course()
     {
-        return $this->belongsTo(UnitsTeaching::class, 'teaching_unit_id');
+        return $this->belongsTo(Course::class, 'course_id');
     }
 
     /**
