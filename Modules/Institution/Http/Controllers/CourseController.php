@@ -5,9 +5,7 @@ namespace Modules\Institution\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Course;
-use Modules\Institution\Entities\CourseCategory;
 use Modules\Institution\Http\Requests\StoreCourseRequest;
 use Modules\Institution\Http\Requests\UpdateCourseRequest;
 use Spatie\Permission\Models\Permission;
@@ -42,26 +40,13 @@ class CourseController extends Controller
         );
 
         // Construction de la requête
-        $query = Course::with(['institution', 'category'])
-            ->orderByDesc('id');
-
-        if ($user->hasRole('Secrétaire Académique')) {
-            $institutionIds = $user->institutions()->pluck('id');
-            $query->whereIn('institution_id', $institutionIds);
-        }
-
-        $institutions = $user->hasRole('Secrétaire Académique')
-            ? $user->institutions()->pluck('id')
-            : Institution::pluck('id');
+        $query = Course::query()->orderByDesc('id');
 
         // Formatage des données pour Inertia
         $courses = $query->get()->map(function ($course) {
             return [
                 'id' => $course->id,
                 'title' => $course->title,
-                'credits' => $course->credits,
-                'institution' => $course->institution->name,
-                'category' => $course->category->name ?? 'Non classé',
                 'created_at' => $course->created_at->translatedFormat('d F Y'),
             ];
         });
@@ -71,26 +56,6 @@ class CourseController extends Controller
             'can' => $can,
             'filters' => $request->only(['search']),
             'flash' => $this->getFlashMessages(),
-            'institutions' => Institution::whereIn('id', $institutions)->get(['id', 'name']),
-            'categories' => CourseCategory::all(['id', 'name']),
-        ]);
-    }
-
-    public function create()
-    {
-        $user = auth()->user();
-
-        $institutions = Institution::when(
-            $user->hasRole('Secrétaire Académique'),
-            fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
-        )->get(['id', 'name']);
-
-        $categories = CourseCategory::all(['id', 'name']);
-
-        return Inertia::render('institution::courses/Form', [
-            'course' => new Course(),
-            'institutions' => $institutions,
-            'categories' => $categories,
         ]);
     }
 
@@ -102,9 +67,6 @@ class CourseController extends Controller
 
         Course::create([
             'title' => $request->title,
-            'credits' => $request->credits,
-            'institution_id' => $request->institution_id,
-            'course_category_id' => $request->course_category_id,
         ]);
 
         return redirect()->route('courses.index')->with([
@@ -112,24 +74,6 @@ class CourseController extends Controller
                 'type' => 'success',
                 'message' => 'Cours enregistré avec succès !',
             ],
-        ]);
-    }
-
-    public function edit(Course $course)
-    {
-        $user = auth()->user();
-
-        $institutions = Institution::when(
-            $user->hasRole('Secrétaire Académique'),
-            fn($q) => $q->whereIn('id', $user->institutions()->pluck('id'))
-        )->get(['id', 'name']);
-
-        $categories = CourseCategory::all(['id', 'name']);
-
-        return Inertia::render('course/index', [
-            'course' => $course,
-            'institutions' => $institutions,
-            'categories' => $categories,
         ]);
     }
 
@@ -141,9 +85,6 @@ class CourseController extends Controller
 
         $course->update([
             'title' => $request->title,
-            'credits' => $request->credits,
-            'institution_id' => $request->institution_id,
-            'course_category_id' => $request->course_category_id,
         ]);
 
         return redirect()->route('courses.index')->with([

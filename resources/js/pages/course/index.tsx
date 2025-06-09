@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 
@@ -18,28 +17,11 @@ import _ from 'lodash';
 type Course = {
     id: number;
     title: string;
-    credits: number;
-    institution: string;
-    category: string;
     created_at: string;
-    institution_id?: number;  
-    course_category_id?: number;  
-};
-
-type Institution = {
-    id: number;
-    name: string;
-};
-
-type Category = {
-    id: number;
-    name: string;
 };
 
 type PageProps = {
     courses: Course[];
-    institutions: Institution[];
-    categories: Category[];
     can: {
         create: boolean;
         edit: boolean;
@@ -56,7 +38,7 @@ type PageProps = {
     };
 };
 
-export default function CourseIndex({ courses: allCourses, institutions, categories, can, flash, filters }: PageProps) {
+export default function CourseIndex({ courses: allCourses, can, flash, filters }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentCourse, setCurrentCourse] = useState<Course | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -68,9 +50,6 @@ export default function CourseIndex({ courses: allCourses, institutions, categor
 
     const { data, setData, post, put, errors, processing, reset } = useForm({
         title: '',
-        credits: 1,
-        institution_id: '',
-        course_category_id: '',
     });
 
     const handleSearch = useMemo(() => {
@@ -81,10 +60,7 @@ export default function CourseIndex({ courses: allCourses, institutions, categor
                 return;
             }
             const results = allCourses.filter(
-                (course) =>
-                    course.title.toLowerCase().includes(term.toLowerCase()) ||
-                    course.institution.toLowerCase().includes(term.toLowerCase()) ||
-                    course.category.toLowerCase().includes(term.toLowerCase()),
+                (course) => course.title.toLowerCase().includes(term.toLowerCase())
             );
             setFilteredCourses(results);
             setCurrentPage(1);
@@ -122,9 +98,6 @@ export default function CourseIndex({ courses: allCourses, institutions, categor
         if (currentCourse) {
             setData({
                 title: currentCourse.title,
-                credits: currentCourse.credits,
-                institution_id: currentCourse.institution_id?.toString() || '',
-                course_category_id: currentCourse.course_category_id?.toString() || '',
             });
         } else {
             reset();
@@ -132,7 +105,6 @@ export default function CourseIndex({ courses: allCourses, institutions, categor
     }, [currentCourse]);
 
     const openModal = (course: Course | null = null) => {
-        console.log('Opening modal with course:', course); // Ajoutez ceci
         if ((course && !can.edit) || (!course && !can.create)) {
             toast.error("Vous n'avez pas les permissions nécessaires");
             return;
@@ -270,9 +242,6 @@ export default function CourseIndex({ courses: allCourses, institutions, categor
                                         <TableHeader className="bg-gray-50 dark:bg-gray-800">
                                             <TableRow>
                                                 <TableHead>Titre</TableHead>
-                                                <TableHead>Crédits</TableHead>
-                                                <TableHead>Institution</TableHead>
-                                                <TableHead>Catégorie</TableHead>
                                                 <TableHead>Date de création</TableHead>
                                                 <TableHead className="text-right">Actions</TableHead>
                                             </TableRow>
@@ -281,9 +250,6 @@ export default function CourseIndex({ courses: allCourses, institutions, categor
                                             {paginatedCourses.map((course) => (
                                                 <TableRow key={course.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                                     <TableCell className="font-medium">{course.title}</TableCell>
-                                                    <TableCell>{course.credits}</TableCell>
-                                                    <TableCell>{course.institution}</TableCell>
-                                                    <TableCell>{course.category}</TableCell>
                                                     <TableCell>{course.created_at}</TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
@@ -386,87 +352,14 @@ export default function CourseIndex({ courses: allCourses, institutions, categor
                         </DialogHeader>
 
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                {/* Colonne Gauche */}
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="title" className="flex items-center gap-1">
-                                            <BookOpen className="h-4 w-4" />
-                                            Titre du cours *
-                                        </Label>
-                                        <Input id="title" value={data.title} onChange={(e) => setData('title', e.target.value)} required />
-                                        {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="credits" className="flex items-center gap-1">
-                                            <BookOpen className="h-4 w-4" />
-                                            Nombre de crédits *
-                                        </Label>
-                                        <Input
-                                            id="credits"
-                                            type="number"
-                                            min="1"
-                                            max="10"
-                                            value={data.credits}
-                                            onChange={(e) => setData('credits', parseInt(e.target.value))}
-                                            required
-                                        />
-                                        {errors.credits && <p className="text-sm text-red-500">{errors.credits}</p>}
-                                    </div>
-                                </div>
-
-                                {/* Colonne Droite */}
-                                <div className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label className="flex items-center gap-1">
-                                            <BookOpen className="h-4 w-4" />
-                                            Institution *
-                                        </Label>
-                                        <Select value={data.institution_id} onValueChange={(value) => setData('institution_id', value)} required>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Sélectionnez une institution">
-                                                    {institutions.find((i) => i.id.toString() === data.institution_id)?.name ||
-                                                        'Sélectionnez une institution'}
-                                                </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {institutions.map((institution) => (
-                                                    <SelectItem key={institution.id} value={institution.id.toString()}>
-                                                        {institution.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {errors.institution_id && <p className="text-sm text-red-500">{errors.institution_id}</p>}
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label className="flex items-center gap-1">
-                                            <BookOpen className="h-4 w-4" />
-                                            Catégorie *
-                                        </Label>
-                                        <Select
-                                            value={data.course_category_id}
-                                            onValueChange={(value) => setData('course_category_id', value)}
-                                            required
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Sélectionnez une catégorie">
-                                                    {categories.find((c) => c.id.toString() === data.course_category_id)?.name ||
-                                                        'Sélectionnez une catégorie'}
-                                                </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {categories.map((category) => (
-                                                    <SelectItem key={category.id} value={category.id.toString()}>
-                                                        {category.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {errors.course_category_id && <p className="text-sm text-red-500">{errors.course_category_id}</p>}
-                                    </div>
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="title" className="flex items-center gap-1">
+                                        <BookOpen className="h-4 w-4" />
+                                        Titre du cours *
+                                    </Label>
+                                    <Input id="title" value={data.title} onChange={(e) => setData('title', e.target.value)} required />
+                                    {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
                                 </div>
                             </div>
 
