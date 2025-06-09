@@ -15,7 +15,6 @@ class BulkAssignmentRequest extends FormRequest
     public function rules()
     {
         return [
-            'assignments' => 'required|array|min:1',
             'assignments.*.institution_id' => [
                 'required',
                 Rule::exists('institutions', 'id')
@@ -34,7 +33,8 @@ class BulkAssignmentRequest extends FormRequest
             ],
             'assignments.*.collaborator_id' => [
                 'nullable',
-                Rule::exists('teachers', 'id')
+                Rule::exists('teachers', 'id'),
+                'different:assignments.*.holder_id'
             ],
             'assignments.*.observation' => 'nullable|string|max:500',
             
@@ -59,6 +59,7 @@ class BulkAssignmentRequest extends FormRequest
             'assignments.*.holder_id.exists' => 'Le titulaire sélectionné est invalide',
             
             'assignments.*.collaborator_id.exists' => 'Le collaborateur sélectionné est invalide',
+            'assignments.*.collaborator_id.different' => 'Le collaborateur ne peut pas être le même que le titulaire',
             
             'assignments.*.id.exists' => 'L\'attribution à mettre à jour est invalide',
         ];

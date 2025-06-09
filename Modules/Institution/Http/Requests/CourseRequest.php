@@ -12,10 +12,8 @@ class CourseRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title' => 'required|string|max:255',
+            'title' => 'required|string|max:255|unique:courses,title,' . $this->route('course') . ',id',
             'content' => 'required|string',
-            'credits' => 'required|integer',
-            'institution_id' => 'required|exists:institutions,id'
         ];
     }
 
@@ -26,4 +24,20 @@ class CourseRequest extends FormRequest
     {
         return true;
     }
+
+    /**
+     * Get the custom messages for the validation rules.
+     */
+    public function messages(): array
+    {
+        return [
+            'title.required' => 'Le titre du cours est obligatoire',
+            'title.string' => 'Le titre doit être une chaîne de caractères',
+            'title.max' => 'Le titre ne doit pas dépasser 255 caractères',
+            'title.unique' => 'Un cours avec ce titre existe déjà'
+        ];
+    }
+    /**
+     * Prepare the data for validation.
+     */
 }

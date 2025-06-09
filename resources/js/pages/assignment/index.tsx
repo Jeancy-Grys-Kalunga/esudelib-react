@@ -4,24 +4,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import _ from 'lodash';
 
 type TeachingUnit = {
     id: number;
-    name: string; // On garde name comme alias
+    name: string;
 };
 
 type AcademicYear = {
     id: number;
-    name: string; // On garde name comme alias
+    name: string;
 };
 
 interface Assignment {
@@ -37,11 +35,6 @@ interface Assignment {
     institution_id: number;
     institution: string;
     observation: string | null;
-}
-
-interface Option {
-    id: number;
-    name: string;
 }
 
 type Teacher = {
@@ -82,10 +75,12 @@ type PageProps = {
     };
     filters?: {
         search?: string;
+        institution?: string;
+        academic_year?: string;
     };
 };
 
-export default function AssignmentIndex({
+export default function AssignmentManager({
     assignments: allAssignments,
     teachers,
     teaching_units,
@@ -104,36 +99,44 @@ export default function AssignmentIndex({
     const [itemsPerPage] = useState(10);
     const [bulkAssignments, setBulkAssignments] = useState<AssignmentFormData[]>([]);
     const [isBulkMode, setIsBulkMode] = useState(false);
-    const [currentInstitution, setCurrentInstitution] = useState<string>('');
-    const [currentAcademicYear, setCurrentAcademicYear] = useState<string>('');
+    const [currentInstitution, setCurrentInstitution] = useState(filters?.institution || 'all');
+    const [currentAcademicYear, setCurrentAcademicYear] = useState(filters?.academic_year || 'all');
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const { post, errors, processing, reset } = useForm({
+    const { post, errors, processing, reset, setData } = useForm({
         assignments: [] as AssignmentFormData[],
     });
 
-    const handleSearch = useMemo(() => {
-        return _.debounce((term: string) => {
-            if (!term) {
-                setFilteredAssignments(allAssignments);
-                setCurrentPage(1);
-                return;
-            }
-            const results = allAssignments.filter(
-                (assignment) =>
-                    assignment.holder.toLowerCase().includes(term.toLowerCase()) ||
-                    (assignment.collaborator && assignment.collaborator.toLowerCase().includes(term.toLowerCase())) ||
-                    assignment.teaching_unit.toLowerCase().includes(term.toLowerCase()) ||
-                    assignment.institution.toLowerCase().includes(term.toLowerCase()),
-            );
-            setFilteredAssignments(results);
-            setCurrentPage(1);
-        }, 300);
-    }, [allAssignments]);
-
+    // Filtrage combiné
     useEffect(() => {
-        handleSearch(searchTerm);
-        return () => handleSearch.cancel();
-    }, [searchTerm, handleSearch]);
+        let results = [...allAssignments];
+
+        // Filtre par recherche
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            results = results.filter(
+                (assignment) =>
+                    assignment.holder.toLowerCase().includes(term) ||
+                    (assignment.collaborator && assignment.collaborator.toLowerCase().includes(term)) ||
+                    assignment.teaching_unit.toLowerCase().includes(term) ||
+                    assignment.institution.toLowerCase().includes(term),
+            );
+        }
+
+        // Filtre par institution (ignorer si 'all')
+        if (currentInstitution && currentInstitution !== 'all') {
+            results = results.filter((a) => a.institution_id.toString() === currentInstitution);
+        }
+
+        // Filtre par année académique (ignorer si 'all')
+        if (currentAcademicYear && currentAcademicYear !== 'all') {
+            results = results.filter((a) => a.academic_year_id.toString() === currentAcademicYear);
+        }
+
+        setFilteredAssignments(results);
+        setCurrentPage(1);
+    }, [allAssignments, searchTerm, currentInstitution, currentAcademicYear]);
 
     const paginatedAssignments = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
@@ -170,23 +173,18 @@ export default function AssignmentIndex({
         setIsBulkMode(mode === 'bulk');
 
         if (mode === 'single' && assignment) {
-            // Mode édition d'une seule attribution
             setBulkAssignments([
                 {
                     id: assignment.id,
                     institution_id: assignment.institution_id.toString(),
-                    teaching_unit_id: teaching_units.find((unit) => unit.name === assignment.teaching_unit)?.id.toString() || '',
-                    academic_year_id: academic_years.find((year) => year.name === assignment.academic_year)?.id.toString() || '',
+                    teaching_unit_id: assignment.teaching_unit_id.toString(),
+                    academic_year_id: assignment.academic_year_id.toString(),
                     holder_id: assignment.holder_id.toString(),
-                    collaborator_id: assignment.collaborator_id?.toString() || '',
+                    collaborator_id: assignment.collaborator_id?.toString() || 'none',
                     observation: assignment.observation || '',
                 },
             ]);
-        } else if (mode === 'bulk') {
-            // Mode création en masse - initialiser avec une ligne vide
-            setBulkAssignments([createEmptyAssignment()]);
         } else {
-            // Mode création d'une seule attribution
             setBulkAssignments([createEmptyAssignment()]);
         }
 
@@ -194,11 +192,11 @@ export default function AssignmentIndex({
     };
 
     const createEmptyAssignment = (): AssignmentFormData => ({
-        institution_id: currentInstitution || (institutions.length > 0 ? institutions[0].id.toString() : ''),
+        institution_id: currentInstitution !== 'all' ? currentInstitution : institutions.length > 0 ? institutions[0].id.toString() : '',
         teaching_unit_id: teaching_units.length > 0 ? teaching_units[0].id.toString() : '',
-        academic_year_id: currentAcademicYear || (academic_years.length > 0 ? academic_years[0].id.toString() : ''),
+        academic_year_id: currentAcademicYear !== 'all' ? currentAcademicYear : academic_years.length > 0 ? academic_years[0].id.toString() : '',
         holder_id: teachers.length > 0 ? teachers[0].id.toString() : '',
-        collaborator_id: '',
+        collaborator_id: 'none',
         observation: '',
     });
 
@@ -231,31 +229,36 @@ export default function AssignmentIndex({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Préparer les données dans un FormData d'Inertia
-        const formData = new FormData();
-        bulkAssignments.forEach((assignment, idx) => {
-            Object.entries(assignment).forEach(([key, value]) => {
-                // Pour le collaborateur, si "none" ou vide, on envoie null
-                if (key === 'collaborator_id' && (value === 'none' || value === '')) {
-                    formData.append(`assignments[${idx}][${key}]`, '');
-                } else {
-                    formData.append(`assignments[${idx}][${key}]`, value != null ? String(value) : '');
-                }
-            });
-        });
+        setIsSubmitting(true);
 
-        try {
-            await post(route('assignments.bulk'), {
-                data: formData,
-                forceFormData: true,
-                onSuccess: () => {
-                    closeModal();
-                    toast.success(isBulkMode ? 'Attributions enregistrées avec succès' : 'Attribution enregistrée avec succès');
-                },
-            });
-        } catch (error) {
-            console.error('Error submitting form:', error);
-        }
+        // Préparation des données pour l'envoi
+        const payload = {
+            assignments: bulkAssignments.map((a) => ({
+                ...a,
+                institution_id: a.institution_id,
+                teaching_unit_id: a.teaching_unit_id,
+                academic_year_id: a.academic_year_id,
+                holder_id: a.holder_id,
+                // Convertir 'none' en null
+                collaborator_id: a.collaborator_id === 'none' ? null : a.collaborator_id,
+                observation: a.observation,
+            })),
+        };
+
+        // Utilisation de la route spécifique pour les opérations en masse
+        const url = isBulkMode ? route('assignments.store.bulk') : route('assignments.store');
+
+        router.post(url, payload, {
+            onSuccess: () => {
+                closeModal();
+                setIsSubmitting(false);
+            },
+            onError: (errors) => {
+                toast.error("Une erreur s'est produite");
+                console.error('Submission errors:', errors);
+                setIsSubmitting(false);
+            },
+        });
     };
 
     const openDeleteModal = (assignment: Assignment) => {
@@ -270,18 +273,26 @@ export default function AssignmentIndex({
     const confirmDelete = () => {
         if (!assignmentToDelete) return;
 
+        setIsDeleting(true);
         router.delete(route('assignments.destroy', assignmentToDelete.id), {
             onSuccess: () => {
                 setIsDeleteModalOpen(false);
-                setAssignmentToDelete(null);
+                toast.warning('Attribution supprimée avec succès');
             },
         });
     };
 
     const resetFilters = () => {
         setSearchTerm('');
-        setFilteredAssignments(allAssignments);
-        setCurrentPage(1);
+        setCurrentInstitution('all');
+        setCurrentAcademicYear('all');
+        router.get(route('assignments.index'), {}, { preserveState: true });
+    };
+
+    const getFieldError = (index: number, field: string): string | null => {
+        const key = `assignments.${index}.${field}`;
+        // @ts-ignore
+        return errors[key] as string | null;
     };
 
     if (!can.access) {
@@ -326,11 +337,8 @@ export default function AssignmentIndex({
                 </div>
 
                 <Card className="shadow-sm">
-                    <CardHeader className="pb-3">
-                        <CardTitle>Recherche</CardTitle>
-                    </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                             <div className="relative">
                                 <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                                 <Input
@@ -350,47 +358,37 @@ export default function AssignmentIndex({
                                     </Button>
                                 )}
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <Select value={currentInstitution} onValueChange={setCurrentInstitution}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Filtrer par institution" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Toutes les institutions</SelectItem> {/* Corrigé */}
-                                        {institutions.map((institution) => (
-                                            <SelectItem key={institution.id} value={institution.id.toString()}>
-                                                {institution.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <Select value={currentAcademicYear} onValueChange={setCurrentAcademicYear}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Filtrer par année" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Toutes les années</SelectItem> {/* Corrigé */}
-                                        {academic_years.map((year) => (
-                                            <SelectItem key={year.id} value={year.id.toString()}>
-                                                {year.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            <Select value={currentInstitution} onValueChange={setCurrentInstitution}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Toutes les institutions" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Toutes les institutions</SelectItem>
+                                    {institutions.map((institution) => (
+                                        <SelectItem key={institution.id} value={institution.id.toString()}>
+                                            {institution.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select value={currentAcademicYear} onValueChange={setCurrentAcademicYear}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Toutes les années" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Toutes les années</SelectItem>
+                                    {academic_years.map((year) => (
+                                        <SelectItem key={year.id} value={year.id.toString()}>
+                                            {year.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="shadow-sm">
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle>Liste des Attributions</CardTitle>
-                                <CardDescription>{filteredAssignments.length} attributions correspondant aux critères</CardDescription>
-                            </div>
-                        </div>
-                    </CardHeader>
                     <CardContent>
                         {filteredAssignments.length > 0 ? (
                             <div className="space-y-4">
@@ -505,7 +503,7 @@ export default function AssignmentIndex({
                 </Card>
 
                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+                    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl md:max-w-4xl lg:max-w-6xl">
                         <DialogHeader>
                             <DialogTitle className="flex items-center gap-2 text-xl">
                                 <GraduationCap className="h-5 w-5" />
@@ -515,18 +513,15 @@ export default function AssignmentIndex({
                                       ? 'Modifier Attribution'
                                       : 'Nouvelle Attribution'}
                             </DialogTitle>
+                            <DialogDescription>
+                                {isBulkMode ? 'Ajoutez plusieurs attributions en une seule opération' : "Configurez les détails de l'attribution"}
+                            </DialogDescription>
                         </DialogHeader>
 
-                        {Object.keys(errors).length > 0 && (
+                        {errors.assignments && typeof errors.assignments === 'string' && (
                             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 shadow dark:border-red-700 dark:bg-red-900/20">
                                 <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">Erreurs de validation</h3>
-                                <ul className="mt-2 list-disc space-y-1 pl-5">
-                                    {Object.entries(errors).map(([key, error]) => (
-                                        <li key={key} className="text-sm text-red-700 dark:text-red-300">
-                                            {error}
-                                        </li>
-                                    ))}
-                                </ul>
+                                <p className="mt-2 text-sm text-red-700 dark:text-red-300">{errors.assignments}</p>
                             </div>
                         )}
 
@@ -542,25 +537,23 @@ export default function AssignmentIndex({
                                     </Button>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-4">
-                                    {bulkAssignments.map((assignment, index) => (
-                                        <div key={index} className="relative rounded-lg border bg-white p-4">
-                                            {bulkAssignments.length > 1 && (
-                                                <Button
-                                                    type="button"
-                                                    variant="destructive"
-                                                    size="icon"
-                                                    className="absolute top-2 right-2 h-6 w-6"
-                                                    onClick={() => handleRemoveAssignment(index)}
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </Button>
-                                            )}
-
-                                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                <div className="space-y-3">
-                                                    <div className="space-y-2">
-                                                        <Label>Institution *</Label>
+                                <div className="overflow-hidden rounded-lg border">
+                                    <Table>
+                                        <TableHeader className="bg-gray-100">
+                                            <TableRow>
+                                                <TableHead className="w-[180px]">Institution *</TableHead>
+                                                <TableHead className="w-[180px]">Unité d'enseignement *</TableHead>
+                                                <TableHead className="w-[150px]">Année académique *</TableHead>
+                                                <TableHead className="w-[180px]">Titulaire *</TableHead>
+                                                <TableHead className="w-[180px]">Collaborateur</TableHead>
+                                                <TableHead>Observation</TableHead>
+                                                <TableHead className="w-[50px]">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {bulkAssignments.map((assignment, index) => (
+                                                <TableRow key={index}>
+                                                    <TableCell>
                                                         <Select
                                                             value={assignment.institution_id}
                                                             onValueChange={(value) => handleAssignmentChange(index, 'institution_id', value)}
@@ -569,29 +562,18 @@ export default function AssignmentIndex({
                                                                 <SelectValue placeholder="Sélectionnez une institution" />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {institutions
-                                                                    .filter((inst) => inst.id != null)
-                                                                    .map((institution) => (
-                                                                        <SelectItem
-                                                                            key={institution.id}
-                                                                            value={institution.id.toString()}
-                                                                            disabled={!institution.id}
-                                                                        >
-                                                                            {institution.name}
-                                                                        </SelectItem>
-                                                                    ))}
+                                                                {institutions.map((institution) => (
+                                                                    <SelectItem key={institution.id} value={institution.id.toString()}>
+                                                                        {institution.name}
+                                                                    </SelectItem>
+                                                                ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {Array.isArray((errors as any).assignments) &&
-                                                            (errors as any).assignments[index]?.institution_id && (
-                                                                <p className="text-sm text-red-500">
-                                                                    {(errors as any).assignments[index].institution_id}
-                                                                </p>
-                                                            )}
-                                                    </div>
-
-                                                    <div className="space-y-2">
-                                                        <Label>Unité d'enseignement *</Label>
+                                                        {getFieldError(index, 'institution_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'institution_id')}</p>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
                                                         <Select
                                                             value={assignment.teaching_unit_id}
                                                             onValueChange={(value) => handleAssignmentChange(index, 'teaching_unit_id', value)}
@@ -600,25 +582,18 @@ export default function AssignmentIndex({
                                                                 <SelectValue placeholder="Sélectionnez une unité" />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {teaching_units
-                                                                    .filter((unit) => unit.id != null)
-                                                                    .map((unit) => (
-                                                                        <SelectItem key={unit.id} value={unit.id.toString()} disabled={!unit.id}>
-                                                                            {unit.name}
-                                                                        </SelectItem>
-                                                                    ))}
+                                                                {teaching_units.map((unit) => (
+                                                                    <SelectItem key={unit.id} value={unit.id.toString()}>
+                                                                        {unit.name}
+                                                                    </SelectItem>
+                                                                ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {Array.isArray((errors as any).assignments) &&
-                                                            (errors as any).assignments[index]?.teaching_unit_id && (
-                                                                <p className="text-sm text-red-500">
-                                                                    {(errors as any).assignments[index].teaching_unit_id}
-                                                                </p>
-                                                            )}
-                                                    </div>
-
-                                                    <div className="space-y-2">
-                                                        <Label>Année académique *</Label>
+                                                        {getFieldError(index, 'teaching_unit_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'teaching_unit_id')}</p>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
                                                         <Select
                                                             value={assignment.academic_year_id}
                                                             onValueChange={(value) => handleAssignmentChange(index, 'academic_year_id', value)}
@@ -627,27 +602,18 @@ export default function AssignmentIndex({
                                                                 <SelectValue placeholder="Sélectionnez une année" />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {academic_years
-                                                                    .filter((year) => year.id != null)
-                                                                    .map((year) => (
-                                                                        <SelectItem key={year.id} value={year.id.toString()} disabled={!year.id}>
-                                                                            {year.name}
-                                                                        </SelectItem>
-                                                                    ))}
+                                                                {academic_years.map((year) => (
+                                                                    <SelectItem key={year.id} value={year.id.toString()}>
+                                                                        {year.name}
+                                                                    </SelectItem>
+                                                                ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {Array.isArray((errors as any).assignments) &&
-                                                            (errors as any).assignments[index]?.academic_year_id && (
-                                                                <p className="text-sm text-red-500">
-                                                                    {(errors as any).assignments[index].academic_year_id}
-                                                                </p>
-                                                            )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-3">
-                                                    <div className="space-y-2">
-                                                        <Label>Titulaire *</Label>
+                                                        {getFieldError(index, 'academic_year_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'academic_year_id')}</p>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
                                                         <Select
                                                             value={assignment.holder_id}
                                                             onValueChange={(value) => handleAssignmentChange(index, 'holder_id', value)}
@@ -656,27 +622,18 @@ export default function AssignmentIndex({
                                                                 <SelectValue placeholder="Sélectionnez un titulaire" />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {teachers
-                                                                    .filter((teacher) => teacher.id != null)
-                                                                    .map((teacher) => (
-                                                                        <SelectItem
-                                                                            key={teacher.id}
-                                                                            value={teacher.id.toString()}
-                                                                            disabled={!teacher.id}
-                                                                        >
-                                                                            {teacher.name}
-                                                                        </SelectItem>
-                                                                    ))}
+                                                                {teachers.map((teacher) => (
+                                                                    <SelectItem key={teacher.id} value={teacher.id.toString()}>
+                                                                        {teacher.name}
+                                                                    </SelectItem>
+                                                                ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {Array.isArray((errors as any).assignments) &&
-                                                            (errors as any).assignments[index]?.holder_id && (
-                                                                <p className="text-sm text-red-500">{(errors as any).assignments[index].holder_id}</p>
-                                                            )}
-                                                    </div>
-
-                                                    <div className="space-y-2">
-                                                        <Label>Collaborateur</Label>
+                                                        {getFieldError(index, 'holder_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'holder_id')}</p>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
                                                         <Select
                                                             value={assignment.collaborator_id}
                                                             onValueChange={(value) => handleAssignmentChange(index, 'collaborator_id', value)}
@@ -686,55 +643,66 @@ export default function AssignmentIndex({
                                                             </SelectTrigger>
                                                             <SelectContent>
                                                                 <SelectItem value="none">Aucun collaborateur</SelectItem>
-                                                                {teachers
-                                                                    .filter((teacher) => teacher.id != null)
-                                                                    .map((teacher) => (
-                                                                        <SelectItem
-                                                                            key={teacher.id}
-                                                                            value={teacher.id.toString()}
-                                                                            disabled={!teacher.id}
-                                                                        >
-                                                                            {teacher.name}
-                                                                        </SelectItem>
-                                                                    ))}
+                                                                {teachers.map((teacher) => (
+                                                                    <SelectItem key={teacher.id} value={teacher.id.toString()}>
+                                                                        {teacher.name}
+                                                                    </SelectItem>
+                                                                ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {Array.isArray((errors as any).assignments) &&
-                                                            (errors as any).assignments[index]?.collaborator_id && (
-                                                                <p className="text-sm text-red-500">
-                                                                    {(errors as any).assignments[index].collaborator_id}
-                                                                </p>
-                                                            )}
-                                                    </div>
-
-                                                    <div className="space-y-2">
-                                                        <Label>Observation</Label>
+                                                        {getFieldError(index, 'collaborator_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'collaborator_id')}</p>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
                                                         <Input
                                                             value={assignment.observation}
                                                             onChange={(e) => handleAssignmentChange(index, 'observation', e.target.value)}
+                                                            placeholder="Observation"
                                                         />
-                                                        {Array.isArray((errors as any).assignments) &&
-                                                            (errors as any).assignments[index]?.observation && (
-                                                                <p className="text-sm text-red-500">
-                                                                    {(errors as any).assignments[index].observation}
-                                                                </p>
-                                                            )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
+                                                        {getFieldError(index, 'observation') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'observation')}</p>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Button
+                                                            type="button"
+                                                            variant="destructive"
+                                                            size="icon"
+                                                            className="h-7 w-7"
+                                                            onClick={() => handleRemoveAssignment(index)}
+                                                            disabled={bulkAssignments.length <= 1}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
                                 </div>
                             </div>
 
                             <DialogFooter className="mt-4">
                                 <div className="flex w-full justify-between">
-                                    <Button type="button" variant="outline" onClick={closeModal} disabled={processing}>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={closeModal}
+                                        disabled={isSubmitting} // Désactiver pendant le chargement
+                                    >
                                         Annuler
                                     </Button>
-                                    <Button type="submit" disabled={processing} className="gap-2">
-                                        {processing ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                    <Button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="relative flex min-w-[180px] items-center justify-center gap-2"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                <span>Traitement...</span>
+                                            </>
                                         ) : bulkAssignments[0]?.id ? (
                                             <>
                                                 <Edit className="h-4 w-4" />
@@ -752,7 +720,17 @@ export default function AssignmentIndex({
                         </form>
                     </DialogContent>
                 </Dialog>
-                <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+
+                <Dialog
+                    open={isDeleteModalOpen}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setIsDeleteModalOpen(false);
+                            setAssignmentToDelete(null);
+                            setIsDeleting(false); // Réinitialiser l'état
+                        }
+                    }}
+                >
                     <DialogContent className="sm:max-w-[425px]">
                         <DialogHeader>
                             <DialogTitle className="text-xl">Confirmer la suppression</DialogTitle>
@@ -761,12 +739,33 @@ export default function AssignmentIndex({
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setIsDeleteModalOpen(false);
+                                    setIsDeleting(false);
+                                }}
+                                disabled={isDeleting}
+                            >
                                 Annuler
                             </Button>
-                            <Button variant="destructive" onClick={confirmDelete} className="gap-2">
-                                <Trash2 className="h-4 w-4" />
-                                Supprimer
+                            <Button
+                                variant="destructive"
+                                onClick={confirmDelete}
+                                className="flex min-w-[120px] items-center justify-center gap-2"
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Suppression...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Trash2 className="h-4 w-4" />
+                                        Supprimer
+                                    </>
+                                )}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

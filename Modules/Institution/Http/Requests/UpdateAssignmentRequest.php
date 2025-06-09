@@ -26,13 +26,13 @@ class UpdateAssignmentRequest extends FormRequest
                 'required',
                 Rule::exists('units_teachings', 'id')
             ],
-            'academic_year_id' => [
+           'academic_year_id' => [
                 'required',
                 Rule::exists('academic_years', 'id'),
                 Rule::unique('assignments')
                     ->where('institution_id', $this->institution_id)
                     ->where('teaching_unit_id', $this->teaching_unit_id)
-                    ->ignore($assignment->id)
+                    ->ignore($this->route('assignments')) 
             ],
             'holder_id' => [
                 'required',
