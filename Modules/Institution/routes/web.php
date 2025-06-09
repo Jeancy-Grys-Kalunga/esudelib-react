@@ -12,7 +12,7 @@ use Modules\Institution\Http\Controllers\AssignmentController;
 use Modules\Institution\Http\Controllers\ProgramController;
 
 Route::middleware(['auth', 'verified'])->group(function () {
-     Route::resource('institutions', InstitutionController::class)->names('institutions');
+    Route::resource('institutions', InstitutionController::class)->names('institutions');
     Route::post('institutions/import', [InstitutionController::class, 'importDataToExcel'])->name('import.institution');
 
     Route::resource('departments', DepartmentController::class)->names('departments');
@@ -35,6 +35,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('assignments', AssignmentController::class)->names('assignments');
 
     Route::post('assignmentsbulk', [AssignmentController::class, 'bulkStore'])->name('assignments.bulk');
+
+    Route::post('/assignments/bulk', [AssignmentController::class, 'storeBulk'])
+        ->name('assignments.store.bulk');
 
     Route::resource('programs', ProgramController::class)->names('programs');
 
