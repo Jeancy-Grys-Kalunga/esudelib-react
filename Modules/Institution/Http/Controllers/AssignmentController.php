@@ -137,18 +137,46 @@ class AssignmentController extends Controller
     }
 
 
-    public function store(StoreAssignmentRequest $request)
+    public function store(BulkAssignmentRequest $request)
     {
-        if (!auth()->user()->hasPermissionTo('create_assignments')) {
+        if (!auth()->user()->hasPermissionTo('edit_assignments')) {
             abort(403, 'Action non autorisée');
         }
 
-        Assignment::create($request->validated());
+        $assignmentsData = $request->validated();
+        $results = ['created' => 0, 'updated' => 0];
+
+        foreach ($assignmentsData as $data) {
+            $data['institution_id'] = (int)$data['institution_id'];
+            $data['academic_year_id'] = (int)$data['academic_year_id'];
+            $data['teaching_unit_id'] = (int)$data['teaching_unit_id'];
+            $data['holder_id'] = (int)$data['holder_id'];
+
+            // Conversion simplifiée
+            $data['collaborator_id'] = $data['collaborator_id'] ? (int)$data['collaborator_id'] : null;
+
+            if (isset($data['id'])) {
+                $assignment = Assignment::find($data['id']);
+                if ($assignment) {
+                    $assignment->update($data);
+                    $results['updated']++;
+                }
+            } else {
+                Assignment::create($data);
+                $results['created']++;
+            }
+        }
+
+        $message = sprintf(
+            "Opération réussie : %d créations, %d mises à jour",
+            $results['created'],
+            $results['updated']
+        );
 
         return redirect()->route('assignments.index')->with([
             'flash' => [
                 'type' => 'success',
-                'message' => 'Attribution créée avec succès !',
+                'message' => $message,
             ],
         ]);
     }
@@ -191,22 +219,18 @@ class AssignmentController extends Controller
             abort(403, 'Action non autorisée');
         }
 
+
         $assignmentsData = $request->validated()['assignments'];
         $results = ['created' => 0, 'updated' => 0];
 
         foreach ($assignmentsData as $data) {
-            // Gestion des types
             $data['institution_id'] = (int)$data['institution_id'];
             $data['academic_year_id'] = (int)$data['academic_year_id'];
             $data['teaching_unit_id'] = (int)$data['teaching_unit_id'];
             $data['holder_id'] = (int)$data['holder_id'];
 
-            // Conversion 'none' en null
-            if (isset($data['collaborator_id']) && $data['collaborator_id'] === 'none') {
-                $data['collaborator_id'] = null;
-            } elseif (isset($data['collaborator_id'])) {
-                $data['collaborator_id'] = (int)$data['collaborator_id'];
-            }
+            // Conversion simplifiée
+            $data['collaborator_id'] = $data['collaborator_id'] ? (int)$data['collaborator_id'] : null;
 
             if (isset($data['id'])) {
                 $assignment = Assignment::find($data['id']);

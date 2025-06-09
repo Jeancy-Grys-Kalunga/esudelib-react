@@ -107,7 +107,7 @@ export default function AssignmentIndex({
     const [currentInstitution, setCurrentInstitution] = useState<string>('');
     const [currentAcademicYear, setCurrentAcademicYear] = useState<string>('');
 
-    const { post, errors, processing, reset } = useForm({
+    const { post, errors, processing, reset, setData } = useForm({
         assignments: [] as AssignmentFormData[],
     });
 
@@ -231,27 +231,11 @@ export default function AssignmentIndex({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Préparer les données dans un FormData d'Inertia
-        const formData = new FormData();
-        bulkAssignments.forEach((assignment, idx) => {
-            Object.entries(assignment).forEach(([key, value]) => {
-                // Pour le collaborateur, si "none" ou vide, on envoie null
-                if (key === 'collaborator_id' && (value === 'none' || value === '')) {
-                    formData.append(`assignments[${idx}][${key}]`, '');
-                } else {
-                    formData.append(`assignments[${idx}][${key}]`, value != null ? String(value) : '');
-                }
-            });
-        });
+        setData('assignments', bulkAssignments);
 
         try {
-            await post(route('assignments.bulk'), {
-                data: formData,
-                forceFormData: true,
-                onSuccess: () => {
-                    closeModal();
-                    toast.success(isBulkMode ? 'Attributions enregistrées avec succès' : 'Attribution enregistrée avec succès');
-                },
+            await post(route('assignments.store'), {
+                onSuccess: () => closeModal(),
             });
         } catch (error) {
             console.error('Error submitting form:', error);
@@ -284,6 +268,12 @@ export default function AssignmentIndex({
         setCurrentPage(1);
     };
 
+    const getFieldError = (index: number, field: string): string | null => {
+        const key = `assignments.${index}.${field}`;
+        // @ts-ignore
+        return errors[key] as string | null;
+    };
+
     if (!can.access) {
         return (
             <AppLayout>
@@ -309,7 +299,7 @@ export default function AssignmentIndex({
                         {can.create && (
                             <Button onClick={() => openModal('single')} className="gap-2 shadow-sm">
                                 <Plus size={16} />
-                                Nouvelle Attribution
+                                Nouvelle Attribution Charge horaire
                             </Button>
                         )}
                         {can.edit && (
@@ -517,16 +507,16 @@ export default function AssignmentIndex({
                             </DialogTitle>
                         </DialogHeader>
 
-                        {Object.keys(errors).length > 0 && (
+                        {errors.assignments && typeof errors.assignments === 'string' && (
                             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 shadow dark:border-red-700 dark:bg-red-900/20">
                                 <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">Erreurs de validation</h3>
-                                <ul className="mt-2 list-disc space-y-1 pl-5">
-                                    {Object.entries(errors).map(([key, error]) => (
-                                        <li key={key} className="text-sm text-red-700 dark:text-red-300">
-                                            {error}
-                                        </li>
-                                    ))}
-                                </ul>
+                                <p className="mt-2 text-sm text-red-700 dark:text-red-300">{errors.assignments}</p>
+                            </div>
+                        )}
+
+                        {Object.keys(errors).some((key) => key.startsWith('assignments.')) && (
+                            <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-4 shadow dark:border-yellow-700 dark:bg-yellow-900/20">
+                                <h3 className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">Veuillez corriger les champs en erreur</h3>
                             </div>
                         )}
 
@@ -582,12 +572,9 @@ export default function AssignmentIndex({
                                                                     ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {Array.isArray((errors as any).assignments) &&
-                                                            (errors as any).assignments[index]?.institution_id && (
-                                                                <p className="text-sm text-red-500">
-                                                                    {(errors as any).assignments[index].institution_id}
-                                                                </p>
-                                                            )}
+                                                        {getFieldError(index, 'institution_id') && (
+                                                            <p className="text-sm text-red-500">{getFieldError(index, 'institution_id')}</p>
+                                                        )}
                                                     </div>
 
                                                     <div className="space-y-2">
