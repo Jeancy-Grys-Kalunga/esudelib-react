@@ -266,7 +266,6 @@ export default function AssignmentManager({
         router.delete(route('assignments.destroy', assignmentToDelete.id), {
             onSuccess: () => {
                 setIsDeleteModalOpen(false);
-                toast.warning('Attribution supprimée avec succès');
             },
         });
     };

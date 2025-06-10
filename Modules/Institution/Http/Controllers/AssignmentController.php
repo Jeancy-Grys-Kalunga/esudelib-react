@@ -4,6 +4,7 @@ namespace Modules\Institution\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Modules\Institution\Entities\Assignment;
@@ -17,6 +18,8 @@ use Illuminate\Support\Collection;
 use Modules\Institution\Entities\AcademicYear;
 use Modules\Institution\Entities\Course;
 use Modules\Teacher\Entities\Teacher;
+use App\Services\InfoBipService;
+use Illuminate\Support\Facades\Log;
 
 class AssignmentController extends Controller
 {
@@ -133,7 +136,7 @@ class AssignmentController extends Controller
         if ($user->hasRole('Super Admin')) {
             return Institution::all(['id', 'name']);
         }
-        
+
         return $user->institutions()->get(['id', 'name']);
     }
 
@@ -143,6 +146,7 @@ class AssignmentController extends Controller
             abort(403, 'Action non autorisée');
         }
 
+        $newAssignments = [];
         // Récupérer les données validées
         $validated = $request->validated();
 
@@ -170,7 +174,8 @@ class AssignmentController extends Controller
                     $results['updated']++;
                 }
             } else {
-                Assignment::create($data);
+                $assignment = Assignment::create($data);
+                $newAssignments[] = $assignment;
                 $results['created']++;
             }
         }
@@ -180,6 +185,9 @@ class AssignmentController extends Controller
             $results['created'],
             $results['updated']
         );
+
+        $this->sendAssignmentNotifications($newAssignments);
+
 
         return redirect()->route('assignments.index')->with([
             'flash' => [
@@ -193,12 +201,12 @@ class AssignmentController extends Controller
     private function getUserInstitutionId()
     {
         $user = auth()->user();
-        
+
         if ($user->hasRole('Super Admin')) {
             // Logique pour Super Admin (peut-être null ou première institution)
             return Institution::first()->id ?? null;
         }
-        
+
         return $user->institutions()->first()->id ?? null;
     }
 
@@ -243,6 +251,7 @@ class AssignmentController extends Controller
         $validated = $request->validated();
         $assignmentsData = $validated['assignments'];
         $created = 0;
+        $newAssignments = [];
 
         foreach ($assignmentsData as $data) {
             // Conversion des types
@@ -256,9 +265,12 @@ class AssignmentController extends Controller
                 ? (int)$data['collaborator_id']
                 : null;
 
-            Assignment::create($data);
+            $assignment = Assignment::create($data);
+            $newAssignments[] = $assignment;
             $created++;
         }
+
+        $this->sendAssignmentNotifications($newAssignments);
 
         return redirect()->back()->with([
             'flash' => [
@@ -266,5 +278,51 @@ class AssignmentController extends Controller
                 'message' => "{$created} attributions créées avec succès"
             ]
         ]);
+    }
+
+    private function sendAssignmentNotifications(array $assignments)
+    {
+        if (empty($assignments)) return;
+
+        // Charger les relations nécessaires
+        foreach ($assignments as $assignment) {
+            $assignment->load([
+                'holder:id,phone,email,name',
+                'course:id,title',
+                'academicYear:id,title'
+            ]);
+        }
+
+        $smsService = new InfoBipService();
+
+        foreach ($assignments as $assignment) {
+            $teacher = $assignment->holder;
+            if (!$teacher || !$teacher->phone) continue;
+
+            try {
+                $message = $this->generateAssignmentMessage($assignment, $teacher);
+                $smsService->sendInfobipSms($teacher->phone, $message);
+            } catch (\Exception $e) {
+                Log::error("Erreur envoi SMS à {$teacher->phone}: " . $e->getMessage());
+            }
+        }
+    }
+
+    private function generateAssignmentMessage(Assignment $assignment, Teacher $teacher): string
+    {
+        $course = $assignment->course?->title ?? 'Cours inconnu';
+        $year = $assignment->academicYear?->title ?? 'Année inconnue';
+
+        $institution = $assignment->institution;
+
+        // Récupération de l'email institutionnel
+        $email = Str::slug($teacher->name)
+            . Str::slug($institution->name)
+            . '@esudelib.com';
+
+        return "Bonjour {$teacher->name}, "
+            . "vous avez été assigné au cours : $course "
+            . "pour l'année académique $year. "
+            . "Votre email de connexion : $email";
     }
 }
