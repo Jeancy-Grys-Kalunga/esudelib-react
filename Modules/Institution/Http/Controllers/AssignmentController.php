@@ -6,9 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
-
 use Modules\Institution\Entities\Assignment;
-
 use Modules\Institution\Entities\Institution;
 use Modules\Institution\Http\Requests\BulkAssignmentRequest;
 use Modules\Institution\Http\Requests\StoreAssignmentRequest;
@@ -17,7 +15,7 @@ use Inertia\Inertia;
 use Spatie\Permission\Models\Permission;
 use Illuminate\Support\Collection;
 use Modules\Institution\Entities\AcademicYear;
-use Modules\Institution\Entities\UnitsTeaching;
+use Modules\Institution\Entities\Course;
 use Modules\Teacher\Entities\Teacher;
 
 class AssignmentController extends Controller
@@ -52,7 +50,7 @@ class AssignmentController extends Controller
         $query = Assignment::with([
             'holder',
             'collaborator',
-            'teachingUnit',
+            'course', // Nouvelle relation
             'academicYear',
             'institution'
         ]);
@@ -60,11 +58,6 @@ class AssignmentController extends Controller
         if ($user->hasRole('Secrétaire Académique')) {
             $institutionIds = $user->institutions()->pluck('id');
             $query->whereIn('institution_id', $institutionIds);
-        }
-
-        // Filtrage par institution (avec conversion numérique)
-        if ($request->has('institution') && $request->institution) {
-            $query->where('institution_id', (int)$request->institution);
         }
 
         // Filtrage par année académique (avec conversion numérique)
@@ -82,7 +75,7 @@ class AssignmentController extends Controller
                     ->orWhereHas('collaborator', function ($q) use ($searchTerm) {
                         $q->where('name', 'LIKE', "%$searchTerm%");
                     })
-                    ->orWhereHas('teachingUnit', function ($q) use ($searchTerm) {
+                    ->orWhereHas('course', function ($q) use ($searchTerm) { // Nouvelle relation
                         $q->where('title', 'LIKE', "%$searchTerm%");
                     })
                     ->orWhereHas('institution', function ($q) use ($searchTerm) {
@@ -93,7 +86,7 @@ class AssignmentController extends Controller
 
         $assignments = $query->orderByDesc('id')->get();
 
-        // Formatage des données pour Inertia (avec gestion null et clés manquantes)
+        // Formatage des données pour Inertia
         $formattedAssignments = $assignments->map(function ($assignment) {
             return [
                 'id' => $assignment->id,
@@ -101,8 +94,8 @@ class AssignmentController extends Controller
                 'holder' => $assignment->holder?->name ?? 'Non assigné',
                 'collaborator_id' => $assignment->collaborator_id,
                 'collaborator' => $assignment->collaborator?->name ?? 'Aucun',
-                'teaching_unit_id' => $assignment->teaching_unit_id,
-                'teaching_unit' => $assignment->teachingUnit?->title ?? 'Unité inconnue',
+                'course_id' => $assignment->course_id, // Nouveau champ
+                'course' => $assignment->course?->title ?? 'Cours inconnu', // Nouveau champ
                 'academic_year_id' => $assignment->academic_year_id,
                 'academic_year' => $assignment->academicYear?->title ?? 'Année non définie',
                 'observation' => $assignment->observation,
@@ -111,14 +104,12 @@ class AssignmentController extends Controller
             ];
         });
 
-        // Filtres disponibles pour l'utilisateur
-        $institutions = $user->hasRole('Secrétaire Académique')
-            ? $user->institutions()->get(['id', 'name'])
-            : Institution::get(['id', 'name']);
+        // Récupération des institutions basée sur le rôle
+        $institutions = $this->getUserInstitutions($user);
 
         // Formatage avec alias cohérents
-        $formattedTeachingUnits = UnitsTeaching::all(['id', 'title'])->map(function ($unit) {
-            return ['id' => $unit->id, 'name' => $unit->title];
+        $formattedCourses = Course::all(['id', 'title'])->map(function ($course) {
+            return ['id' => $course->id, 'name' => $course->title];
         });
 
         $formattedAcademicYears = AcademicYear::all(['id', 'title'])->map(function ($year) {
@@ -128,14 +119,23 @@ class AssignmentController extends Controller
         return Inertia::render('assignment/index', [
             'assignments' => $formattedAssignments,
             'can' => $can,
-            'filters' => $request->only(['search', 'institution', 'academic_year']),
+            'filters' => $request->only(['search', 'academic_year']),
             'institutions' => $institutions,
             'teachers' => Teacher::all(['id', 'name']),
-            'teaching_units' => $formattedTeachingUnits,
+            'courses' => $formattedCourses, // Nouveau dataset
             'academic_years' => $formattedAcademicYears,
         ]);
     }
 
+    // Helper pour récupérer les institutions
+    private function getUserInstitutions($user)
+    {
+        if ($user->hasRole('Super Admin')) {
+            return Institution::all(['id', 'name']);
+        }
+        
+        return $user->institutions()->get(['id', 'name']);
+    }
 
     public function store(BulkAssignmentRequest $request)
     {
@@ -153,9 +153,9 @@ class AssignmentController extends Controller
 
         foreach ($assignmentsData as $data) {
             // Conversion des types
-            $data['institution_id'] = (int)$data['institution_id'];
+            $data['institution_id'] = $this->getUserInstitutionId();
             $data['academic_year_id'] = (int)$data['academic_year_id'];
-            $data['teaching_unit_id'] = (int)$data['teaching_unit_id'];
+            $data['course_id'] = (int)$data['course_id']; // Nouveau champ
             $data['holder_id'] = (int)$data['holder_id'];
 
             // Gestion du collaborator_id
@@ -187,6 +187,19 @@ class AssignmentController extends Controller
                 'message' => $message,
             ],
         ]);
+    }
+
+    // Helper pour obtenir l'ID d'institution
+    private function getUserInstitutionId()
+    {
+        $user = auth()->user();
+        
+        if ($user->hasRole('Super Admin')) {
+            // Logique pour Super Admin (peut-être null ou première institution)
+            return Institution::first()->id ?? null;
+        }
+        
+        return $user->institutions()->first()->id ?? null;
     }
 
     public function update(UpdateAssignmentRequest $request, Assignment $assignment)
@@ -233,9 +246,9 @@ class AssignmentController extends Controller
 
         foreach ($assignmentsData as $data) {
             // Conversion des types
-            $data['institution_id'] = (int)$data['institution_id'];
+            $data['institution_id'] = $this->getUserInstitutionId();
             $data['academic_year_id'] = (int)$data['academic_year_id'];
-            $data['teaching_unit_id'] = (int)$data['teaching_unit_id'];
+            $data['course_id'] = (int)$data['course_id']; // Nouveau champ
             $data['holder_id'] = (int)$data['holder_id'];
 
             // Gestion du collaborator_id

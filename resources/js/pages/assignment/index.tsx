@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 
-type TeachingUnit = {
+type Course = {
     id: number;
     name: string;
 };
@@ -28,8 +28,8 @@ interface Assignment {
     holder: string;
     collaborator_id: number | null;
     collaborator: string;
-    teaching_unit_id: number;
-    teaching_unit: string;
+    course_id: number; // Nouveau champ
+    course: string; // Nouveau champ
     academic_year_id: number;
     academic_year: string;
     institution_id: number;
@@ -49,8 +49,7 @@ type Institution = {
 
 type AssignmentFormData = {
     id?: number;
-    institution_id: string;
-    teaching_unit_id: string;
+    course_id: string; // Nouveau champ
     academic_year_id: string;
     holder_id: string;
     collaborator_id: string;
@@ -60,7 +59,7 @@ type AssignmentFormData = {
 type PageProps = {
     assignments: Assignment[];
     teachers: Teacher[];
-    teaching_units: TeachingUnit[];
+    courses: Course[]; // Nouveau dataset
     academic_years: AcademicYear[];
     institutions: Institution[];
     can: {
@@ -75,7 +74,6 @@ type PageProps = {
     };
     filters?: {
         search?: string;
-        institution?: string;
         academic_year?: string;
     };
 };
@@ -83,7 +81,7 @@ type PageProps = {
 export default function AssignmentManager({
     assignments: allAssignments,
     teachers,
-    teaching_units,
+    courses, // Nouveau dataset
     academic_years,
     institutions,
     can,
@@ -99,7 +97,6 @@ export default function AssignmentManager({
     const [itemsPerPage] = useState(10);
     const [bulkAssignments, setBulkAssignments] = useState<AssignmentFormData[]>([]);
     const [isBulkMode, setIsBulkMode] = useState(false);
-    const [currentInstitution, setCurrentInstitution] = useState(filters?.institution || 'all');
     const [currentAcademicYear, setCurrentAcademicYear] = useState(filters?.academic_year || 'all');
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -119,14 +116,9 @@ export default function AssignmentManager({
                 (assignment) =>
                     assignment.holder.toLowerCase().includes(term) ||
                     (assignment.collaborator && assignment.collaborator.toLowerCase().includes(term)) ||
-                    assignment.teaching_unit.toLowerCase().includes(term) ||
+                    assignment.course.toLowerCase().includes(term) || // Nouveau champ
                     assignment.institution.toLowerCase().includes(term),
             );
-        }
-
-        // Filtre par institution (ignorer si 'all')
-        if (currentInstitution && currentInstitution !== 'all') {
-            results = results.filter((a) => a.institution_id.toString() === currentInstitution);
         }
 
         // Filtre par année académique (ignorer si 'all')
@@ -136,7 +128,7 @@ export default function AssignmentManager({
 
         setFilteredAssignments(results);
         setCurrentPage(1);
-    }, [allAssignments, searchTerm, currentInstitution, currentAcademicYear]);
+    }, [allAssignments, searchTerm, currentAcademicYear]);
 
     const paginatedAssignments = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
@@ -176,8 +168,7 @@ export default function AssignmentManager({
             setBulkAssignments([
                 {
                     id: assignment.id,
-                    institution_id: assignment.institution_id.toString(),
-                    teaching_unit_id: assignment.teaching_unit_id.toString(),
+                    course_id: assignment.course_id.toString(), // Nouveau champ
                     academic_year_id: assignment.academic_year_id.toString(),
                     holder_id: assignment.holder_id.toString(),
                     collaborator_id: assignment.collaborator_id?.toString() || 'none',
@@ -192,8 +183,7 @@ export default function AssignmentManager({
     };
 
     const createEmptyAssignment = (): AssignmentFormData => ({
-        institution_id: currentInstitution !== 'all' ? currentInstitution : institutions.length > 0 ? institutions[0].id.toString() : '',
-        teaching_unit_id: teaching_units.length > 0 ? teaching_units[0].id.toString() : '',
+        course_id: courses.length > 0 ? courses[0].id.toString() : '', // Nouveau champ
         academic_year_id: currentAcademicYear !== 'all' ? currentAcademicYear : academic_years.length > 0 ? academic_years[0].id.toString() : '',
         holder_id: teachers.length > 0 ? teachers[0].id.toString() : '',
         collaborator_id: 'none',
@@ -235,8 +225,7 @@ export default function AssignmentManager({
         const payload = {
             assignments: bulkAssignments.map((a) => ({
                 ...a,
-                institution_id: a.institution_id,
-                teaching_unit_id: a.teaching_unit_id,
+                course_id: a.course_id, // Nouveau champ
                 academic_year_id: a.academic_year_id,
                 holder_id: a.holder_id,
                 // Convertir 'none' en null
@@ -284,7 +273,6 @@ export default function AssignmentManager({
 
     const resetFilters = () => {
         setSearchTerm('');
-        setCurrentInstitution('all');
         setCurrentAcademicYear('all');
         router.get(route('assignments.index'), {}, { preserveState: true });
     };
@@ -293,6 +281,14 @@ export default function AssignmentManager({
         const key = `assignments.${index}.${field}`;
         // @ts-ignore
         return errors[key] as string | null;
+    };
+
+    // Fonction pour filtrer les collaborateurs (exclure le titulaire)
+    const getFilteredCollaborators = (index: number) => {
+        const currentHolderId = bulkAssignments[index]?.holder_id;
+        return teachers.filter(teacher => 
+            teacher.id.toString() !== currentHolderId
+        );
     };
 
     if (!can.access) {
@@ -338,7 +334,7 @@ export default function AssignmentManager({
 
                 <Card className="shadow-sm">
                     <CardContent>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div className="relative">
                                 <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                                 <Input
@@ -358,19 +354,6 @@ export default function AssignmentManager({
                                     </Button>
                                 )}
                             </div>
-                            <Select value={currentInstitution} onValueChange={setCurrentInstitution}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Toutes les institutions" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Toutes les institutions</SelectItem>
-                                    {institutions.map((institution) => (
-                                        <SelectItem key={institution.id} value={institution.id.toString()}>
-                                            {institution.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
                             <Select value={currentAcademicYear} onValueChange={setCurrentAcademicYear}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Toutes les années" />
@@ -399,7 +382,7 @@ export default function AssignmentManager({
                                                 <TableHead>Institution</TableHead>
                                                 <TableHead>Titulaire</TableHead>
                                                 <TableHead>Collaborateur</TableHead>
-                                                <TableHead>Unité d'enseignement</TableHead>
+                                                <TableHead>Cours</TableHead> {/* Nouvel intitulé */}
                                                 <TableHead>Année académique</TableHead>
                                                 <TableHead>Observation</TableHead>
                                                 <TableHead className="text-right">Actions</TableHead>
@@ -411,7 +394,7 @@ export default function AssignmentManager({
                                                     <TableCell>{assignment.institution}</TableCell>
                                                     <TableCell>{assignment.holder}</TableCell>
                                                     <TableCell>{assignment.collaborator || '-'}</TableCell>
-                                                    <TableCell>{assignment.teaching_unit}</TableCell>
+                                                    <TableCell>{assignment.course}</TableCell> {/* Nouveau champ */}
                                                     <TableCell>{assignment.academic_year}</TableCell>
                                                     <TableCell>{assignment.observation || '-'}</TableCell>
                                                     <TableCell className="text-right">
@@ -541,8 +524,7 @@ export default function AssignmentManager({
                                     <Table>
                                         <TableHeader className="bg-gray-100">
                                             <TableRow>
-                                                <TableHead className="w-[180px]">Institution *</TableHead>
-                                                <TableHead className="w-[180px]">Unité d'enseignement *</TableHead>
+                                                <TableHead className="w-[180px]">Cours *</TableHead> {/* Nouvel intitulé */}
                                                 <TableHead className="w-[150px]">Année académique *</TableHead>
                                                 <TableHead className="w-[180px]">Titulaire *</TableHead>
                                                 <TableHead className="w-[180px]">Collaborateur</TableHead>
@@ -555,42 +537,22 @@ export default function AssignmentManager({
                                                 <TableRow key={index}>
                                                     <TableCell>
                                                         <Select
-                                                            value={assignment.institution_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'institution_id', value)}
+                                                            value={assignment.course_id} // Nouveau champ
+                                                            onValueChange={(value) => handleAssignmentChange(index, 'course_id', value)}
                                                         >
                                                             <SelectTrigger>
-                                                                <SelectValue placeholder="Sélectionnez une institution" />
+                                                                <SelectValue placeholder="Sélectionnez un cours" />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {institutions.map((institution) => (
-                                                                    <SelectItem key={institution.id} value={institution.id.toString()}>
-                                                                        {institution.name}
+                                                                {courses.map((course) => (
+                                                                    <SelectItem key={course.id} value={course.id.toString()}>
+                                                                        {course.name}
                                                                     </SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {getFieldError(index, 'institution_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'institution_id')}</p>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Select
-                                                            value={assignment.teaching_unit_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'teaching_unit_id', value)}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Sélectionnez une unité" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {teaching_units.map((unit) => (
-                                                                    <SelectItem key={unit.id} value={unit.id.toString()}>
-                                                                        {unit.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {getFieldError(index, 'teaching_unit_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'teaching_unit_id')}</p>
+                                                        {getFieldError(index, 'course_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'course_id')}</p>
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
@@ -643,7 +605,7 @@ export default function AssignmentManager({
                                                             </SelectTrigger>
                                                             <SelectContent>
                                                                 <SelectItem value="none">Aucun collaborateur</SelectItem>
-                                                                {teachers.map((teacher) => (
+                                                                {getFilteredCollaborators(index).map((teacher) => (
                                                                     <SelectItem key={teacher.id} value={teacher.id.toString()}>
                                                                         {teacher.name}
                                                                     </SelectItem>
@@ -689,7 +651,7 @@ export default function AssignmentManager({
                                         type="button"
                                         variant="outline"
                                         onClick={closeModal}
-                                        disabled={isSubmitting} // Désactiver pendant le chargement
+                                        disabled={isSubmitting}
                                     >
                                         Annuler
                                     </Button>
@@ -727,7 +689,7 @@ export default function AssignmentManager({
                         if (!open) {
                             setIsDeleteModalOpen(false);
                             setAssignmentToDelete(null);
-                            setIsDeleting(false); // Réinitialiser l'état
+                            setIsDeleting(false);
                         }
                     }}
                 >

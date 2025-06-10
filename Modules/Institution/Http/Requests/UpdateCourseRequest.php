@@ -22,20 +22,10 @@ class UpdateCourseRequest extends FormRequest
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('courses')->where(function ($query) {
-                    return $query->where('institution_id', $this->institution_id);
-                })->ignore($courseId)
+                Rule::unique('courses', 'title')->ignore($courseId),
             ],
-            'credits' => 'required|integer|min:1|max:10',
-            'institution_id' => [
-                'required',
-                'exists:institutions,id',
-                Rule::when(
-                    auth()->user()->hasRole('Secrétaire Académique'),
-                    Rule::in(auth()->user()->institutions()->pluck('id')->toArray())
-                )
-            ],
-            'course_category_id' => 'required|exists:course_categories,id',
+            
+            
         ];
     }
 
@@ -44,14 +34,8 @@ class UpdateCourseRequest extends FormRequest
         return [
             'title.required' => 'Le titre du cours est obligatoire',
             'title.unique' => 'Ce cours existe déjà dans cette institution',
-            'credits.required' => 'Le nombre de crédits est obligatoire',
-            'credits.integer' => 'Les crédits doivent être un nombre entier',
-            'credits.min' => 'Le cours doit avoir au moins 1 crédit',
-            'credits.max' => 'Le cours ne peut pas avoir plus de 10 crédits',
-            'institution_id.required' => 'L\'institution est obligatoire',
-            'institution_id.exists' => 'L\'institution sélectionnée est invalide',
-            'course_category_id.required' => 'La catégorie du cours est obligatoire',
-            'course_category_id.exists' => 'La catégorie sélectionnée est invalide',
+            'title.string' => 'Le titre doit être une chaîne de caractères',
+            'title.max' => 'Le titre ne doit pas dépasser 255 caractères',
         ];
     }
 }

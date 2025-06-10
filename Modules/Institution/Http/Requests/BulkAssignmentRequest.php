@@ -15,13 +15,9 @@ class BulkAssignmentRequest extends FormRequest
     public function rules()
     {
         return [
-            'assignments.*.institution_id' => [
+            'assignments.*.course_id' => [ // Nouveau champ
                 'required',
-                Rule::exists('institutions', 'id')
-            ],
-            'assignments.*.teaching_unit_id' => [
-                'required',
-                Rule::exists('units_teachings', 'id')
+                Rule::exists('courses', 'id')
             ],
             'assignments.*.academic_year_id' => [
                 'required',
@@ -46,11 +42,8 @@ class BulkAssignmentRequest extends FormRequest
     public function messages()
     {
         return [
-            'assignments.*.institution_id.required' => 'L\'institution est obligatoire',
-            'assignments.*.institution_id.exists' => 'L\'institution sélectionnée est invalide',
-            
-            'assignments.*.teaching_unit_id.required' => 'L\'unité d\'enseignement est obligatoire',
-            'assignments.*.teaching_unit_id.exists' => 'L\'unité d\'enseignement sélectionnée est invalide',
+            'assignments.*.course_id.required' => 'Le cours est obligatoire', // Nouveau message
+            'assignments.*.course_id.exists' => 'Le cours sélectionné est invalide', // Nouveau message
             
             'assignments.*.academic_year_id.required' => 'L\'année académique est obligatoire',
             'assignments.*.academic_year_id.exists' => 'L\'année académique sélectionnée est invalide',

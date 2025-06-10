@@ -20,7 +20,7 @@ class StoreCourseRequest extends FormRequest
                 'required',
                 'string',
                 'max:255',
-                'unique:courses,title,' . $this->route('course') . ',id',
+                Rule::unique('courses', 'title'),
             ],
     
         ];
