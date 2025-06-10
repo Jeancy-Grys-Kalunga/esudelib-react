@@ -3,6 +3,8 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type GroupedNavItem, type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
+import { usePage } from '@inertiajs/react';
+import { usePermissions } from '@/lib/auth';
 import {
     Bookmark,
     Building,
@@ -81,6 +83,13 @@ const secretaryItems: NavItem[] = [
         href: '/assignments',
         icon: Bookmark,
         isActive: route().current('assignments.index'),
+        color: 'text-indigo-500',
+    },
+     {
+        title: 'Gérer Jurys',
+        href: '/juries',
+        icon: FilePlus,
+        isActive: route().current('juries.index'),
         color: 'text-indigo-500',
     },
 ];
@@ -234,6 +243,27 @@ const groupedNavItems: GroupedNavItem[] = [
 ];
 
 export function AppSidebar() {
+
+     const { has } = usePermissions(); // Utilisation du hook de permissions
+
+    // Fonction de vérification des permissions
+    const hasPermission = (permissionString: string | undefined): boolean => {
+        if (!permissionString) return true;
+        return has(permissionString.split('|'));
+    };
+
+    // Filtrer les groupes et les items
+    const filteredGroupedItems = groupedNavItems
+        .filter(group => hasPermission(group.permission))
+        .map(group => ({
+            ...group,
+            items: group.items.filter(item => hasPermission(item.permission))
+        }))
+        .filter(group => group.items.length > 0); // Supprimer les groupes vides
+
+    // Filtrer les items principaux
+    const filteredMainItems = mainNavItems.filter(item => hasPermission(item.permission));
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -249,7 +279,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} groupedItems={groupedNavItems} />
+                <NavMain items={filteredMainItems} groupedItems={filteredGroupedItems} />
             </SidebarContent>
 
             <SidebarFooter>
