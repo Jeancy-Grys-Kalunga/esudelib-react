@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Edit, GraduationCap, Loader2, Plus, Search, Trash2, X } from 'lucide-react';
+import { Edit, Loader2, Plus, Search, Trash2, X, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -12,54 +12,48 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 
-type Course = {
+type Promotion = {
     id: number;
-    name: string;
+    title: string;
 };
 
 type AcademicYear = {
     id: number;
-    name: string;
+    title: string;
 };
 
-interface Assignment {
+interface Jury {
     id: number;
-    holder_id: number;
-    holder: string;
-    collaborator_id: number | null;
-    collaborator: string;
-    course_id: number; // Nouveau champ
-    course: string; // Nouveau champ
-    academic_year_id: number;
-    academic_year: string;
+    president: string;
+    secretary: string;
+    member: string;
+    observation: string | null;
     institution_id: number;
     institution: string;
-    observation: string | null;
+    promotion_id: number;
+    promotion: string;
+    academic_year_id: number;
+    academic_year: string;
 }
-
-type Teacher = {
-    id: number;
-    name: string;
-};
 
 type Institution = {
     id: number;
     name: string;
 };
 
-type AssignmentFormData = {
+type JuryFormData = {
     id?: number;
-    course_id: string; // Nouveau champ
-    academic_year_id: string;
-    holder_id: string;
-    collaborator_id: string;
+    president: string;
+    secretary: string;
+    member: string;
     observation: string;
+    academic_year_id: string;
+    promotion_id: string;
 };
 
 type PageProps = {
-    assignments: Assignment[];
-    teachers: Teacher[];
-    courses: Course[]; // Nouveau dataset
+    juries: Jury[];
+    promotions: Promotion[];
     academic_years: AcademicYear[];
     institutions: Institution[];
     can: {
@@ -75,13 +69,13 @@ type PageProps = {
     filters?: {
         search?: string;
         academic_year?: string;
+        promotion?: string;
     };
 };
 
-export default function AssignmentManager({
-    assignments: allAssignments,
-    teachers,
-    courses, // Nouveau dataset
+export default function JuryManager({
+    juries: allJuries,
+    promotions,
     academic_years,
     institutions,
     can,
@@ -90,52 +84,59 @@ export default function AssignmentManager({
 }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [assignmentToDelete, setAssignmentToDelete] = useState<Assignment | null>(null);
+    const [juryToDelete, setJuryToDelete] = useState<Jury | null>(null);
     const [searchTerm, setSearchTerm] = useState(filters?.search || '');
-    const [filteredAssignments, setFilteredAssignments] = useState<Assignment[]>(allAssignments);
+    const [filteredJuries, setFilteredJuries] = useState<Jury[]>(allJuries);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
-    const [bulkAssignments, setBulkAssignments] = useState<AssignmentFormData[]>([]);
+    const [bulkJuries, setBulkJuries] = useState<JuryFormData[]>([]);
     const [isBulkMode, setIsBulkMode] = useState(false);
     const [currentAcademicYear, setCurrentAcademicYear] = useState(filters?.academic_year || 'all');
+    const [currentPromotion, setCurrentPromotion] = useState(filters?.promotion || 'all');
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const { post, errors, processing, reset, setData } = useForm({
-        assignments: [] as AssignmentFormData[],
+        juries: [] as JuryFormData[],
     });
 
     // Filtrage combiné
     useEffect(() => {
-        let results = [...allAssignments];
+        let results = [...allJuries];
 
         // Filtre par recherche
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             results = results.filter(
-                (assignment) =>
-                    assignment.holder.toLowerCase().includes(term) ||
-                    (assignment.collaborator && assignment.collaborator.toLowerCase().includes(term)) ||
-                    assignment.course.toLowerCase().includes(term) || // Nouveau champ
-                    assignment.institution.toLowerCase().includes(term),
+                (jury) =>
+                    jury.president.toLowerCase().includes(term) ||
+                    jury.secretary.toLowerCase().includes(term) ||
+                    jury.member.toLowerCase().includes(term) ||
+                    jury.institution.toLowerCase().includes(term) ||
+                    jury.promotion.toLowerCase().includes(term)
             );
         }
 
-        // Filtre par année académique (ignorer si 'all')
+        // Filtre par année académique
         if (currentAcademicYear && currentAcademicYear !== 'all') {
-            results = results.filter((a) => a.academic_year_id.toString() === currentAcademicYear);
+            results = results.filter((j) => j.academic_year_id.toString() === currentAcademicYear);
         }
 
-        setFilteredAssignments(results);
+        // Filtre par promotion
+        if (currentPromotion && currentPromotion !== 'all') {
+            results = results.filter((j) => j.promotion_id.toString() === currentPromotion);
+        }
+
+        setFilteredJuries(results);
         setCurrentPage(1);
-    }, [allAssignments, searchTerm, currentAcademicYear]);
+    }, [allJuries, searchTerm, currentAcademicYear, currentPromotion]);
 
-    const paginatedAssignments = useMemo(() => {
+    const paginatedJuries = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredAssignments.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredAssignments, currentPage, itemsPerPage]);
+        return filteredJuries.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredJuries, currentPage, itemsPerPage]);
 
-    const totalPages = Math.ceil(filteredAssignments.length / itemsPerPage);
+    const totalPages = Math.ceil(filteredJuries.length / itemsPerPage);
 
     useEffect(() => {
         if (flash && flash.message) {
@@ -152,7 +153,7 @@ export default function AssignmentManager({
         }
     }, [flash]);
 
-    const openModal = (mode: 'single' | 'bulk', assignment?: Assignment) => {
+    const openModal = (mode: 'single' | 'bulk', jury?: Jury) => {
         if (mode === 'single' && !can.edit && !can.create) {
             toast.error("Vous n'avez pas les permissions nécessaires");
             return;
@@ -164,56 +165,58 @@ export default function AssignmentManager({
 
         setIsBulkMode(mode === 'bulk');
 
-        if (mode === 'single' && assignment) {
-            setBulkAssignments([
+        if (mode === 'single' && jury) {
+            setBulkJuries([
                 {
-                    id: assignment.id,
-                    course_id: assignment.course_id.toString(), // Nouveau champ
-                    academic_year_id: assignment.academic_year_id.toString(),
-                    holder_id: assignment.holder_id.toString(),
-                    collaborator_id: assignment.collaborator_id?.toString() || 'none',
-                    observation: assignment.observation || '',
+                    id: jury.id,
+                    president: jury.president,
+                    secretary: jury.secretary,
+                    member: jury.member,
+                    observation: jury.observation || '',
+                    academic_year_id: jury.academic_year_id.toString(),
+                    promotion_id: jury.promotion_id.toString(),
                 },
             ]);
         } else {
-            setBulkAssignments([createEmptyAssignment()]);
+            setBulkJuries([createEmptyJury()]);
         }
 
         setIsModalOpen(true);
     };
 
-    const createEmptyAssignment = (): AssignmentFormData => ({
-        course_id: courses.length > 0 ? courses[0].id.toString() : '', // Nouveau champ
-        academic_year_id: currentAcademicYear !== 'all' ? currentAcademicYear : academic_years.length > 0 ? academic_years[0].id.toString() : '',
-        holder_id: teachers.length > 0 ? teachers[0].id.toString() : '',
-        collaborator_id: 'none',
+    const createEmptyJury = (): JuryFormData => ({
+        president: '',
+        secretary: '',
+        member: '',
         observation: '',
+        academic_year_id: currentAcademicYear !== 'all' ? currentAcademicYear : academic_years.length > 0 ? academic_years[0].id.toString() : '',
+        promotion_id: promotions.length > 0 ? promotions[0].id.toString() : '',
     });
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setBulkAssignments([]);
+        setBulkJuries([]);
         reset();
     };
 
-    const handleAddAssignment = () => {
-        setBulkAssignments([...bulkAssignments, createEmptyAssignment()]);
+    const handleAddJury = () => {
+        setBulkJuries([...bulkJuries, createEmptyJury()]);
     };
 
-    const handleRemoveAssignment = (index: number) => {
-        if (bulkAssignments.length > 1) {
-            const newAssignments = [...bulkAssignments];
-            newAssignments.splice(index, 1);
-            setBulkAssignments(newAssignments);
+    const handleRemoveJury = (index: number) => {
+        if (bulkJuries.length > 1) {
+            const newJuries = [...bulkJuries];
+            newJuries.splice(index, 1);
+            setBulkJuries(newJuries);
         } else {
-            toast.warning('Vous devez conserver au moins une attribution');
+            toast.warning('Vous devez conserver au moins un jury');
         }
     };
 
-    const handleAssignmentChange = (index: number, field: keyof AssignmentFormData, value: string) => {
-        const newAssignments = [...bulkAssignments];
-        newAssignments[index] = { ...newAssignments[index], [field]: value };
-        setBulkAssignments(newAssignments);
+    const handleJuryChange = (index: number, field: keyof JuryFormData, value: string) => {
+        const newJuries = [...bulkJuries];
+        newJuries[index] = { ...newJuries[index], [field]: value };
+        setBulkJuries(newJuries);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -221,21 +224,15 @@ export default function AssignmentManager({
 
         setIsSubmitting(true);
 
-        // Préparation des données pour l'envoi
         const payload = {
-            assignments: bulkAssignments.map((a) => ({
-                ...a,
-                course_id: a.course_id, // Nouveau champ
-                academic_year_id: a.academic_year_id,
-                holder_id: a.holder_id,
-                // Convertir 'none' en null
-                collaborator_id: a.collaborator_id === 'none' ? null : a.collaborator_id,
-                observation: a.observation,
+            juries: bulkJuries.map((j) => ({
+                ...j,
+                academic_year_id: j.academic_year_id,
+                promotion_id: j.promotion_id,
             })),
         };
 
-        // Utilisation de la route spécifique pour les opérations en masse
-        const url = isBulkMode ? route('assignments.store.bulk') : route('assignments.store');
+        const url = isBulkMode ? route('juries.store.bulk') : route('juries.store');
 
         router.post(url, payload, {
             onSuccess: () => {
@@ -250,20 +247,20 @@ export default function AssignmentManager({
         });
     };
 
-    const openDeleteModal = (assignment: Assignment) => {
+    const openDeleteModal = (jury: Jury) => {
         if (!can.delete) {
             toast.error("Vous n'avez pas la permission de supprimer");
             return;
         }
-        setAssignmentToDelete(assignment);
+        setJuryToDelete(jury);
         setIsDeleteModalOpen(true);
     };
 
     const confirmDelete = () => {
-        if (!assignmentToDelete) return;
+        if (!juryToDelete) return;
 
         setIsDeleting(true);
-        router.delete(route('assignments.destroy', assignmentToDelete.id), {
+        router.delete(route('juries.destroy', juryToDelete.id), {
             onSuccess: () => {
                 setIsDeleteModalOpen(false);
             },
@@ -273,21 +270,14 @@ export default function AssignmentManager({
     const resetFilters = () => {
         setSearchTerm('');
         setCurrentAcademicYear('all');
-        router.get(route('assignments.index'), {}, { preserveState: true });
+        setCurrentPromotion('all');
+        router.get(route('juries.index'), {}, { preserveState: true });
     };
 
     const getFieldError = (index: number, field: string): string | null => {
-        const key = `assignments.${index}.${field}`;
+        const key = `juries.${index}.${field}`;
         // @ts-ignore
         return errors[key] as string | null;
-    };
-
-    // Fonction pour filtrer les collaborateurs (exclure le titulaire)
-    const getFilteredCollaborators = (index: number) => {
-        const currentHolderId = bulkAssignments[index]?.holder_id;
-        return teachers.filter(teacher => 
-            teacher.id.toString() !== currentHolderId
-        );
     };
 
     if (!can.access) {
@@ -304,18 +294,18 @@ export default function AssignmentManager({
 
     return (
         <AppLayout>
-            <Head title="Gestion des Attributions" />
+            <Head title="Gestion des Jurys" />
             <div className="container mx-auto space-y-6 py-6">
                 <div className="flex flex-col gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Gestion des Attributions</h1>
-                        <p className="text-muted-foreground">{filteredAssignments.length} attributions enregistrées</p>
+                        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Gestion des Jurys</h1>
+                        <p className="text-muted-foreground">{filteredJuries.length} jurys enregistrés</p>
                     </div>
                     <div className="flex flex-col gap-3 sm:flex-row">
                         {can.create && (
                             <Button onClick={() => openModal('single')} className="gap-2 shadow-sm">
                                 <Plus size={16} />
-                                Nouvelle Attribution
+                                Nouveau Jury
                             </Button>
                         )}
                         {can.edit && (
@@ -333,11 +323,11 @@ export default function AssignmentManager({
 
                 <Card className="shadow-sm">
                     <CardContent>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                             <div className="relative">
                                 <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                                 <Input
-                                    placeholder="Rechercher une attribution..."
+                                    placeholder="Rechercher un jury..."
                                     className="pl-10"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -361,7 +351,20 @@ export default function AssignmentManager({
                                     <SelectItem value="all">Toutes les années</SelectItem>
                                     {academic_years.map((year) => (
                                         <SelectItem key={year.id} value={year.id.toString()}>
-                                            {year.name}
+                                            {year.title}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select value={currentPromotion} onValueChange={setCurrentPromotion}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Toutes les promotions" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Toutes les promotions</SelectItem>
+                                    {promotions.map((promotion) => (
+                                        <SelectItem key={promotion.id} value={promotion.id.toString()}>
+                                            {promotion.title}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -372,37 +375,39 @@ export default function AssignmentManager({
 
                 <Card className="shadow-sm">
                     <CardContent>
-                        {filteredAssignments.length > 0 ? (
+                        {filteredJuries.length > 0 ? (
                             <div className="space-y-4">
                                 <div className="overflow-hidden rounded-md border">
                                     <Table>
                                         <TableHeader className="bg-gray-50 dark:bg-gray-800">
                                             <TableRow>
+                                                <TableHead>Président</TableHead>
+                                                <TableHead>Secrétaire</TableHead>
+                                                <TableHead>Membre</TableHead>
                                                 <TableHead>Institution</TableHead>
-                                                <TableHead>Titulaire</TableHead>
-                                                <TableHead>Collaborateur</TableHead>
-                                                <TableHead>Cours</TableHead> {/* Nouvel intitulé */}
+                                                <TableHead>Promotion</TableHead>
                                                 <TableHead>Année académique</TableHead>
                                                 <TableHead>Observation</TableHead>
                                                 <TableHead className="text-right">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {paginatedAssignments.map((assignment) => (
-                                                <TableRow key={assignment.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                    <TableCell>{assignment.institution}</TableCell>
-                                                    <TableCell>{assignment.holder}</TableCell>
-                                                    <TableCell>{assignment.collaborator || '-'}</TableCell>
-                                                    <TableCell>{assignment.course}</TableCell> {/* Nouveau champ */}
-                                                    <TableCell>{assignment.academic_year}</TableCell>
-                                                    <TableCell>{assignment.observation || '-'}</TableCell>
+                                            {paginatedJuries.map((jury) => (
+                                                <TableRow key={jury.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                                    <TableCell>{jury.president}</TableCell>
+                                                    <TableCell>{jury.secretary}</TableCell>
+                                                    <TableCell>{jury.member}</TableCell>
+                                                    <TableCell>{jury.institution}</TableCell>
+                                                    <TableCell>{jury.promotion}</TableCell>
+                                                    <TableCell>{jury.academic_year}</TableCell>
+                                                    <TableCell>{jury.observation || '-'}</TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
                                                             {can.edit && (
                                                                 <Button
                                                                     variant="outline"
                                                                     size="icon"
-                                                                    onClick={() => openModal('single', assignment)}
+                                                                    onClick={() => openModal('single', jury)}
                                                                     className="h-8 w-8"
                                                                 >
                                                                     <Edit className="h-3.5 w-3.5" />
@@ -412,7 +417,7 @@ export default function AssignmentManager({
                                                                 <Button
                                                                     variant="destructive"
                                                                     size="icon"
-                                                                    onClick={() => openDeleteModal(assignment)}
+                                                                    onClick={() => openDeleteModal(jury)}
                                                                     className="h-8 w-8"
                                                                 >
                                                                     <Trash2 className="h-3.5 w-3.5" />
@@ -467,16 +472,16 @@ export default function AssignmentManager({
                         ) : (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
                                 <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-                                    <GraduationCap className="h-10 w-10 text-gray-400" />
+                                    <Users className="h-10 w-10 text-gray-400" />
                                 </div>
-                                <h3 className="mb-2 text-lg font-medium">Aucune attribution trouvée</h3>
+                                <h3 className="mb-2 text-lg font-medium">Aucun jury trouvé</h3>
                                 <p className="text-muted-foreground mb-4 text-sm">
-                                    {can.create ? 'Commencez par créer une nouvelle attribution.' : 'Aucune donnée disponible.'}
+                                    {can.create ? 'Commencez par créer un nouveau jury.' : 'Aucune donnée disponible.'}
                                 </p>
                                 {can.create && (
                                     <Button onClick={() => openModal('single')} className="gap-2">
                                         <Plus size={16} />
-                                        Ajouter une attribution
+                                        Ajouter un jury
                                     </Button>
                                 )}
                             </div>
@@ -488,22 +493,22 @@ export default function AssignmentManager({
                     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl md:max-w-4xl lg:max-w-6xl">
                         <DialogHeader>
                             <DialogTitle className="flex items-center gap-2 text-xl">
-                                <GraduationCap className="h-5 w-5" />
+                                <Users className="h-5 w-5" />
                                 {isBulkMode
-                                    ? "Ajout Multiple d'Attributions"
-                                    : bulkAssignments[0]?.id
-                                      ? 'Modifier Attribution'
-                                      : 'Nouvelle Attribution'}
+                                    ? "Ajout Multiple de Jurys"
+                                    : bulkJuries[0]?.id
+                                      ? 'Modifier Jury'
+                                      : 'Nouveau Jury'}
                             </DialogTitle>
                             <DialogDescription>
-                                {isBulkMode ? 'Ajoutez plusieurs attributions en une seule opération' : "Configurez les détails de l'attribution"}
+                                {isBulkMode ? 'Ajoutez plusieurs jurys en une seule opération' : "Configurez les détails du jury"}
                             </DialogDescription>
                         </DialogHeader>
 
-                        {errors.assignments && typeof errors.assignments === 'string' && (
+                        {errors.juries && typeof errors.juries === 'string' && (
                             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 shadow dark:border-red-700 dark:bg-red-900/20">
                                 <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">Erreurs de validation</h3>
-                                <p className="mt-2 text-sm text-red-700 dark:text-red-300">{errors.assignments}</p>
+                                <p className="mt-2 text-sm text-red-700 dark:text-red-300">{errors.juries}</p>
                             </div>
                         )}
 
@@ -511,9 +516,9 @@ export default function AssignmentManager({
                             <div className="rounded-lg bg-gray-50 p-4">
                                 <div className="mb-4 flex items-center justify-between">
                                     <h3 className="font-medium">
-                                        {bulkAssignments.length} {bulkAssignments.length > 1 ? 'attributions' : 'attribution'}
+                                        {bulkJuries.length} {bulkJuries.length > 1 ? 'jurys' : 'jury'}
                                     </h3>
-                                    <Button type="button" onClick={handleAddAssignment} variant="outline" size="sm">
+                                    <Button type="button" onClick={handleAddJury} variant="outline" size="sm">
                                         <Plus className="mr-1 h-4 w-4" />
                                         Ajouter une ligne
                                     </Button>
@@ -523,41 +528,52 @@ export default function AssignmentManager({
                                     <Table>
                                         <TableHeader className="bg-gray-100">
                                             <TableRow>
-                                                <TableHead className="w-[180px]">Cours *</TableHead> {/* Nouvel intitulé */}
+                                                <TableHead className="w-[180px]">Président *</TableHead>
+                                                <TableHead className="w-[180px]">Secrétaire *</TableHead>
+                                                <TableHead className="w-[180px]">Membre *</TableHead>
                                                 <TableHead className="w-[150px]">Année académique *</TableHead>
-                                                <TableHead className="w-[180px]">Titulaire *</TableHead>
-                                                <TableHead className="w-[180px]">Collaborateur</TableHead>
+                                                <TableHead className="w-[150px]">Promotion *</TableHead>
                                                 <TableHead>Observation</TableHead>
                                                 <TableHead className="w-[50px]">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {bulkAssignments.map((assignment, index) => (
+                                            {bulkJuries.map((jury, index) => (
                                                 <TableRow key={index}>
                                                     <TableCell>
-                                                        <Select
-                                                            value={assignment.course_id} // Nouveau champ
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'course_id', value)}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Sélectionnez un cours" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {courses.map((course) => (
-                                                                    <SelectItem key={course.id} value={course.id.toString()}>
-                                                                        {course.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {getFieldError(index, 'course_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'course_id')}</p>
+                                                        <Input
+                                                            value={jury.president}
+                                                            onChange={(e) => handleJuryChange(index, 'president', e.target.value)}
+                                                            placeholder="Président"
+                                                        />
+                                                        {getFieldError(index, 'president') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'president')}</p>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Input
+                                                            value={jury.secretary}
+                                                            onChange={(e) => handleJuryChange(index, 'secretary', e.target.value)}
+                                                            placeholder="Secrétaire"
+                                                        />
+                                                        {getFieldError(index, 'secretary') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'secretary')}</p>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Input
+                                                            value={jury.member}
+                                                            onChange={(e) => handleJuryChange(index, 'member', e.target.value)}
+                                                            placeholder="Membre"
+                                                        />
+                                                        {getFieldError(index, 'member') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'member')}</p>
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Select
-                                                            value={assignment.academic_year_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'academic_year_id', value)}
+                                                            value={jury.academic_year_id}
+                                                            onValueChange={(value) => handleJuryChange(index, 'academic_year_id', value)}
                                                         >
                                                             <SelectTrigger>
                                                                 <SelectValue placeholder="Sélectionnez une année" />
@@ -565,7 +581,7 @@ export default function AssignmentManager({
                                                             <SelectContent>
                                                                 {academic_years.map((year) => (
                                                                     <SelectItem key={year.id} value={year.id.toString()}>
-                                                                        {year.name}
+                                                                        {year.title}
                                                                     </SelectItem>
                                                                 ))}
                                                             </SelectContent>
@@ -576,49 +592,28 @@ export default function AssignmentManager({
                                                     </TableCell>
                                                     <TableCell>
                                                         <Select
-                                                            value={assignment.holder_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'holder_id', value)}
+                                                            value={jury.promotion_id}
+                                                            onValueChange={(value) => handleJuryChange(index, 'promotion_id', value)}
                                                         >
                                                             <SelectTrigger>
-                                                                <SelectValue placeholder="Sélectionnez un titulaire" />
+                                                                <SelectValue placeholder="Sélectionnez une promotion" />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {teachers.map((teacher) => (
-                                                                    <SelectItem key={teacher.id} value={teacher.id.toString()}>
-                                                                        {teacher.name}
+                                                                {promotions.map((promotion) => (
+                                                                    <SelectItem key={promotion.id} value={promotion.id.toString()}>
+                                                                        {promotion.title}
                                                                     </SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {getFieldError(index, 'holder_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'holder_id')}</p>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Select
-                                                            value={assignment.collaborator_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'collaborator_id', value)}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Sélectionnez un collaborateur" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="none">Aucun collaborateur</SelectItem>
-                                                                {getFilteredCollaborators(index).map((teacher) => (
-                                                                    <SelectItem key={teacher.id} value={teacher.id.toString()}>
-                                                                        {teacher.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {getFieldError(index, 'collaborator_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'collaborator_id')}</p>
+                                                        {getFieldError(index, 'promotion_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'promotion_id')}</p>
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Input
-                                                            value={assignment.observation}
-                                                            onChange={(e) => handleAssignmentChange(index, 'observation', e.target.value)}
+                                                            value={jury.observation}
+                                                            onChange={(e) => handleJuryChange(index, 'observation', e.target.value)}
                                                             placeholder="Observation"
                                                         />
                                                         {getFieldError(index, 'observation') && (
@@ -631,8 +626,8 @@ export default function AssignmentManager({
                                                             variant="destructive"
                                                             size="icon"
                                                             className="h-7 w-7"
-                                                            onClick={() => handleRemoveAssignment(index)}
-                                                            disabled={bulkAssignments.length <= 1}
+                                                            onClick={() => handleRemoveJury(index)}
+                                                            disabled={bulkJuries.length <= 1}
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </Button>
@@ -664,15 +659,15 @@ export default function AssignmentManager({
                                                 <Loader2 className="h-4 w-4 animate-spin" />
                                                 <span>Traitement...</span>
                                             </>
-                                        ) : bulkAssignments[0]?.id ? (
+                                        ) : bulkJuries[0]?.id ? (
                                             <>
                                                 <Edit className="h-4 w-4" />
-                                                Mettre à jour
+                                                <span>Modifier Jury</span>
                                             </>
                                         ) : (
                                             <>
                                                 <Plus className="h-4 w-4" />
-                                                {isBulkMode ? 'Enregistrer les attributions' : "Créer l'attribution"}
+                                                <span>Créer Jury</span>
                                             </>
                                         )}
                                     </Button>
@@ -687,7 +682,7 @@ export default function AssignmentManager({
                     onOpenChange={(open) => {
                         if (!open) {
                             setIsDeleteModalOpen(false);
-                            setAssignmentToDelete(null);
+                            setJuryToDelete(null);
                             setIsDeleting(false);
                         }
                     }}
@@ -696,7 +691,7 @@ export default function AssignmentManager({
                         <DialogHeader>
                             <DialogTitle className="text-xl">Confirmer la suppression</DialogTitle>
                             <DialogDescription>
-                                Êtes-vous sûr de vouloir supprimer cette attribution ? Cette action est irréversible.
+                                Êtes-vous sûr de vouloir supprimer ce jury ? Cette action est irréversible.
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>

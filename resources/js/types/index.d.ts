@@ -32,16 +32,14 @@ export interface User {
 }
 
 // Nouveaux types pour la navigation
-export interface NavItem {
-  title: string;
-  href?: string;
-  icon?: LucideIcon;
-  items?: NavItem[];
-  permission?: string | string[];
-  isActive?: boolean;
-  color?: string;
-  isGrouped?: boolean;
-}
+export type NavItem = {
+    title: string;
+    href: string;
+    icon: LucideIcon;
+    isActive?: boolean;
+    color?: string;
+    permission?: string;
+};
 
 export interface NavGroup {
   groupTitle: string;
@@ -52,12 +50,11 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-export interface GroupedNavItem {
-  groupTitle: string;
-  items: NavItem[];
-  icon?: LucideIcon;
-  color?: string;
-  permission?: string | string[];
-  isActive?: boolean;
-  isGrouped?: boolean;
-}
+export type GroupedNavItem = {
+    groupTitle: string;
+    icon: LucideIcon;
+    color?: string;
+    items: NavItem[];
+    permission?: string;
+    isActive?: boolean;
+};

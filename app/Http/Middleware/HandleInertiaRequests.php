@@ -45,15 +45,21 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
-            'ziggy' => fn (): array => [
+            'ziggy' => fn(): array => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             // Ajout de la gestion des messages flash
             'flash' => [
-                'message' => fn () => $request->session()->get('flash.message'),
-                'type' => fn () => $request->session()->get('flash.type'),
+                'message' => fn() => $request->session()->get('flash.message'),
+                'type' => fn() => $request->session()->get('flash.type'),
+            ],
+            'auth' => [
+                'user' => $request->user(),
+                'permissions' => $request->user()
+                    ? $request->user()->getAllPermissions()->pluck('name')->toArray()
+                    : [],
             ],
         ]);
     }
