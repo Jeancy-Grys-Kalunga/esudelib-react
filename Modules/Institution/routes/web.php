@@ -9,6 +9,7 @@ use Modules\Institution\Http\Controllers\PromotionController;
 use Modules\Institution\Http\Controllers\UnitsTeachingController;
 use Modules\Institution\Http\Controllers\CourseController;
 use Modules\Institution\Http\Controllers\AssignmentController;
+use Modules\Institution\Http\Controllers\JuryController;
 use Modules\Institution\Http\Controllers\ProgramController;
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -34,6 +35,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::resource('assignments', AssignmentController::class)->names('assignments');
 
+
     Route::post('assignmentsbulk', [AssignmentController::class, 'bulkStore'])->name('assignments.bulk');
 
     Route::post('/assignments/bulk', [AssignmentController::class, 'storeBulk'])
@@ -43,7 +45,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('units-teachings-mass-create', [UnitsTeachingController::class, 'mass_create'])->name('units-teachings.mass-create');
     Route::post('units-teachings-mass-create', [UnitsTeachingController::class, 'massStore'])->name('units-teachings.mass-store');
-
     Route::get('units-teachings/mass-edit', [UnitsTeachingController::class, 'massEdit'])->name('units-teachings.mass-edit');
     Route::put('units-teachings/mass-update', [UnitsTeachingController::class, 'massUpdate'])->name('units-teachings.mass-update');
+    Route::resource('juries', JuryController::class)->names('juries');
 });

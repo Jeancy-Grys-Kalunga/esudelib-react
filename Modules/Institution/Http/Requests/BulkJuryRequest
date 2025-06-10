@@ -1,0 +1,52 @@
+<?php
+
+namespace Modules\Institution\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+class BulkJuryRequest extends FormRequest
+{
+    public function authorize()
+    {
+        return true;
+    }
+
+    public function rules()
+    {
+        return [
+            'juries.*.president' => 'required|string|max:255',
+            'juries.*.secretary' => 'required|string|max:255',
+            'juries.*.member' => 'required|string|max:255',
+            'juries.*.observation' => 'nullable|string|max:500',
+            'juries.*.academic_year_id' => [
+                'required',
+                Rule::exists('academic_years', 'id')
+            ],
+            'juries.*.promotion_id' => [
+                'required',
+                Rule::exists('promotions', 'id')
+            ],
+            
+            // Pour les mises à jour
+            'juries.*.id' => 'nullable|exists:juries,id',
+        ];
+    }
+
+    public function messages()
+    {
+        return [
+            'juries.*.president.required' => 'Le président est obligatoire',
+            'juries.*.secretary.required' => 'Le secrétaire est obligatoire',
+            'juries.*.member.required' => 'Le membre est obligatoire',
+            
+            'juries.*.academic_year_id.required' => 'L\'année académique est obligatoire',
+            'juries.*.academic_year_id.exists' => 'L\'année académique sélectionnée est invalide',
+            
+            'juries.*.promotion_id.required' => 'La promotion est obligatoire',
+            'juries.*.promotion_id.exists' => 'La promotion sélectionnée est invalide',
+            
+            'juries.*.id.exists' => 'Le jury à mettre à jour est invalide',
+        ];
+    }
+}
