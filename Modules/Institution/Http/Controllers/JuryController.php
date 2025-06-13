@@ -12,13 +12,13 @@ use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Promotion;
 use Modules\Institution\Entities\AcademicYear;
 use Modules\Institution\Http\Requests\BulkJuryRequest;
-use Modules\Institution\Http\Requests\StoreJuryRequest;
-use Modules\Institution\Http\Requests\UpdateJuryRequest;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Permission;
 use Illuminate\Support\Collection;
 use App\Services\InfoBipService;
 use Illuminate\Support\Facades\Log;
+
+use Modules\Teacher\Entities\Teacher;
 
 class JuryController extends Controller
 {
@@ -52,7 +52,10 @@ class JuryController extends Controller
         $query = Jury::with([
             'institution',
             'promotion',
-            'academicYear'
+            'academicYear',
+            'president',
+            'secretary',
+            'member'
         ]);
 
         if ($user->hasRole('Secrétaire Académique')) {
@@ -74,15 +77,21 @@ class JuryController extends Controller
         if ($request->has('search') && $request->search) {
             $searchTerm = $request->search;
             $query->where(function ($q) use ($searchTerm) {
-                $q->where('president', 'LIKE', "%$searchTerm%")
-                    ->orWhere('secretary', 'LIKE', "%$searchTerm%")
-                    ->orWhere('member', 'LIKE', "%$searchTerm%")
-                    ->orWhereHas('institution', function ($q) use ($searchTerm) {
-                        $q->where('name', 'LIKE', "%$searchTerm%");
-                    })
-                    ->orWhereHas('promotion', function ($q) use ($searchTerm) {
-                        $q->where('title', 'LIKE', "%$searchTerm%");
-                    });
+                $q->whereHas('president', function ($q) use ($searchTerm) {
+                    $q->where('name', 'LIKE', "%$searchTerm%");
+                })
+                ->orWhereHas('secretary', function ($q) use ($searchTerm) {
+                    $q->where('name', 'LIKE', "%$searchTerm%");
+                })
+                ->orWhereHas('member', function ($q) use ($searchTerm) {
+                    $q->where('name', 'LIKE', "%$searchTerm%");
+                })
+                ->orWhereHas('institution', function ($q) use ($searchTerm) {
+                    $q->where('name', 'LIKE', "%$searchTerm%");
+                })
+                ->orWhereHas('promotion', function ($q) use ($searchTerm) {
+                    $q->where('title', 'LIKE', "%$searchTerm%");
+                });
             });
         }
 
@@ -92,9 +101,12 @@ class JuryController extends Controller
         $formattedJuries = $juries->map(function ($jury) {
             return [
                 'id' => $jury->id,
-                'president' => $jury->president,
-                'secretary' => $jury->secretary,
-                'member' => $jury->member,
+                'president_id' => $jury->president_id,
+                'president' => $jury->president->name ?? 'Enseignant inconnu',
+                'secretary_id' => $jury->secretary_id,
+                'secretary' => $jury->secretary->name ?? 'Enseignant inconnu',
+                'member_id' => $jury->member_id,
+                'member' => $jury->member->name ?? 'Enseignant inconnu',
                 'observation' => $jury->observation,
                 'institution_id' => $jury->institution_id,
                 'institution' => $jury->institution?->name ?? 'Institution inconnue',
@@ -109,6 +121,7 @@ class JuryController extends Controller
         $institutions = $this->getUserInstitutions($user);
         $promotions = Promotion::all(['id', 'title']);
         $academicYears = AcademicYear::all(['id', 'title']);
+        $teachers = Teacher::all(['id', 'name']); // Pour les sélecteurs
 
         return Inertia::render('jury/index', [
             'juries' => $formattedJuries,
@@ -117,6 +130,7 @@ class JuryController extends Controller
             'institutions' => $institutions,
             'promotions' => $promotions,
             'academic_years' => $academicYears,
+            'teachers' => $teachers, // Nouveau
         ]);
     }
 

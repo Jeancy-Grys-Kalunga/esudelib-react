@@ -22,10 +22,18 @@ type AcademicYear = {
     title: string;
 };
 
+type Teacher = {
+    id: number;
+    name: string;
+};
+
 interface Jury {
     id: number;
+    president_id: number;
     president: string;
+    secretary_id: number;
     secretary: string;
+    member_id: number;
     member: string;
     observation: string | null;
     institution_id: number;
@@ -43,9 +51,9 @@ type Institution = {
 
 type JuryFormData = {
     id?: number;
-    president: string;
-    secretary: string;
-    member: string;
+    president_id: string;
+    secretary_id: string;
+    member_id: string;
     observation: string;
     academic_year_id: string;
     promotion_id: string;
@@ -56,6 +64,7 @@ type PageProps = {
     promotions: Promotion[];
     academic_years: AcademicYear[];
     institutions: Institution[];
+    teachers: Teacher[];
     can: {
         create: boolean;
         edit: boolean;
@@ -78,6 +87,7 @@ export default function JuryManager({
     promotions,
     academic_years,
     institutions,
+    teachers,
     can,
     flash,
     filters,
@@ -169,9 +179,9 @@ export default function JuryManager({
             setBulkJuries([
                 {
                     id: jury.id,
-                    president: jury.president,
-                    secretary: jury.secretary,
-                    member: jury.member,
+                    president_id: jury.president_id.toString(),
+                    secretary_id: jury.secretary_id.toString(),
+                    member_id: jury.member_id.toString(),
                     observation: jury.observation || '',
                     academic_year_id: jury.academic_year_id.toString(),
                     promotion_id: jury.promotion_id.toString(),
@@ -185,9 +195,9 @@ export default function JuryManager({
     };
 
     const createEmptyJury = (): JuryFormData => ({
-        president: '',
-        secretary: '',
-        member: '',
+        president_id: teachers.length > 0 ? teachers[0].id.toString() : '',
+        secretary_id: teachers.length > 0 ? teachers[0].id.toString() : '',
+        member_id: teachers.length > 0 ? teachers[0].id.toString() : '',
         observation: '',
         academic_year_id: currentAcademicYear !== 'all' ? currentAcademicYear : academic_years.length > 0 ? academic_years[0].id.toString() : '',
         promotion_id: promotions.length > 0 ? promotions[0].id.toString() : '',
@@ -505,7 +515,7 @@ export default function JuryManager({
                             </DialogDescription>
                         </DialogHeader>
 
-                        {errors.juries && typeof errors.juries === 'string' && (
+                        {typeof errors.juries === 'string' && (
                             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 shadow dark:border-red-700 dark:bg-red-900/20">
                                 <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">Erreurs de validation</h3>
                                 <p className="mt-2 text-sm text-red-700 dark:text-red-300">{errors.juries}</p>
@@ -541,33 +551,84 @@ export default function JuryManager({
                                             {bulkJuries.map((jury, index) => (
                                                 <TableRow key={index}>
                                                     <TableCell>
-                                                        <Input
-                                                            value={jury.president}
-                                                            onChange={(e) => handleJuryChange(index, 'president', e.target.value)}
-                                                            placeholder="Président"
-                                                        />
-                                                        {getFieldError(index, 'president') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'president')}</p>
+                                                        <Select
+                                                            value={jury.president_id}
+                                                            onValueChange={(value) => handleJuryChange(index, 'president_id', value)}
+                                                        >
+                                                            <SelectTrigger
+                                                                className={getFieldError(index, 'president_id') ? 'border-red-500' : ''}
+                                                            >
+                                                                <SelectValue placeholder="Sélectionnez un président" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {teachers
+                                                                    .filter((teacher) =>
+                                                                        teacher.id.toString() !== jury.secretary_id &&
+                                                                        teacher.id.toString() !== jury.member_id
+                                                                    )
+                                                                    .map((teacher) => (
+                                                                        <SelectItem key={teacher.id} value={teacher.id.toString()}>
+                                                                            {teacher.name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        {getFieldError(index, 'president_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'president_id')}</p>
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Input
-                                                            value={jury.secretary}
-                                                            onChange={(e) => handleJuryChange(index, 'secretary', e.target.value)}
-                                                            placeholder="Secrétaire"
-                                                        />
-                                                        {getFieldError(index, 'secretary') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'secretary')}</p>
+                                                        <Select
+                                                            value={jury.secretary_id}
+                                                            onValueChange={(value) => handleJuryChange(index, 'secretary_id', value)}
+                                                        >
+                                                            <SelectTrigger
+                                                                className={getFieldError(index, 'secretary_id') ? 'border-red-500' : ''}
+                                                            >
+                                                                <SelectValue placeholder="Sélectionnez un secrétaire" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {teachers
+                                                                    .filter((teacher) =>
+                                                                        teacher.id.toString() !== jury.president_id &&
+                                                                        teacher.id.toString() !== jury.member_id
+                                                                    )
+                                                                    .map((teacher) => (
+                                                                        <SelectItem key={teacher.id} value={teacher.id.toString()}>
+                                                                            {teacher.name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        {getFieldError(index, 'secretary_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'secretary_id')}</p>
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Input
-                                                            value={jury.member}
-                                                            onChange={(e) => handleJuryChange(index, 'member', e.target.value)}
-                                                            placeholder="Membre"
-                                                        />
-                                                        {getFieldError(index, 'member') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'member')}</p>
+                                                        <Select
+                                                            value={jury.member_id}
+                                                            onValueChange={(value) => handleJuryChange(index, 'member_id', value)}
+                                                        >
+                                                            <SelectTrigger
+                                                                className={getFieldError(index, 'member_id') ? 'border-red-500' : ''}
+                                                            >
+                                                                <SelectValue placeholder="Sélectionnez un membre" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {teachers
+                                                                    .filter((teacher) =>
+                                                                        teacher.id.toString() !== jury.president_id &&
+                                                                        teacher.id.toString() !== jury.secretary_id
+                                                                    )
+                                                                    .map((teacher) => (
+                                                                        <SelectItem key={teacher.id} value={teacher.id.toString()}>
+                                                                            {teacher.name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        {getFieldError(index, 'member_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'member_id')}</p>
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
@@ -614,20 +675,20 @@ export default function JuryManager({
                                                         <Input
                                                             value={jury.observation}
                                                             onChange={(e) => handleJuryChange(index, 'observation', e.target.value)}
-                                                            placeholder="Observation"
+                                                            placeholder="Observation (optionnel)"
+                                                            className={getFieldError(index, 'observation') ? 'border-red-500' : ''}
                                                         />
                                                         {getFieldError(index, 'observation') && (
                                                             <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'observation')}</p>
                                                         )}
                                                     </TableCell>
-                                                    <TableCell className="text-center">
+                                                    <TableCell>
                                                         <Button
                                                             type="button"
                                                             variant="destructive"
                                                             size="icon"
-                                                            className="h-7 w-7"
                                                             onClick={() => handleRemoveJury(index)}
-                                                            disabled={bulkJuries.length <= 1}
+                                                            className="h-8 w-8"
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </Button>
@@ -639,89 +700,48 @@ export default function JuryManager({
                                 </div>
                             </div>
 
-                            <DialogFooter className="mt-4">
-                                <div className="flex w-full justify-between">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={closeModal}
-                                        disabled={isSubmitting}
-                                    >
-                                        Annuler
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                        className="relative flex min-w-[180px] items-center justify-center gap-2"
-                                    >
-                                        {isSubmitting ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                <span>Traitement...</span>
-                                            </>
-                                        ) : bulkJuries[0]?.id ? (
-                                            <>
-                                                <Edit className="h-4 w-4" />
-                                                <span>Modifier Jury</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Plus className="h-4 w-4" />
-                                                <span>Créer Jury</span>
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={closeModal} type="button" disabled={processing}>
+                                    Annuler
+                                </Button>
+                                <Button type="submit" disabled={processing || isSubmitting}>
+                                    {(processing || isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    {isBulkMode ? "Enregistrer les jurys" : "Enregistrer"}
+                                </Button>
                             </DialogFooter>
                         </form>
                     </DialogContent>
                 </Dialog>
 
-                <Dialog
-                    open={isDeleteModalOpen}
-                    onOpenChange={(open) => {
-                        if (!open) {
-                            setIsDeleteModalOpen(false);
-                            setJuryToDelete(null);
-                            setIsDeleting(false);
-                        }
-                    }}
-                >
-                    <DialogContent className="sm:max-w-[425px]">
+                {/* Modal de suppression */}
+                <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+                    <DialogContent>
                         <DialogHeader>
-                            <DialogTitle className="text-xl">Confirmer la suppression</DialogTitle>
+                            <DialogTitle>Confirmer la suppression</DialogTitle>
                             <DialogDescription>
                                 Êtes-vous sûr de vouloir supprimer ce jury ? Cette action est irréversible.
                             </DialogDescription>
                         </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div>
+                                <p>
+                                    <span className="font-medium">Président:</span> {juryToDelete?.president}
+                                </p>
+                                <p>
+                                    <span className="font-medium">Secrétaire:</span> {juryToDelete?.secretary}
+                                </p>
+                                <p>
+                                    <span className="font-medium">Membre:</span> {juryToDelete?.member}
+                                </p>
+                            </div>
+                        </div>
                         <DialogFooter>
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setIsDeleteModalOpen(false);
-                                    setIsDeleting(false);
-                                }}
-                                disabled={isDeleting}
-                            >
+                            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeleting}>
                                 Annuler
                             </Button>
-                            <Button
-                                variant="destructive"
-                                onClick={confirmDelete}
-                                className="flex min-w-[120px] items-center justify-center gap-2"
-                                disabled={isDeleting}
-                            >
-                                {isDeleting ? (
-                                    <>
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Suppression...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Trash2 className="h-4 w-4" />
-                                        Supprimer
-                                    </>
-                                )}
+                            <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Supprimer
                             </Button>
                         </DialogFooter>
                     </DialogContent>

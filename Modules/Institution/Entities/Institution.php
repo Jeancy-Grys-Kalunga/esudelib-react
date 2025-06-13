@@ -62,4 +62,9 @@ class Institution extends Model implements HasMedia
     {
         return $this->hasMany(Program::class);
     }
+
+    public function juries()
+    {
+        return $this->hasMany(Jury::class);
+    }
 }
