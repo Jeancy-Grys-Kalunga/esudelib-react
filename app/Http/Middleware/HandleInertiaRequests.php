@@ -39,11 +39,10 @@ class HandleInertiaRequests extends Middleware
     {
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
 
-        // Calculer les permissions
         $permissions = [];
         if ($user = $request->user()) {
             $permissions = $user->hasRole('Super Admin')
-                ? ['*'] // Marqueur pour toutes les permissions
+                ? ['*'] 
                 : $user->getAllPermissions()->pluck('name')->toArray();
         }
 
@@ -61,7 +60,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'auth' => [
                 'user' => $request->user(),
-                'permissions' => $permissions, // Utilisation des permissions calculées
+                'permissions' => $permissions,
             ],
         ]);
     }
