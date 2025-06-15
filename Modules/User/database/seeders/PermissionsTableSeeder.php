@@ -44,7 +44,7 @@ class PermissionsTableSeeder extends Seeder
             'edit_academic_years',
             'delete_academic_years',
 
-             //Departments
+            //Departments
             'access_departments',
             'create_departments',
             'show_departments',
@@ -61,7 +61,7 @@ class PermissionsTableSeeder extends Seeder
             'edit_promotions',
             'delete_promotions',
 
-             //Institutions
+            //Institutions
             'access_institutions',
             'create_institutions',
             'show_institutions',
@@ -81,7 +81,7 @@ class PermissionsTableSeeder extends Seeder
             'add_observation',
 
             // Appeals
-            'access_appeals', 
+            'access_appeals',
             'create_appeals',
             'show_appeals',
             'edit_appeals',
@@ -94,7 +94,7 @@ class PermissionsTableSeeder extends Seeder
             'edit_courses',
             'delete_courses',
             'import_courses',
-            
+
             // Inscriptions
 
             'access_inscriptions',
@@ -115,7 +115,7 @@ class PermissionsTableSeeder extends Seeder
             'import_faculties',
             'show_faculties',
 
-    
+
             //teachers
             'access_teachers',
             'create_teachers',
@@ -133,7 +133,7 @@ class PermissionsTableSeeder extends Seeder
             'import_unit_teachings',
 
             // Reports
-            
+
             'access_reports',
 
             //Currencies
@@ -152,7 +152,7 @@ class PermissionsTableSeeder extends Seeder
             'access_jury_features',
 
             'access_partner_features',
-            
+
             // programs
 
             'access_programs',
@@ -165,9 +165,19 @@ class PermissionsTableSeeder extends Seeder
 
             'access_assignments',
             'create_assignments',
-            'show_assignments',             
+            'show_assignments',
             'edit_assignments',
-            'delete_assignments' 
+            'delete_assignments',
+
+            'create_roles',
+            'edit_roles',
+            'delete_roles',
+
+            'create_users',
+            'edit_users',
+            'delete_users',
+            'access_users',
+            'show_users',
 
         ];
 
