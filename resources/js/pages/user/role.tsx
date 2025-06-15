@@ -176,11 +176,11 @@ const permissionCategories = [
     {
         title: 'Charge Horaire',
         permissions: [
-            { id: 'access_attributions', label: 'Accès' },
-            { id: 'create_attributions', label: 'Créer' },
-            { id: 'show_attributions', label: 'Voir' },
-            { id: 'edit_attributions', label: 'Edition' },
-            { id: 'delete_attributions', label: 'Supprimer' },
+            { id: 'access_assignments', label: 'Accès' },
+            { id: 'create_assignments', label: 'Créer' },
+            { id: 'show_assignments', label: 'Voir' },
+            { id: 'edit_assignments', label: 'Edition' },
+            { id: 'delete_assignments', label: 'Supprimer' },
         ],
     },
     {
@@ -225,8 +225,20 @@ const permissionCategories = [
         ],
     },
     {
-        title: 'Palmarès',
-        permissions: [{ id: 'access_palmares', label: 'Accès' }],
+        title: 'Fonctionnalités Secrétariat',
+        permissions: [{ id: 'access_secretary_features', label: 'Accès' }],
+    },
+    {
+        title: 'Fonctionnalités Étudiant',
+        permissions: [{ id: 'access_student_features', label: 'Accès' }],
+    },
+    {
+        title: 'Fonctionnalités Jury',
+        permissions: [{ id: 'access_jury_features', label: 'Accès' }],
+    },
+    {
+        title: 'Fonctionnalités Partenaire',
+        permissions: [{ id: 'access_partner_features', label: 'Accès' }],
     },
 ];
 
