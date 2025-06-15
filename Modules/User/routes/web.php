@@ -13,9 +13,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 Route::group(['middleware' => 'auth'], function () {
 
     //User Profile
-    Route::get('/user/profile', 'ProfileController@edit')->name('profile.edit');
-    Route::patch('/user/profile', 'ProfileController@update')->name('profile.update');
-    Route::patch('/user/password', 'ProfileController@updatePassword')->name('profile.update.password');
+    // Route::get('/user/profile', 'ProfileController@edit')->name('profile.edit');
+    // Route::patch('/user/profile', 'ProfileController@update')->name('profile.update');
+    // Route::patch('/user/password', 'ProfileController@updatePassword')->name('profile.update.password');
 
     //Users
     Route::resource('users', UsersController::class)->except('show');
