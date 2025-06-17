@@ -19,7 +19,9 @@
         "nwidart/laravel-modules": "^12.0",
         "spatie/laravel-medialibrary": "^11.12",
         "spatie/laravel-permission": "^6.18",
-        "tightenco/ziggy": "^2.4"
+        "tightenco/ziggy": "^2.4",
+        "twilio/sdk": "^8.6",
+        "vonage/client": "^4.2"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
