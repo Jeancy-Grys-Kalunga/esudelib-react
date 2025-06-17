@@ -17,6 +17,7 @@ import _ from 'lodash';
 type Course = {
     id: number;
     title: string;
+    orientation?: string;
     created_at: string;
 };
 
@@ -50,6 +51,7 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
 
     const { data, setData, post, put, errors, processing, reset } = useForm({
         title: '',
+        orientation: '',
     });
 
     const handleSearch = useMemo(() => {
@@ -60,7 +62,9 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                 return;
             }
             const results = allCourses.filter(
-                (course) => course.title.toLowerCase().includes(term.toLowerCase())
+                (course) => 
+                    course.title.toLowerCase().includes(term.toLowerCase()) ||
+                    (course.orientation && course.orientation.toLowerCase().includes(term.toLowerCase()))
             );
             setFilteredCourses(results);
             setCurrentPage(1);
@@ -98,6 +102,7 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
         if (currentCourse) {
             setData({
                 title: currentCourse.title,
+                orientation: currentCourse.orientation || '',
             });
         } else {
             reset();
@@ -206,7 +211,7 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                         <div className="relative">
                             <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                             <Input
-                                placeholder="Rechercher un cours..."
+                                placeholder="Rechercher un cours ou orientation..."
                                 className="pl-10"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -242,6 +247,7 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                                         <TableHeader className="bg-gray-50 dark:bg-gray-800">
                                             <TableRow>
                                                 <TableHead>Titre</TableHead>
+                                                <TableHead>Orientation</TableHead>
                                                 <TableHead>Date de création</TableHead>
                                                 <TableHead className="text-right">Actions</TableHead>
                                             </TableRow>
@@ -250,6 +256,7 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                                             {paginatedCourses.map((course) => (
                                                 <TableRow key={course.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                                     <TableCell className="font-medium">{course.title}</TableCell>
+                                                    <TableCell>{course.orientation || '-'}</TableCell>
                                                     <TableCell>{course.created_at}</TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
@@ -358,8 +365,25 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                                         <BookOpen className="h-4 w-4" />
                                         Titre du cours *
                                     </Label>
-                                    <Input id="title" value={data.title} onChange={(e) => setData('title', e.target.value)} required />
+                                    <Input 
+                                        id="title" 
+                                        value={data.title} 
+                                        onChange={(e) => setData('title', e.target.value)} 
+                                        required 
+                                    />
                                     {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <Label htmlFor="orientation">
+                                        Orientation (optionnel)
+                                    </Label>
+                                    <Input 
+                                        id="orientation"
+                                        value={data.orientation}
+                                        onChange={(e) => setData('orientation', e.target.value)}
+                                    />
+                                    {errors.orientation && <p className="text-sm text-red-500">{errors.orientation}</p>}
                                 </div>
                             </div>
 

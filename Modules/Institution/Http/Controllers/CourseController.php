@@ -47,6 +47,7 @@ class CourseController extends Controller
             return [
                 'id' => $course->id,
                 'title' => $course->title,
+                'orientation' => $course->orientation,
                 'created_at' => $course->created_at->translatedFormat('d F Y'),
             ];
         });
@@ -67,6 +68,7 @@ class CourseController extends Controller
 
         Course::create([
             'title' => $request->title,
+            'orientation' => $request->orientation,
         ]);
 
         return redirect()->route('courses.index')->with([
@@ -85,6 +87,7 @@ class CourseController extends Controller
 
         $course->update([
             'title' => $request->title,
+            'orientation' => $request->orientation,
         ]);
 
         return redirect()->route('courses.index')->with([

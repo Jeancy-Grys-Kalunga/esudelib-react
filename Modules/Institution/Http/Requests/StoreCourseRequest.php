@@ -22,7 +22,7 @@ class StoreCourseRequest extends FormRequest
                 'max:255',
                 Rule::unique('courses', 'title'),
             ],
-    
+            'orientation' => 'nullable|string|max:255',
         ];
     }
 
@@ -33,6 +33,8 @@ class StoreCourseRequest extends FormRequest
             'title.string' => 'Le titre doit être une chaîne de caractères',
             'title.max' => 'Le titre ne doit pas dépasser 255 caractères',
             'title.unique' => 'Un cours avec ce titre existe déjà',
+            'orientation.string' => 'L\'orientation doit être une chaîne de caractères',
+            'orientation.max' => 'L\'orientation ne doit pas dépasser 255 caractères',
         ];
     }
 }
