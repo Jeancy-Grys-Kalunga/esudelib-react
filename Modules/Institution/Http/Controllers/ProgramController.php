@@ -3,59 +3,103 @@
 namespace Modules\Institution\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-// use Devrabiul\AlertMagic\Facades\Alert;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
 use Modules\Institution\Entities\Program;
 use Modules\Institution\Entities\Institution;
-use Modules\Institution\Entities\Department;
-use Modules\Institution\Entities\Faculty;
 use Modules\Institution\Entities\Course;
-use Illuminate\Http\Request;
+use Modules\Institution\Entities\Promotion;
+use Modules\Institution\Entities\UnitsTeaching;
+use Modules\Institution\Entities\CourseCategory;
+use Modules\Institution\Entities\CourseProgramDetail;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
-use Modules\Institution\Http\Requests\ProgramRequest;
-use RealRashid\SweetAlert\Facades\Alert;
+use Spatie\Permission\Models\Permission;
 
 class ProgramController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        // abort_if(Gate::denies('access_programs'), 403);
-
-        $user = auth()->user();
-
-        if ($user->hasRole('Secrétaire Académique')) {
-            $institutionIds = $user->institutions()->pluck('institutions.id');
-            $programs = Program::whereIn('institution_id', $institutionIds)
-                ->with(['institution', 'department', 'faculty', 'courses'])
-                ->latest()
-                ->get();
-        } else {
-            $programs = Program::with(['institution', 'department', 'faculty', 'courses'])->latest()->get();
+        if (!auth()->user()->hasPermissionTo('access_programs')) {
+            abort(403, 'Action non autorisée');
         }
 
-        return view('institution::programs.index', ['programs' => $programs]);
+        $user = Auth::user();
+        $user->load('permissions', 'roles.permissions');
+
+        // Gestion des permissions
+        $permissions = $user->hasRole('Super Admin')
+            ? Permission::pluck('name')->toArray()
+            : $user->getAllPermissions()->pluck('name')->toArray();
+
+        $requiredPermissions = [
+            'create' => 'create_programs',
+            'edit'   => 'edit_programs',
+            'delete' => 'delete_programs',
+            'access' => 'access_programs',
+        ];
+
+        $can = array_map(
+            fn($permission) => in_array($permission, $permissions),
+            $requiredPermissions
+        );
+
+        // Construction de la requête
+        $query = Program::with(['institution', 'courseDetails']);
+
+        if ($user->hasRole('Secrétaire Académique')) {
+            $institutionIds = $user->institutions()->pluck('id');
+            $query->whereIn('institution_id', $institutionIds);
+        }
+
+        // Formatage des données pour Inertia
+        $programs = $query->get()->map(function ($program) {
+            return [
+                'id' => $program->id,
+                'institution_id' => $program->institution_id,
+                'institution' => $program->institution?->name ?? 'Institution inconnue',
+                'courses_count' => $program->courseDetails->count(),
+                'created_at' => $program->created_at->format('d/m/Y'),
+            ];
+        });
+
+        // Récupération des institutions basée sur le rôle
+        $institutions = $this->getUserInstitutions($user);
+
+        return Inertia::render('program/index', [
+            'programs' => $programs,
+            'can' => $can,
+            'institutions' => $institutions,
+            'flash' => $this->getFlashMessages(),
+        ]);
     }
 
     public function create()
     {
-        abort_if(Gate::denies('create_programs'), 403);
+        if (!auth()->user()->hasPermissionTo('create_programs')) {
+            abort(403, 'Action non autorisée');
+        }
 
-        $user = auth()->user();
-        $institutions = $user->hasRole('Secrétaire Académique') ?
-            $user->institutions()->get() :
-            Institution::all();
-
-        return view('institution::programs.create', ['institutions' => $institutions]);
+        $user = Auth::user();
+        
+        return Inertia::render('program/form', [
+            'institutions' => $this->getUserInstitutions($user),
+            'promotions' => Promotion::all(['id', 'title as name']),
+            'units' => UnitsTeaching::all(['id', 'title as name']),
+            'categories' => CourseCategory::all(['id', 'title as name']),
+            'courses' => Course::all(['id', 'title as name']),
+        ]);
     }
 
-    public function store(ProgramRequest $request)
+    public function store(Request $request)
     {
-        abort_if(Gate::denies('create_programs'), 403);
+        if (!auth()->user()->hasPermissionTo('create_programs')) {
+            abort(403, 'Action non autorisée');
+        }
 
-        $user = auth()->user();
+        $user = Auth::user();
 
-        // Vérification des permissions
+        // Vérification des permissions institutionnelles
         if (
             $user->hasRole('Secrétaire Académique') &&
             !$user->institutions()->where('id', $request->institution_id)->exists()
@@ -68,100 +112,235 @@ class ProgramController extends Controller
 
             // Création du programme
             $program = Program::create([
-                'content' => $request->content,
                 'institution_id' => $request->institution_id,
-                'department_id' => $request->department_id,
-                'faculty_id' => $request->faculty_id,
             ]);
 
-            // Association des cours
-            if ($request->has('courses')) {
-                $program->courses()->sync($request->courses);
+            DB::commit();
+
+            return redirect()->route('programs.details.create', $program->id);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => "Erreur lors de la création : " . $e->getMessage()]);
+        }
+    }
+
+    public function showDetailsForm(Program $program)
+    {
+        if (!auth()->user()->hasPermissionTo('edit_programs')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $user = Auth::user();
+        if ($user->hasRole('Secrétaire Académique') && !$user->institutions->contains($program->institution_id)) {
+            abort(403);
+        }
+
+        return Inertia::render('program/details-form', [
+            'program' => [
+                'id' => $program->id,
+                'institution' => $program->institution?->name,
+            ],
+            'promotions' => Promotion::all(['id', 'title as name']),
+            'units' => UnitsTeaching::all(['id', 'title as name']),
+            'categories' => CourseCategory::all(['id', 'title as name']),
+            'courses' => Course::all(['id', 'title as name']),
+        ]);
+    }
+
+    public function storeDetails(Request $request, Program $program)
+    {
+        if (!auth()->user()->hasPermissionTo('edit_programs')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $user = Auth::user();
+        if ($user->hasRole('Secrétaire Académique') && !$user->institutions->contains($program->institution_id)) {
+            abort(403);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Création des détails des cours
+            foreach ($request->course_details as $detail) {
+                CourseProgramDetail::create([
+                    'program_id' => $program->id,
+                    'course_id' => $detail['course_id'],
+                    'promotion_id' => $detail['promotion_id'],
+                    'units_teaching_id' => $detail['units_teaching_id'],
+                    'course_category_id' => $detail['course_category_id'],
+                    'cm' => $detail['cm'],
+                    'td' => $detail['td'],
+                    'tp' => $detail['tp'],
+                    'credits' => $detail['credits'],
+                ]);
             }
 
             DB::commit();
 
-              Alert::toast('Programme créé avec succès!', 'success');
-            return redirect()->route('programs.index');
+            return redirect()->route('programs.index')->with([
+                'flash' => [
+                    'type' => 'success',
+                    'message' => 'Détails du programme ajoutés avec succès !',
+                ],
+            ]);
         } catch (\Exception $e) {
             DB::rollBack();
-              Alert::toast("Erreur lors de la création du programme: " . $e->getMessage(), 'error');
-            return redirect()->back()->withInput();
+            return back()->withErrors(['error' => "Erreur lors de l'ajout des détails : " . $e->getMessage()]);
         }
     }
 
     public function edit(Program $program)
     {
-        abort_if(Gate::denies('edit_programs'), 403);
+        if (!auth()->user()->hasPermissionTo('edit_programs')) {
+            abort(403, 'Action non autorisée');
+        }
 
-        $user = auth()->user();
+        $user = Auth::user();
         if ($user->hasRole('Secrétaire Académique') && !$user->institutions->contains($program->institution_id)) {
             abort(403);
         }
 
-        $institutions = $user->hasRole('Secrétaire Académique') ?
-            $user->institutions()->get() :
-            Institution::all();
+        // Charger les détails avec les relations
+        $program->load(['courseDetails' => function ($query) {
+            $query->with(['course', 'promotion', 'unitsTeaching', 'courseCategory']);
+        }]);
 
-        $departments = Department::where('institution_id', $program->institution_id)->get();
-        $faculties = Faculty::where('department_id', $program->department_id)->get();
-        $courses = Course::where('faculty_id', $program->faculty_id)->get();
-
-        return view('institution::programs.edit', compact(
-            'program',
-            'institutions',
-            'departments',
-            'faculties',
-            'courses'
-        ));
+        return Inertia::render('program/details-form', [
+            'program' => [
+                'id' => $program->id,
+                'institution' => $program->institution?->name,
+                'course_details' => $program->courseDetails->map(function ($detail) {
+                    return [
+                        'id' => $detail->id,
+                        'course_id' => $detail->course_id,
+                        'course' => $detail->course?->title,
+                        'promotion_id' => $detail->promotion_id,
+                        'promotion' => $detail->promotion?->title,
+                        'units_teaching_id' => $detail->units_teaching_id,
+                        'units_teaching' => $detail->unitsTeaching?->title,
+                        'course_category_id' => $detail->course_category_id,
+                        'course_category' => $detail->courseCategory?->title,
+                        'cm' => $detail->cm,
+                        'td' => $detail->td,
+                        'tp' => $detail->tp,
+                        'credits' => $detail->credits,
+                    ];
+                })
+            ],
+            'promotions' => Promotion::all(['id', 'title as name']),
+            'units' => UnitsTeaching::all(['id', 'title as name']),
+            'categories' => CourseCategory::all(['id', 'title as name']),
+            'courses' => Course::all(['id', 'title as name']),
+        ]);
     }
 
-    public function update(ProgramRequest $request, Program $program)
+    public function updateDetails(Request $request, Program $program)
     {
-        if (
-            Gate::denies('edit_programs') ||
-            (auth()->user()->hasRole('Secrétaire Académique') &&
-                !auth()->user()->institutions->contains($request->institution_id))
-        ) {
+        if (!auth()->user()->hasPermissionTo('edit_programs')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $user = Auth::user();
+        if ($user->hasRole('Secrétaire Académique') && !$user->institutions->contains($program->institution_id)) {
             abort(403);
         }
 
-        $program->update($request->validated());
-        $program->courses()->sync($request->courses);
+        try {
+            DB::beginTransaction();
 
-          Alert::toast('Programme mis à jour avec succès!', 'success');
-        return redirect()->route('programs.index');
+            // Synchronisation des détails des cours
+            $currentDetails = $program->courseDetails->pluck('id')->toArray();
+            $updatedDetails = [];
+
+            foreach ($request->course_details as $detail) {
+                if (isset($detail['id'])) {
+                    // Mise à jour d'un détail existant
+                    CourseProgramDetail::where('id', $detail['id'])
+                        ->update([
+                            'course_id' => $detail['course_id'],
+                            'promotion_id' => $detail['promotion_id'],
+                            'units_teaching_id' => $detail['units_teaching_id'],
+                            'course_category_id' => $detail['course_category_id'],
+                            'cm' => $detail['cm'],
+                            'td' => $detail['td'],
+                            'tp' => $detail['tp'],
+                            'credits' => $detail['credits'],
+                        ]);
+                    $updatedDetails[] = $detail['id'];
+                } else {
+                    // Création d'un nouveau détail
+                    $newDetail = CourseProgramDetail::create([
+                        'program_id' => $program->id,
+                        'course_id' => $detail['course_id'],
+                        'promotion_id' => $detail['promotion_id'],
+                        'units_teaching_id' => $detail['units_teaching_id'],
+                        'course_category_id' => $detail['course_category_id'],
+                        'cm' => $detail['cm'],
+                        'td' => $detail['td'],
+                        'tp' => $detail['tp'],
+                        'credits' => $detail['credits'],
+                    ]);
+                    $updatedDetails[] = $newDetail->id;
+                }
+            }
+
+            // Suppression des détails non présents dans la requête
+            $toDelete = array_diff($currentDetails, $updatedDetails);
+            if (!empty($toDelete)) {
+                CourseProgramDetail::whereIn('id', $toDelete)->delete();
+            }
+
+            DB::commit();
+
+            return redirect()->route('programs.index')->with([
+                'flash' => [
+                    'type' => 'success',
+                    'message' => 'Détails du programme mis à jour avec succès !',
+                ],
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->withErrors(['error' => "Erreur lors de la mise à jour : " . $e->getMessage()]);
+        }
     }
 
     public function destroy(Program $program)
     {
-        abort_if(Gate::denies('delete_programs'), 403);
+        if (!auth()->user()->hasPermissionTo('delete_programs')) {
+            abort(403, 'Action non autorisée');
+        }
 
-        if (
-            auth()->user()->hasRole('Secrétaire Académique') &&
-            !auth()->user()->institutions->contains($program->institution_id)
-        ) {
+        $user = Auth::user();
+        if ($user->hasRole('Secrétaire Académique') && !$user->institutions->contains($program->institution_id)) {
             abort(403);
         }
 
         $program->delete();
-          Alert::toast('Programme supprimé avec succès!', 'success');
-        return redirect()->route('programs.index');
+
+        return redirect()->route('programs.index')->with([
+            'flash' => [
+                'type' => 'success',
+                'message' => 'Programme supprimé avec succès !',
+            ],
+        ]);
     }
 
-
-    public function getDepartments(Institution $institution)
+    // Helper pour récupérer les institutions
+    private function getUserInstitutions($user)
     {
-        return response()->json($institution->departments()->get(['id', 'title as name']));
+        if ($user->hasRole('Super Admin')) {
+            return Institution::all(['id', 'name']);
+        }
+
+        return $user->institutions()->get(['id', 'name']);
     }
 
-    public function getFaculties(Institution $institution)
+    private function getFlashMessages()
     {
-        return response()->json($institution->faculties()->get(['id', 'title as name']));
-    }
-
-    public function getCourses(Institution $institution)
-    {
-        return response()->json($institution->courses()->get(['id', 'title as name']));
+        return [
+            'message' => session('flash.message'),
+            'type' => session('flash.type'),
+        ];
     }
 }

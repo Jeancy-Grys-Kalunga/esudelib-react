@@ -92,6 +92,13 @@ const secretaryItems: NavItem[] = [
         isActive: route().current('juries.index'),
         color: 'text-indigo-500',
     },
+      {
+        title: 'Gérer Programmes',
+        href: '/programs',
+        icon: FilePlus,
+        isActive: route().current('programs.index'),
+        color: 'text-indigo-500',
+    },
 ];
 const departmentItems: NavItem[] = [
     {

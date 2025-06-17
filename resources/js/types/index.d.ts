@@ -1,6 +1,6 @@
 import { type LucideIcon } from 'lucide-react';
 import type { Config } from 'ziggy-js';
-
+import { Page, PageProps } from '@inertiajs/core';
 // Types existants inchangés
 export interface Auth {
     user: User;
@@ -57,4 +57,45 @@ export type GroupedNavItem = {
     items: NavItem[];
     permission?: string;
     isActive?: boolean;
+};
+
+
+declare module '@inertiajs/react' {
+  export interface PageProps extends Page<PageProps> {
+    auth: {
+      user: {
+        id: number;
+        name: string;
+        email: string;
+        permissions: string[];
+        roles: {
+          name: string;
+          permissions: string[];
+        }[];
+      };
+    };
+    flash: {
+      type: 'success' | 'error' | 'warning' | 'info';
+      message: string;
+    };
+  }
+}
+
+export type PageProps = {
+  auth: {
+    user: {
+      id: number;
+      name: string;
+      email: string;
+      permissions: string[];
+      roles: {
+        name: string;
+        permissions: string[];
+      }[];
+    };
+  };
+  flash: {
+    type: 'success' | 'error' | 'warning' | 'info';
+    message: string;
+  };
 };
