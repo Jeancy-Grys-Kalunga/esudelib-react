@@ -24,8 +24,7 @@ class UpdateCourseRequest extends FormRequest
                 'max:255',
                 Rule::unique('courses', 'title')->ignore($courseId),
             ],
-            
-            
+            'orientation' => 'nullable|string|max:255',
         ];
     }
 
@@ -36,6 +35,8 @@ class UpdateCourseRequest extends FormRequest
             'title.unique' => 'Ce cours existe déjà dans cette institution',
             'title.string' => 'Le titre doit être une chaîne de caractères',
             'title.max' => 'Le titre ne doit pas dépasser 255 caractères',
+            'orientation.string' => 'L\'orientation doit être une chaîne de caractères',
+            'orientation.max' => 'L\'orientation ne doit pas dépasser 255 caractères',
         ];
     }
 }

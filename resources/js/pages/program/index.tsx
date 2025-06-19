@@ -1,37 +1,38 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { BookOpen, Edit, Loader2, Plus, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
-import _ from 'lodash';
 
-type Course = {
+type Program = {
     id: number;
-    title: string;
-    orientation?: string;
+    institution_id: number;
+    institution: string;
+    courses_count: number;
     created_at: string;
 };
 
+type Institution = {
+    id: number;
+    name: string;
+};
+
 type PageProps = {
-    courses: Course[];
+    programs: Program[];
+    institutions: Institution[];
     can: {
         create: boolean;
         edit: boolean;
         delete: boolean;
         access: boolean;
-        import?: boolean;
-    };
-    filters?: {
-        search?: string;
     };
     flash?: {
         type: 'success' | 'error' | 'warning' | 'info';
@@ -39,49 +40,15 @@ type PageProps = {
     };
 };
 
-export default function CourseIndex({ courses: allCourses, can, flash, filters }: PageProps) {
+export default function ProgramIndex({ programs: allPrograms, institutions, can, flash }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [currentCourse, setCurrentCourse] = useState<Course | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
-    const [searchTerm, setSearchTerm] = useState(filters?.search || '');
-    const [filteredCourses, setFilteredCourses] = useState<Course[]>(allCourses);
+    const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filteredPrograms, setFilteredPrograms] = useState<Program[]>(allPrograms);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
-
-    const { data, setData, post, put, errors, processing, reset } = useForm({
-        title: '',
-        orientation: '',
-    });
-
-    const handleSearch = useMemo(() => {
-        return _.debounce((term: string) => {
-            if (!term) {
-                setFilteredCourses(allCourses);
-                setCurrentPage(1);
-                return;
-            }
-            const results = allCourses.filter(
-                (course) => 
-                    course.title.toLowerCase().includes(term.toLowerCase()) ||
-                    (course.orientation && course.orientation.toLowerCase().includes(term.toLowerCase()))
-            );
-            setFilteredCourses(results);
-            setCurrentPage(1);
-        }, 300);
-    }, [allCourses]);
-
-    useEffect(() => {
-        handleSearch(searchTerm);
-        return () => handleSearch.cancel();
-    }, [searchTerm, handleSearch]);
-
-    const paginatedCourses = useMemo(() => {
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredCourses.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredCourses, currentPage, itemsPerPage]);
-
-    const totalPages = Math.ceil(filteredCourses.length / itemsPerPage);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         if (flash && flash.message) {
@@ -98,73 +65,66 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
         }
     }, [flash]);
 
+    // Filtrage des programmes
     useEffect(() => {
-        if (currentCourse) {
-            setData({
-                title: currentCourse.title,
-                orientation: currentCourse.orientation || '',
-            });
-        } else {
-            reset();
+        let results = [...allPrograms];
+        
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            results = results.filter(
+                (program) =>
+                    program.institution.toLowerCase().includes(term) ||
+                    program.created_at.includes(term)
+            );
         }
-    }, [currentCourse]);
+        
+        setFilteredPrograms(results);
+        setCurrentPage(1);
+    }, [allPrograms, searchTerm]);
 
-    const openModal = (course: Course | null = null) => {
-        if ((course && !can.edit) || (!course && !can.create)) {
+    const paginatedPrograms = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filteredPrograms.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredPrograms, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(filteredPrograms.length / itemsPerPage);
+
+    const openModal = () => {
+        if (!can.create) {
             toast.error("Vous n'avez pas les permissions nécessaires");
             return;
         }
-        setCurrentCourse(course);
         setIsModalOpen(true);
     };
 
     const closeModal = () => {
         setIsModalOpen(false);
-        setCurrentCourse(null);
-        reset();
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        try {
-            if (currentCourse) {
-                await put(route('courses.update', currentCourse.id), {
-                    onSuccess: () => closeModal(),
-                });
-            } else {
-                await post(route('courses.store'), {
-                    onSuccess: () => closeModal(),
-                });
-            }
-        } catch (error) {
-            console.error('Error submitting form:', error);
-        }
-    };
-
-    const openDeleteModal = (course: Course) => {
+    const openDeleteModal = (program: Program) => {
         if (!can.delete) {
             toast.error("Vous n'avez pas la permission de supprimer");
             return;
         }
-        setCourseToDelete(course);
+        setProgramToDelete(program);
         setIsDeleteModalOpen(true);
     };
 
     const confirmDelete = () => {
-        if (!courseToDelete) return;
+        if (!programToDelete) return;
 
-        router.delete(route('courses.destroy', courseToDelete.id), {
+        setIsDeleting(true);
+        router.delete(route('programs.destroy', programToDelete.id), {
             onSuccess: () => {
                 setIsDeleteModalOpen(false);
-                setCourseToDelete(null);
+                setIsDeleting(false);
             },
         });
     };
 
     const resetFilters = () => {
         setSearchTerm('');
-        setFilteredCourses(allCourses);
+        setFilteredPrograms(allPrograms);
         setCurrentPage(1);
     };
 
@@ -182,18 +142,18 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
 
     return (
         <AppLayout>
-            <Head title="Gestion des Cours" />
+            <Head title="Gestion des Programmes" />
             <div className="container mx-auto space-y-6 py-6">
                 <div className="flex flex-col gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Gestion des Cours</h1>
-                        <p className="text-muted-foreground">{filteredCourses.length} cours enregistrés</p>
+                        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Gestion des Programmes</h1>
+                        <p className="text-muted-foreground">{filteredPrograms.length} programmes enregistrés</p>
                     </div>
                     <div className="flex flex-col gap-3 sm:flex-row">
                         {can.create && (
-                            <Button onClick={() => openModal()} className="gap-2 shadow-sm">
+                            <Button onClick={openModal} className="gap-2 shadow-sm">
                                 <Plus size={16} />
-                                Nouveau Cours
+                                Nouveau Programme
                             </Button>
                         )}
                         <Button variant="outline" onClick={resetFilters} className="gap-2 shadow-sm">
@@ -211,7 +171,7 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                         <div className="relative">
                             <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                             <Input
-                                placeholder="Rechercher un cours ou orientation..."
+                                placeholder="Rechercher un programme..."
                                 className="pl-10"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -234,52 +194,52 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle>Liste des Cours</CardTitle>
-                                <CardDescription>{filteredCourses.length} cours correspondant aux critères</CardDescription>
+                                <CardTitle>Liste des Programmes</CardTitle>
+                                <CardDescription>{filteredPrograms.length} programmes correspondant aux critères</CardDescription>
                             </div>
                         </div>
                     </CardHeader>
                     <CardContent>
-                        {filteredCourses.length > 0 ? (
+                        {filteredPrograms.length > 0 ? (
                             <div className="space-y-4">
                                 <div className="overflow-hidden rounded-md border">
                                     <Table>
                                         <TableHeader className="bg-gray-50 dark:bg-gray-800">
                                             <TableRow>
-                                                <TableHead>Titre</TableHead>
-                                                <TableHead>Orientation</TableHead>
+                                                <TableHead>Institution</TableHead>
+                                                <TableHead>Nombre de cours</TableHead>
                                                 <TableHead>Date de création</TableHead>
                                                 <TableHead className="text-right">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {paginatedCourses.map((course) => (
-                                                <TableRow key={course.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                    <TableCell className="font-medium">{course.title}</TableCell>
-                                                    <TableCell>{course.orientation || '-'}</TableCell>
-                                                    <TableCell>{course.created_at}</TableCell>
+                                            {paginatedPrograms.map((program) => (
+                                                <TableRow key={program.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                                    <TableCell className="font-medium">{program.institution}</TableCell>
+                                                    <TableCell>{program.courses_count}</TableCell>
+                                                    <TableCell>{program.created_at}</TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
                                                             {can.edit && (
                                                                 <Button
                                                                     variant="outline"
                                                                     size="icon"
-                                                                    onClick={() => openModal(course)}
+                                                                    onClick={() => router.get(route('programs.details.create', program.id))}
                                                                     className="h-8 w-8"
                                                                 >
                                                                     <Edit className="h-3.5 w-3.5" />
                                                                 </Button>
                                                             )}
                                                             {can.delete && (
-                                                                <Button
-                                                                    variant="destructive"
-                                                                    size="icon"
-                                                                    onClick={() => openDeleteModal(course)}
-                                                                    className="h-8 w-8"
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            )}
+                                                                    <Button
+                                                                        variant="destructive"
+                                                                        size="icon"
+                                                                        onClick={() => openDeleteModal(program)}
+                                                                        className="h-8 w-8"
+                                                                    >
+                                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                                    </Button>
+                                                                )}
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>
@@ -331,14 +291,14 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                                 <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
                                     <BookOpen className="h-10 w-10 text-gray-400" />
                                 </div>
-                                <h3 className="mb-2 text-lg font-medium">Aucun cours trouvé</h3>
+                                <h3 className="mb-2 text-lg font-medium">Aucun programme trouvé</h3>
                                 <p className="text-muted-foreground mb-4 text-sm">
-                                    {can.create ? 'Commencez par créer un nouveau cours.' : 'Aucune donnée disponible.'}
+                                    {can.create ? 'Commencez par créer un nouveau programme.' : 'Aucune donnée disponible.'}
                                 </p>
                                 {can.create && (
-                                    <Button onClick={() => openModal()} className="gap-2">
+                                    <Button onClick={openModal} className="gap-2">
                                         <Plus size={16} />
-                                        Ajouter un cours
+                                        Ajouter un programme
                                     </Button>
                                 )}
                             </div>
@@ -347,65 +307,49 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                 </Card>
 
                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogContent className="sm:max-w-[700px]">
+                    <DialogContent className="sm:max-w-[500px]">
                         <DialogHeader>
                             <DialogTitle className="flex items-center gap-2 text-xl">
                                 <BookOpen className="h-5 w-5" />
-                                {currentCourse ? 'Modifier Cours' : 'Nouveau Cours'}
+                                Nouveau Programme
                             </DialogTitle>
                             <DialogDescription>
-                                {currentCourse ? 'Modifiez les informations du cours' : 'Remplissez les informations pour créer un nouveau cours'}
+                                Sélectionnez l'institution pour ce nouveau programme
                             </DialogDescription>
                         </DialogHeader>
-
-                        <form onSubmit={handleSubmit} className="space-y-4">
+                        <form onSubmit={(e) => {
+                            e.preventDefault();
+                            const form = e.target as HTMLFormElement;
+                            const institutionId = (form.elements.namedItem('institution_id') as HTMLSelectElement)?.value;
+                            router.post(route('programs.store'), { institution_id: institutionId }, {
+                                onSuccess: () => closeModal()
+                            });
+                        }} className="space-y-4">
                             <div className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="title" className="flex items-center gap-1">
-                                        <BookOpen className="h-4 w-4" />
-                                        Titre du cours *
-                                    </Label>
-                                    <Input 
-                                        id="title" 
-                                        value={data.title} 
-                                        onChange={(e) => setData('title', e.target.value)} 
-                                        required 
-                                    />
-                                    {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
-                                </div>
-                                
-                                <div className="space-y-2">
-                                    <Label htmlFor="orientation">
-                                        Orientation (optionnel)
-                                    </Label>
-                                    <Input 
-                                        id="orientation"
-                                        value={data.orientation}
-                                        onChange={(e) => setData('orientation', e.target.value)}
-                                    />
-                                    {errors.orientation && <p className="text-sm text-red-500">{errors.orientation}</p>}
+                                    <Label htmlFor="institution_id">Institution *</Label>
+                                    <select
+                                        id="institution_id"
+                                        name="institution_id"
+                                        className="w-full p-2 border rounded-md"
+                                        required
+                                    >
+                                        <option value="">Sélectionnez une institution</option>
+                                        {institutions.map((institution) => (
+                                            <option key={institution.id} value={institution.id}>
+                                                {institution.name}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
-
-                            <DialogFooter className="mt-4">
+                            <DialogFooter>
                                 <div className="flex justify-end gap-2">
-                                    <Button type="button" variant="outline" onClick={closeModal} disabled={processing}>
+                                    <Button type="button" variant="outline" onClick={closeModal}>
                                         Annuler
                                     </Button>
-                                    <Button type="submit" disabled={processing} className="gap-2">
-                                        {processing ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : currentCourse ? (
-                                            <>
-                                                <Edit className="h-4 w-4" />
-                                                Mettre à jour
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Plus className="h-4 w-4" />
-                                                Créer le cours
-                                            </>
-                                        )}
+                                    <Button type="submit">
+                                        Créer et ajouter des cours
                                     </Button>
                                 </div>
                             </DialogFooter>
@@ -418,16 +362,27 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                         <DialogHeader>
                             <DialogTitle className="text-xl">Confirmer la suppression</DialogTitle>
                             <DialogDescription>
-                                Êtes-vous sûr de vouloir supprimer le cours "{courseToDelete?.title}" ? Cette action est irréversible.
+                                Êtes-vous sûr de vouloir supprimer ce programme ? Cette action est irréversible.
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>
                                 Annuler
                             </Button>
-                            <Button variant="destructive" onClick={confirmDelete} className="gap-2">
-                                <Trash2 className="h-4 w-4" />
-                                Supprimer
+                            <Button 
+                                variant="destructive" 
+                                onClick={confirmDelete} 
+                                className="gap-2"
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <>
+                                        <Trash2 className="h-4 w-4" />
+                                        Supprimer
+                                    </>
+                                )}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

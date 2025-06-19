@@ -19,8 +19,8 @@ class InfoBipService
     public function __construct()
     {
         $this->apiKey = env('INFOBIP_KEY');
-        $this->baseUrl = env('INFOBIP_BASE_URL', 'https://api.infobip.com');     
-        
+        $this->baseUrl = env('INFOBIP_BASE_URL', 'https://api.infobip.com');
+
         if (!$this->apiKey) {
             throw new \Exception('InfoBip API key is not set in the environment variables.');
         }
@@ -61,6 +61,4 @@ class InfoBipService
         }
         return $e->getMessage();
     }
-
 }
-           

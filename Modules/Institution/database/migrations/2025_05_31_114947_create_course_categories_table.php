@@ -14,7 +14,7 @@ return new class extends Migration
 
         Schema::create('course_categories', function (Blueprint $table) {
             $table->id();
-            $table->string('name'); // 'Obligatoire', 'Spécialité', 'Autres'
+            $table->string('name'); 
             $table->string('slug')->unique();
             $table->text('description')->nullable();
             $table->timestamps();

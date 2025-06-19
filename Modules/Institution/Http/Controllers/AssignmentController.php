@@ -19,6 +19,8 @@ use Modules\Institution\Entities\AcademicYear;
 use Modules\Institution\Entities\Course;
 use Modules\Teacher\Entities\Teacher;
 use App\Services\InfoBipService;
+use App\Services\TwilioService;
+use App\Services\VonageService;
 use Illuminate\Support\Facades\Log;
 
 class AssignmentController extends Controller
@@ -293,7 +295,13 @@ class AssignmentController extends Controller
             ]);
         }
 
-        $smsService = new InfoBipService();
+        // $smsService = new InfoBipService();
+
+        // $vonageService = new VonageService();
+
+        $twilioService = new TwilioService();
+
+
 
         foreach ($assignments as $assignment) {
             $teacher = $assignment->holder;
@@ -301,7 +309,9 @@ class AssignmentController extends Controller
 
             try {
                 $message = $this->generateAssignmentMessage($assignment, $teacher);
-                $smsService->sendInfobipSms($teacher->phone, $message);
+                //$smsService->sendInfobipSms($teacher->phone, $message);
+                //$vonageService->sendVonageSms($teacher->phone, $message);
+                $twilioService->sendTwilioSms($teacher->phone, $message);
             } catch (\Exception $e) {
                 Log::error("Erreur envoi SMS à {$teacher->phone}: " . $e->getMessage());
             }
