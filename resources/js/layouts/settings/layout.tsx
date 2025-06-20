@@ -5,27 +5,27 @@ import { cn } from '@/lib/utils';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 import { type PropsWithChildren } from 'react';
+import { User, Key, Palette } from 'lucide-react';
 
 const sidebarNavItems: NavItem[] = [
     {
-        title: 'Profile',
+        title: 'Profil',
         href: '/settings/profile',
-        icon: null,
+        icon: User,
     },
     {
-        title: 'Password',
+        title: 'Mot de passe',
         href: '/settings/password',
-        icon: null,
+        icon: Key,
     },
     {
-        title: 'Appearance',
+        title: 'Apparence',
         href: '/settings/appearance',
-        icon: null,
+        icon: Palette,
     },
 ];
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
-    // When server-side rendering, we only render the layout on the client...
     if (typeof window === 'undefined') {
         return null;
     }
@@ -34,26 +34,30 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
 
     return (
         <div className="px-4 py-6">
-            <Heading title="Settings" description="Manage your profile and account settings" />
+            <Heading title="Paramètres" description="Gérez votre profil et les paramètres de votre compte" />
 
             <div className="flex flex-col space-y-8 lg:flex-row lg:space-y-0 lg:space-x-12">
                 <aside className="w-full max-w-xl lg:w-48">
                     <nav className="flex flex-col space-y-1 space-x-0">
-                        {sidebarNavItems.map((item, index) => (
-                            <Button
-                                key={`${item.href}-${index}`}
-                                size="sm"
-                                variant="ghost"
-                                asChild
-                                className={cn('w-full justify-start', {
-                                    'bg-muted': currentPath === item.href,
-                                })}
-                            >
-                                <Link href={item.href} prefetch>
-                                    {item.title}
-                                </Link>
-                            </Button>
-                        ))}
+                        {sidebarNavItems.map((item, index) => {
+                            const Icon = item.icon;
+                            return (
+                                <Button
+                                    key={`${item.href}-${index}`}
+                                    size="sm"
+                                    variant="ghost"
+                                    asChild
+                                    className={cn('w-full justify-start', {
+                                        'bg-muted': currentPath === item.href,
+                                    })}
+                                >
+                                    <Link href={item.href} prefetch>
+                                        {Icon && <Icon className="mr-2 h-4 w-4" />}
+                                        {item.title}
+                                    </Link>
+                                </Button>
+                            );
+                        })}
                     </nav>
                 </aside>
 
