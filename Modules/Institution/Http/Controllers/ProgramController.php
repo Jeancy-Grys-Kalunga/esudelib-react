@@ -44,8 +44,8 @@ class ProgramController extends Controller
             $requiredPermissions
         );
 
-        // Construction de la requête
-        $query = Program::with(['institution', 'courseDetails']);
+        // Construction de la requête optimisée
+        $query = Program::withCount('courseDetails');
 
         if ($user->hasRole('Secrétaire Académique')) {
             $institutionIds = $user->institutions()->pluck('id');
@@ -56,9 +56,10 @@ class ProgramController extends Controller
         $programs = $query->get()->map(function ($program) {
             return [
                 'id' => $program->id,
+                'name' => $program->name,
                 'institution_id' => $program->institution_id,
                 'institution' => $program->institution?->name ?? 'Institution inconnue',
-                'courses_count' => $program->courseDetails->count(),
+                'courses_count' => $program->course_details_count,
                 'created_at' => $program->created_at->format('d/m/Y'),
             ];
         });
@@ -81,9 +82,17 @@ class ProgramController extends Controller
         }
 
         $user = Auth::user();
-        
+        $institutions = $this->getUserInstitutions($user);
+
+        // Pour les secrétaires académiques, on prend leur institution par défaut
+        $defaultInstitution = null;
+        if ($user->hasRole('Secrétaire Académique') && $institutions->count() > 0) {
+            $defaultInstitution = $institutions->first()->id;
+        }
+
         return Inertia::render('program/form', [
-            'institutions' => $this->getUserInstitutions($user),
+            'institutions' => $institutions,
+            'defaultInstitution' => $defaultInstitution,
             'promotions' => Promotion::all(['id', 'title as name']),
             'units' => UnitsTeaching::all(['id', 'title as name']),
             'categories' => CourseCategory::all(['id', 'title as name']),
@@ -98,21 +107,35 @@ class ProgramController extends Controller
         }
 
         $user = Auth::user();
+        $institutionId = $request->institution_id;
 
         // Vérification des permissions institutionnelles
-        if (
-            $user->hasRole('Secrétaire Académique') &&
-            !$user->institutions()->where('id', $request->institution_id)->exists()
-        ) {
-            abort(403);
+        if ($user->hasRole('Secrétaire Académique')) {
+            $userInstitutions = $user->institutions()->pluck('id');
+
+            // Si l'utilisateur n'a qu'une institution, on l'utilise automatiquement
+            if ($userInstitutions->count() === 1) {
+                $institutionId = $userInstitutions->first();
+            }
+            // Si l'utilisateur a plusieurs institutions, on vérifie qu'il a le droit sur celle sélectionnée
+            elseif (!$userInstitutions->contains($institutionId)) {
+                abort(403, "Vous n'avez pas accès à cette institution");
+            }
         }
 
         try {
             DB::beginTransaction();
 
+            // Validation des données
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'institution_id' => 'required|exists:institutions,id'
+            ]);
+
             // Création du programme
             $program = Program::create([
-                'institution_id' => $request->institution_id,
+                'name' => $validated['name'],
+                'institution_id' => $institutionId,
             ]);
 
             DB::commit();
@@ -135,14 +158,15 @@ class ProgramController extends Controller
             abort(403);
         }
 
-        return Inertia::render('program/details-form', [
+        return Inertia::render('program/details', [
             'program' => [
                 'id' => $program->id,
+                'name' => $program->name,
                 'institution' => $program->institution?->name,
             ],
             'promotions' => Promotion::all(['id', 'title as name']),
             'units' => UnitsTeaching::all(['id', 'title as name']),
-            'categories' => CourseCategory::all(['id', 'title as name']),
+            'categories' => CourseCategory::all(['id', 'name']),
             'courses' => Course::all(['id', 'title as name']),
         ]);
     }
@@ -161,20 +185,37 @@ class ProgramController extends Controller
         try {
             DB::beginTransaction();
 
-            // Création des détails des cours
-            foreach ($request->course_details as $detail) {
-                CourseProgramDetail::create([
+            // Validation des données avec conversion numérique
+            $validated = $request->validate([
+                'course_details' => 'required|array|min:1',
+                'course_details.*.course_id' => 'required|exists:courses,id',
+                'course_details.*.promotion_id' => 'required|exists:promotions,id',
+                'course_details.*.units_teaching_id' => 'required|exists:units_teachings,id',
+                'course_details.*.course_category_id' => 'required|exists:course_categories,id',
+                'course_details.*.cm' => 'required|numeric|min:0',
+                'course_details.*.td' => 'required|numeric|min:0',
+                'course_details.*.tp' => 'required|numeric|min:0',
+                'course_details.*.credits' => 'required|numeric|min:0',
+            ]);
+
+            $details = [];
+            foreach ($validated['course_details'] as $detail) {
+                $details[] = [
                     'program_id' => $program->id,
                     'course_id' => $detail['course_id'],
                     'promotion_id' => $detail['promotion_id'],
                     'units_teaching_id' => $detail['units_teaching_id'],
                     'course_category_id' => $detail['course_category_id'],
-                    'cm' => $detail['cm'],
-                    'td' => $detail['td'],
-                    'tp' => $detail['tp'],
-                    'credits' => $detail['credits'],
-                ]);
+                    'cm' => (float)$detail['cm'],
+                    'td' => (float)$detail['td'],
+                    'tp' => (float)$detail['tp'],
+                    'credits' => (float)$detail['credits'],
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
             }
+
+            CourseProgramDetail::insert($details);
 
             DB::commit();
 
@@ -201,14 +242,13 @@ class ProgramController extends Controller
             abort(403);
         }
 
-        // Charger les détails avec les relations
-        $program->load(['courseDetails' => function ($query) {
-            $query->with(['course', 'promotion', 'unitsTeaching', 'courseCategory']);
-        }]);
+        // Charger les détails avec la méthode optimisée
+        $program = $program->loadDetails();
 
-        return Inertia::render('program/details-form', [
+        return Inertia::render('program/details', [
             'program' => [
                 'id' => $program->id,
+                'name' => $program->name,
                 'institution' => $program->institution?->name,
                 'course_details' => $program->courseDetails->map(function ($detail) {
                     return [
@@ -220,7 +260,7 @@ class ProgramController extends Controller
                         'units_teaching_id' => $detail->units_teaching_id,
                         'units_teaching' => $detail->unitsTeaching?->title,
                         'course_category_id' => $detail->course_category_id,
-                        'course_category' => $detail->courseCategory?->title,
+                        'course_category' => $detail->category?->name,
                         'cm' => $detail->cm,
                         'td' => $detail->td,
                         'tp' => $detail->tp,
@@ -230,7 +270,7 @@ class ProgramController extends Controller
             ],
             'promotions' => Promotion::all(['id', 'title as name']),
             'units' => UnitsTeaching::all(['id', 'title as name']),
-            'categories' => CourseCategory::all(['id', 'title as name']),
+            'categories' => CourseCategory::all(['id', 'name']),
             'courses' => Course::all(['id', 'title as name']),
         ]);
     }
@@ -249,47 +289,47 @@ class ProgramController extends Controller
         try {
             DB::beginTransaction();
 
-            // Synchronisation des détails des cours
-            $currentDetails = $program->courseDetails->pluck('id')->toArray();
-            $updatedDetails = [];
+            $validated = $request->validate([
+                'course_details' => 'required|array|min:1',
+                'course_details.*.id' => 'sometimes|exists:course_program_details,id',
+                'course_details.*.course_id' => 'required|exists:courses,id',
+                'course_details.*.promotion_id' => 'required|exists:promotions,id',
+                'course_details.*.units_teaching_id' => 'required|exists:units_teachings,id',
+                'course_details.*.course_category_id' => 'required|exists:course_categories,id',
+                'course_details.*.cm' => 'required|numeric|min:0',
+                'course_details.*.td' => 'required|numeric|min:0',
+                'course_details.*.tp' => 'required|numeric|min:0',
+                'course_details.*.credits' => 'required|numeric|min:0',
+            ]);
 
-            foreach ($request->course_details as $detail) {
-                if (isset($detail['id'])) {
-                    // Mise à jour d'un détail existant
-                    CourseProgramDetail::where('id', $detail['id'])
-                        ->update([
-                            'course_id' => $detail['course_id'],
-                            'promotion_id' => $detail['promotion_id'],
-                            'units_teaching_id' => $detail['units_teaching_id'],
-                            'course_category_id' => $detail['course_category_id'],
-                            'cm' => $detail['cm'],
-                            'td' => $detail['td'],
-                            'tp' => $detail['tp'],
-                            'credits' => $detail['credits'],
-                        ]);
-                    $updatedDetails[] = $detail['id'];
+            $existingIds = [];
+            foreach ($validated['course_details'] as $detail) {
+                $data = [
+                    'course_id' => $detail['course_id'],
+                    'promotion_id' => $detail['promotion_id'],
+                    'units_teaching_id' => $detail['units_teaching_id'],
+                    'course_category_id' => $detail['course_category_id'],
+                    'cm' => (float)$detail['cm'],
+                    'td' => (float)$detail['td'],
+                    'tp' => (float)$detail['tp'],
+                    'credits' => (float)$detail['credits'],
+                ];
+
+                if (isset($detail['id']) && $detail['id']) {
+                    // Mise à jour du détail existant
+                    CourseProgramDetail::where('id', $detail['id'])->update($data);
+                    $existingIds[] = $detail['id'];
                 } else {
                     // Création d'un nouveau détail
-                    $newDetail = CourseProgramDetail::create([
-                        'program_id' => $program->id,
-                        'course_id' => $detail['course_id'],
-                        'promotion_id' => $detail['promotion_id'],
-                        'units_teaching_id' => $detail['units_teaching_id'],
-                        'course_category_id' => $detail['course_category_id'],
-                        'cm' => $detail['cm'],
-                        'td' => $detail['td'],
-                        'tp' => $detail['tp'],
-                        'credits' => $detail['credits'],
-                    ]);
-                    $updatedDetails[] = $newDetail->id;
+                    $newDetail = CourseProgramDetail::create(array_merge($data, ['program_id' => $program->id]));
+                    $existingIds[] = $newDetail->id;
                 }
             }
 
-            // Suppression des détails non présents dans la requête
-            $toDelete = array_diff($currentDetails, $updatedDetails);
-            if (!empty($toDelete)) {
-                CourseProgramDetail::whereIn('id', $toDelete)->delete();
-            }
+            // Supprimer les détails qui ne sont plus dans la liste
+            CourseProgramDetail::where('program_id', $program->id)
+                ->whereNotIn('id', $existingIds)
+                ->delete();
 
             DB::commit();
 
@@ -342,5 +382,18 @@ class ProgramController extends Controller
             'message' => session('flash.message'),
             'type' => session('flash.type'),
         ];
+    }
+
+    private function toFloat($value)
+    {
+        if (is_float($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (float)$value;
+        }
+
+        return 0.0;
     }
 }

@@ -1,4 +1,4 @@
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { BookOpen, Edit, Loader2, Plus, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
@@ -8,12 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 
 type Program = {
     id: number;
+    name: string;
     institution_id: number;
     institution: string;
     courses_count: number;
@@ -28,11 +29,13 @@ type Institution = {
 type PageProps = {
     programs: Program[];
     institutions: Institution[];
+    defaultInstitution?: number;
     can: {
         create: boolean;
         edit: boolean;
         delete: boolean;
         access: boolean;
+        selectInstitution: boolean;
     };
     flash?: {
         type: 'success' | 'error' | 'warning' | 'info';
@@ -40,7 +43,7 @@ type PageProps = {
     };
 };
 
-export default function ProgramIndex({ programs: allPrograms, institutions, can, flash }: PageProps) {
+export default function ProgramIndex({ programs: allPrograms, institutions, defaultInstitution, can, flash }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
@@ -49,6 +52,7 @@ export default function ProgramIndex({ programs: allPrograms, institutions, can,
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (flash && flash.message) {
@@ -68,16 +72,17 @@ export default function ProgramIndex({ programs: allPrograms, institutions, can,
     // Filtrage des programmes
     useEffect(() => {
         let results = [...allPrograms];
-        
+
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             results = results.filter(
                 (program) =>
+                    program.name.toLowerCase().includes(term) ||
                     program.institution.toLowerCase().includes(term) ||
-                    program.created_at.includes(term)
+                    program.created_at.includes(term),
             );
         }
-        
+
         setFilteredPrograms(results);
         setCurrentPage(1);
     }, [allPrograms, searchTerm]);
@@ -206,6 +211,7 @@ export default function ProgramIndex({ programs: allPrograms, institutions, can,
                                     <Table>
                                         <TableHeader className="bg-gray-50 dark:bg-gray-800">
                                             <TableRow>
+                                                <TableHead>Nom du programme</TableHead>
                                                 <TableHead>Institution</TableHead>
                                                 <TableHead>Nombre de cours</TableHead>
                                                 <TableHead>Date de création</TableHead>
@@ -215,7 +221,8 @@ export default function ProgramIndex({ programs: allPrograms, institutions, can,
                                         <TableBody>
                                             {paginatedPrograms.map((program) => (
                                                 <TableRow key={program.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                    <TableCell className="font-medium">{program.institution}</TableCell>
+                                                    <TableCell className="font-medium">{program.name}</TableCell>
+                                                    <TableCell>{program.institution}</TableCell>
                                                     <TableCell>{program.courses_count}</TableCell>
                                                     <TableCell>{program.created_at}</TableCell>
                                                     <TableCell className="text-right">
@@ -224,22 +231,29 @@ export default function ProgramIndex({ programs: allPrograms, institutions, can,
                                                                 <Button
                                                                     variant="outline"
                                                                     size="icon"
-                                                                    onClick={() => router.get(route('programs.details.create', program.id))}
+                                                                    onClick={() => {
+                                                                        // Redirection conditionnelle
+                                                                        if (program.courses_count > 0) {
+                                                                            router.get(route('programs.edit', program.id));
+                                                                        } else {
+                                                                            router.get(route('programs.details.create', program.id));
+                                                                        }
+                                                                    }}
                                                                     className="h-8 w-8"
                                                                 >
                                                                     <Edit className="h-3.5 w-3.5" />
                                                                 </Button>
                                                             )}
                                                             {can.delete && (
-                                                                    <Button
-                                                                        variant="destructive"
-                                                                        size="icon"
-                                                                        onClick={() => openDeleteModal(program)}
-                                                                        className="h-8 w-8"
-                                                                    >
-                                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                                    </Button>
-                                                                )}
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    size="icon"
+                                                                    onClick={() => openDeleteModal(program)}
+                                                                    className="h-8 w-8"
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>
@@ -313,42 +327,77 @@ export default function ProgramIndex({ programs: allPrograms, institutions, can,
                                 <BookOpen className="h-5 w-5" />
                                 Nouveau Programme
                             </DialogTitle>
-                            <DialogDescription>
-                                Sélectionnez l'institution pour ce nouveau programme
-                            </DialogDescription>
+                            <DialogDescription>Renseignez les informations pour créer un nouveau programme</DialogDescription>
                         </DialogHeader>
-                        <form onSubmit={(e) => {
-                            e.preventDefault();
-                            const form = e.target as HTMLFormElement;
-                            const institutionId = (form.elements.namedItem('institution_id') as HTMLSelectElement)?.value;
-                            router.post(route('programs.store'), { institution_id: institutionId }, {
-                                onSuccess: () => closeModal()
-                            });
-                        }} className="space-y-4">
+                        <form
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                setIsSubmitting(true);
+                                const form = e.target as HTMLFormElement;
+                                const name = (form.elements.namedItem('name') as HTMLInputElement)?.value;
+                                const institutionId = (form.elements.namedItem('institution_id') as HTMLSelectElement)?.value;
+
+                                router.post(
+                                    route('programs.store'),
+                                    {
+                                        name,
+                                        institution_id: institutionId,
+                                    },
+                                    {
+                                        onSuccess: () => {
+                                            closeModal();
+                                            setIsSubmitting(false);
+                                        },
+                                        onFinish: () => setIsSubmitting(false),
+                                    },
+                                );
+                            }}
+                            className="space-y-4"
+                        >
                             <div className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="institution_id">Institution *</Label>
-                                    <select
-                                        id="institution_id"
-                                        name="institution_id"
-                                        className="w-full p-2 border rounded-md"
-                                        required
-                                    >
-                                        <option value="">Sélectionnez une institution</option>
-                                        {institutions.map((institution) => (
-                                            <option key={institution.id} value={institution.id}>
-                                                {institution.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <Label htmlFor="name">Nom du programme *</Label>
+                                    <Input id="name" name="name" placeholder="Licence Informatique" required />
                                 </div>
+                                {can.selectInstitution ? (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="institution_id">Institution *</Label>
+                                        <select
+                                            id="institution_id"
+                                            name="institution_id"
+                                            className="w-full rounded-md border p-2"
+                                            required
+                                            defaultValue={defaultInstitution}
+                                        >
+                                            <option value="">Sélectionnez une institution</option>
+                                            {institutions.map((institution) => (
+                                                <option key={institution.id} value={institution.id}>
+                                                    {institution.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <Label>Institution</Label>
+                                        {institutions.length > 0 ? (
+                                            <>
+                                                <Input readOnly value={institutions[0].name} />
+                                                <input type="hidden" name="institution_id" value={institutions[0].id} />
+                                            </>
+                                        ) : (
+                                            <p className="text-red-500">Aucune institution disponible</p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <DialogFooter>
                                 <div className="flex justify-end gap-2">
                                     <Button type="button" variant="outline" onClick={closeModal}>
                                         Annuler
                                     </Button>
-                                    <Button type="submit">
+                                    <Button type="submit" disabled={isDeleting} className="gap-2">
+                                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                                         Créer et ajouter des cours
                                     </Button>
                                 </div>
@@ -361,20 +410,13 @@ export default function ProgramIndex({ programs: allPrograms, institutions, can,
                     <DialogContent className="sm:max-w-[425px]">
                         <DialogHeader>
                             <DialogTitle className="text-xl">Confirmer la suppression</DialogTitle>
-                            <DialogDescription>
-                                Êtes-vous sûr de vouloir supprimer ce programme ? Cette action est irréversible.
-                            </DialogDescription>
+                            <DialogDescription>Êtes-vous sûr de vouloir supprimer ce programme ? Cette action est irréversible.</DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>
                                 Annuler
                             </Button>
-                            <Button 
-                                variant="destructive" 
-                                onClick={confirmDelete} 
-                                className="gap-2"
-                                disabled={isDeleting}
-                            >
+                            <Button variant="destructive" onClick={confirmDelete} className="gap-2" disabled={isDeleting}>
                                 {isDeleting ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (

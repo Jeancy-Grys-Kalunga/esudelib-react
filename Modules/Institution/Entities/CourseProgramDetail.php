@@ -4,24 +4,30 @@ namespace Modules\Institution\Entities;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Modules\Institution\Database\factories\CourseProgramDetailFactory;
-use Modules\Institution\Entities\Course;
-use Modules\Institution\Entities\Program;
-use Modules\Institution\Entities\Promotion;
-use Modules\Institution\Entities\UnitsTeaching;
-use Modules\Institution\Entities\CourseCategory;
+
 class CourseProgramDetail extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     */
-    protected $guarded = [];
+    protected $fillable = [
+        'program_id',
+        'course_id',
+        'promotion_id',
+        'units_teaching_id',
+        'course_category_id',
+        'cm',
+        'td',
+        'tp',
+        'credits'
+    ];
 
-    public $preventsLazyLoading = true;
+    protected $casts = [
+        'cm' => 'float',
+        'td' => 'float',
+        'tp' => 'float',
+        'credits' => 'float',
+    ];
 
-    protected $with = ['course', 'program', 'promotion', 'unitsTeaching', 'category'];
 
     public function course()
     {
@@ -48,5 +54,3 @@ class CourseProgramDetail extends Model
         return $this->belongsTo(CourseCategory::class, 'course_category_id');
     }
 }
-
-
