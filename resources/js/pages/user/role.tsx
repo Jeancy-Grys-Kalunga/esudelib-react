@@ -240,6 +240,11 @@ const permissionCategories = [
         title: 'Fonctionnalités Partenaire',
         permissions: [{ id: 'access_partner_features', label: 'Accès' }],
     },
+
+    {
+        title: 'Fonctionnalités Enseignant',
+        permissions: [{ id: 'access_teacher_features', label: 'Accès' }],
+    },
 ];
 
 export default function RolesIndex({ roles: allRoles, can, flash }: PageProps) {

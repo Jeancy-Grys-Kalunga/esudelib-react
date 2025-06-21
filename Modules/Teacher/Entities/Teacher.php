@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Institution\Entities\Assignment;
+use Modules\Institution\Entities\Course;
 use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Jury;
 use Modules\Teacher\Database\factories\TeacherFactory;
@@ -55,5 +56,18 @@ class Teacher extends Model implements HasMedia
     public function members()
     {
         return $this->hasMany(Jury::class, 'member_id');
+    }
+
+    // Modules\Teacher\Entities\Teacher.php
+    public function courses()
+    {
+        return $this->belongsToMany(Course::class, 'assignments', 'holder_id')
+            ->orWhere('collaborator_id', $this->id)
+            ->distinct();
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

@@ -15,8 +15,8 @@ class Note extends Model
     /**
      * The attributes that are mass assignable.
      */
-    protected $fillable = [];
-    
+    protected $guarded = [];
+
     public function student() {
         return $this->belongsTo(Student::class, 'student_id', 'id');
     }

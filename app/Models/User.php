@@ -24,7 +24,7 @@ class User extends Authenticatable implements HasMedia
     public $preventsLazyLoading = true;
 
 
-    protected $with = ['institutions', 'media', 'roles', 'permissions'];
+    protected $with = ['institutions', 'media', 'roles', 'permissions', 'teacher'];
 
     /**
      * The attributes that are mass assignable.
@@ -81,7 +81,7 @@ class User extends Authenticatable implements HasMedia
 
     public function teacher()
     {
-        return $this->hasOne(Teacher::class, 'user_id');
+        return $this->hasOne(Teacher::class); 
     }
 
 
@@ -99,4 +99,6 @@ class User extends Authenticatable implements HasMedia
 
         return $this->getAllPermissions()->contains('name', $permission);
     }
+
+    
 }
