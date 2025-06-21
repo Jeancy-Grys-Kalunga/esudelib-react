@@ -2,8 +2,10 @@
 
 namespace Modules\Student\Entities;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Modules\Institution\Entities\Course;
 use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Palmares;
 use Modules\RegistrationDesk\Entities\Inscription;
@@ -23,29 +25,43 @@ class Student extends Model implements HasMedia
 
     protected $with = ['media'];
 
-    public function institution() {
+    public function institution()
+    {
         return $this->belongsTo(Institution::class, 'institution_id', 'id');
     }
 
-    public function notes() {
+    public function notes()
+    {
         return $this->hasMany(Note::class, 'student_id', 'id');
     }
 
-    public function appeals() {
+    public function appeals()
+    {
         return $this->hasMany(Appeal::class, 'student_id', 'id');
     }
 
-    public function payments() {
+    public function payments()
+    {
         return $this->hasMany(Payment::class, 'student_id', 'id');
     }
 
-    public function inscriptions() {
+    public function inscriptions()
+    {
         return $this->hasMany(Inscription::class, 'student_id', 'id');
     }
 
-    public function palmares() {
+    public function palmares()
+    {
         return $this->hasMany(Palmares::class, 'student_id', 'id');
     }
 
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 
+    public function courses()
+    {
+        return $this->belongsToMany(Course::class, 'course_student');
+    }
 }

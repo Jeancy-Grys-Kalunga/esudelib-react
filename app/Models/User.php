@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Modules\Institution\Entities\Institution;
+use Modules\Student\Entities\Student;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\File;
@@ -21,6 +22,7 @@ class User extends Authenticatable implements HasMedia
     use HasFactory, Notifiable, HasRoles, InteractsWithMedia;
 
     public $preventsLazyLoading = true;
+
 
     protected $with = ['institutions', 'media', 'roles', 'permissions'];
 
@@ -72,17 +74,23 @@ class User extends Authenticatable implements HasMedia
         return $this->belongsToMany(Institution::class, 'institution_user');
     }
 
+    public function student()
+    {
+        return $this->hasOne(Student::class, 'user_id');
+    }
+
     public function teacher()
     {
-        return $this->belongsToMany(Teacher::class);
+        return $this->hasOne(Teacher::class, 'user_id');
     }
+
 
     public function getAllPermissionsWithFallback()
     {
         return $this->getAllPermissions()->pluck('name');
     }
 
-    
+
     public function hasPermissionTo($permission, $guardName = null)
     {
         if ($this->hasRole('Super Admin')) {

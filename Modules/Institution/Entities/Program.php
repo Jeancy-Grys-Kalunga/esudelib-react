@@ -13,12 +13,12 @@ class Program extends Model
     /**
      * The attributes that are mass assignable.
      */
-   protected $guarded = [];
+    protected $guarded = [];
 
 
-    public $preventsLazyLoading = true;
+    // public $preventsLazyLoading = true;
 
-    protected $with = ['courses'];
+    // protected $with = ['courses', 'institution', 'department', 'faculty', 'courseDetails'];
 
     public function institution()
     {
@@ -38,5 +38,25 @@ class Program extends Model
     public function courses()
     {
         return $this->belongsToMany(Course::class);
+    }
+
+    public function courseDetails()
+    {
+        return $this->hasMany(CourseProgramDetail::class);
+    }
+
+    // Charger les relations uniquement quand nécessaire
+     public function loadDetails()
+    {
+        return $this->load([
+            'courseDetails' => function ($query) {
+                $query->with([
+                    'course:id,title',
+                    'promotion:id,title',
+                    'unitsTeaching:id,title',
+                    'category:id,name'
+                ]);
+            }
+        ]);
     }
 }

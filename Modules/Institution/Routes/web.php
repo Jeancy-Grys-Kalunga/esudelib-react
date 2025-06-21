@@ -35,17 +35,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::resource('assignments', AssignmentController::class)->names('assignments');
 
-
     Route::post('assignmentsbulk', [AssignmentController::class, 'bulkStore'])->name('assignments.bulk');
+    Route::post('/assignments/bulk', [AssignmentController::class, 'storeBulk'])->name('assignments.store.bulk');
 
-    Route::post('/assignments/bulk', [AssignmentController::class, 'storeBulk'])
-        ->name('assignments.store.bulk');
-
+    // Routes pour les programmes
     Route::resource('programs', ProgramController::class)->names('programs');
+
+    // Routes supplémentaires pour la gestion des détails des programmes
+    Route::get('programs/{program}/details/create', [ProgramController::class, 'showDetailsForm'])
+        ->name('programs.details.create');
+
+    Route::post('programs/{program}/details', [ProgramController::class, 'storeDetails'])
+        ->name('programs.details.store');
+
+    Route::get('programs/{program}/details', [ProgramController::class, 'showDetails'])
+        ->name('programs.details.show');
+
+    Route::put('programs/{program}/details', [ProgramController::class, 'updateDetails'])
+        ->name('programs.details.update');
 
     Route::get('units-teachings-mass-create', [UnitsTeachingController::class, 'mass_create'])->name('units-teachings.mass-create');
     Route::post('units-teachings-mass-create', [UnitsTeachingController::class, 'massStore'])->name('units-teachings.mass-store');
     Route::get('units-teachings/mass-edit', [UnitsTeachingController::class, 'massEdit'])->name('units-teachings.mass-edit');
     Route::put('units-teachings/mass-update', [UnitsTeachingController::class, 'massUpdate'])->name('units-teachings.mass-update');
+
     Route::resource('juries', JuryController::class)->names('juries');
 });

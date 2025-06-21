@@ -10,5 +10,6 @@
     "Setting": true,
     "Upload": true,
     "User": true,
-    "Currency": true
+    "Currency": true,
+    "Calendar": true
 }
