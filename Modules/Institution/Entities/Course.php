@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Institution\Database\factories\CourseFactory;
 use Modules\Student\Entities\Note;
+use Modules\Student\Entities\Student;
 
 class Course extends Model
 {
@@ -32,15 +33,7 @@ class Course extends Model
         return $this->hasMany(Note::class, 'course_id', 'id');
     }
 
-    public function category()
-    {
-        return $this->belongsTo(CourseCategory::class, 'course_category_id');
-    }
 
-    public function programs()
-    {
-        return $this->belongsToMany(Program::class);
-    }
     public function unitsTeaching()
     {
         return $this->belongsToMany(UnitsTeaching::class, 'course_units_teaching', 'course_id', 'units_teaching_id');
@@ -49,5 +42,10 @@ class Course extends Model
     public function assignments()
     {
         return $this->hasMany(Assignment::class, 'course_id', 'id');
+    }
+
+    public function students()
+    {
+        return $this->belongsToMany(Student::class, 'course_student');
     }
 }

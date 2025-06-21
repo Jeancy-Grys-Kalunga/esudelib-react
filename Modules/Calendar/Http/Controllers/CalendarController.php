@@ -1,18 +1,18 @@
 <?php
 
-namespace Modules\Student\Http\Controllers;
+namespace Modules\Calendar\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
-class StudentController extends Controller
+class CalendarController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
     public function index()
     {
-        return view('student::index');
+        return view('calendar::index');
     }
 
     /**
@@ -20,7 +20,7 @@ class StudentController extends Controller
      */
     public function create()
     {
-        return view('student::create');
+        return view('calendar::create');
     }
 
     /**
@@ -33,7 +33,7 @@ class StudentController extends Controller
      */
     public function show($id)
     {
-        return view('student::show');
+        return view('calendar::show');
     }
 
     /**
@@ -41,7 +41,7 @@ class StudentController extends Controller
      */
     public function edit($id)
     {
-        return view('student::edit');
+        return view('calendar::edit');
     }
 
     /**

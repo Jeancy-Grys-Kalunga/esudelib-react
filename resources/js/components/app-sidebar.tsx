@@ -100,6 +100,23 @@ const secretaryItems: NavItem[] = [
     },
 ];
 
+const StudentItems: NavItem[] = [
+    {
+        title: 'Selection Cours',
+        href: '/student/courses',
+        icon: Bookmark,
+        isActive: route().current('student.courses.index'),
+        color: 'text-indigo-500',
+    },
+    {
+        title: 'Résultats',
+        href: '/student/results',
+        icon: FileText,
+        isActive: route().current('student.results'),
+        color: 'text-purple-500',
+    },
+];
+
 const RegistrationDeskItems: NavItem[] = [
     {
         title: 'Gérer Inscriptions',
@@ -225,6 +242,14 @@ const groupedNavItems: GroupedNavItem[] = [
         items: RegistrationDeskItems,
         permission: 'access_registration_desk',
         isActive: route().current('subscriptions.*'),
+    },
+    {
+        groupTitle: 'Espace Étudiant',
+        icon: GraduationCap,
+        color: 'text-blue-500',
+        items: StudentItems,
+        permission: 'access_student_features',
+        isActive: route().current('student.courses.*') || route().current('student.results'),
     },
     {
         groupTitle: 'Départements',

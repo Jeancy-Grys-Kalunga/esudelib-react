@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Imports\StudentsImport;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -79,9 +80,9 @@ class SubscriptionController extends Controller
         return Inertia::render('inscription/index', [
             'inscriptions' => $inscriptions,
             'can' => $can,
-            'institutions' => $institutions, // Ajouté
-            'academicYears' => $academicYears, // Ajouté
-            'promotions' => $promotions, // Ajouté
+            'institutions' => $institutions,
+            'academicYears' => $academicYears,
+            'promotions' => $promotions,
             'flash' => $this->getFlashMessages(),
         ]);
     }
@@ -111,37 +112,40 @@ class SubscriptionController extends Controller
             abort(403, 'Action non autorisée');
         }
 
-        // Génération du matricule
-        $matricule = 'MAT-' . date('Y') . '-' . Str::padLeft(Student::max('id') + 1, 5, '0');
+        return DB::transaction(function () use ($request) {
+            // Création du compte utilisateur en premier
+            $user = $this->createStudentUser($request);
+            
+            // Génération du matricule
+            $matricule = 'MAT-' . date('Y') . '-' . Str::padLeft(Student::max('id') + 1, 5, '0');
+            
+            // Création de l'étudiant avec le user_id
+            $student = Student::create([
+                'matricule' => $matricule,
+                'name' => $request->name,
+                'gendre' => $request->gendre,
+                'date_of_birth' => $request->date_of_birth,
+                'email' => $user->email,
+                'phone' => $request->phone,
+                'institution_id' => $request->institution_id,
+                'user_id' => $user->id,
+            ]);
 
-        // Création de l'étudiant
-        $student = Student::create([
-            'matricule' => $matricule,
-            'name' => $request->name,
-            'gendre' => $request->gendre,
-            'date_of_birth' => $request->date_of_birth,
-            'email' => $this->generateStudentEmail($request->name, $request->institution_id),
-            'phone' => $request->phone,
-            'institution_id' => $request->institution_id,
-        ]);
+            // Création de l'inscription
+            $inscription = Inscription::create([
+                'student_id' => $student->id,
+                'academic_year_id' => $request->academic_year_id,
+                'institution_id' => $request->institution_id,
+                'promotion_id' => $request->promotion_id,
+            ]);
 
-        // Création de l'inscription
-        $inscription = Inscription::create([
-            'student_id' => $student->id,
-            'academic_year_id' => $request->academic_year_id,
-            'institution_id' => $request->institution_id,
-            'promotion_id' => $request->promotion_id,
-        ]);
-
-        // Création du compte utilisateur
-        $this->createStudentUser($student);
-
-        return redirect()->route('subscriptions.index')->with([
-            'flash' => [
-                'type' => 'success',
-                'message' => 'Inscription enregistrée avec succès !',
-            ],
-        ]);
+            return redirect()->route('subscriptions.index')->with([
+                'flash' => [
+                    'type' => 'success',
+                    'message' => 'Inscription enregistrée avec succès !',
+                ],
+            ]);
+        });
     }
 
     public function edit(Inscription $inscription)
@@ -174,28 +178,36 @@ class SubscriptionController extends Controller
             abort(403, 'Action non autorisée');
         }
 
-        // Mise à jour de l'étudiant associé
-        $student = $inscription->student;
-        $student->update([
-            'name' => $request->name,
-            'gendre' => $request->gendre,
-            'date_of_birth' => $request->date_of_birth,
-            'phone' => $request->phone,
-            'institution_id' => $request->institution_id,
-        ]);
+        return DB::transaction(function () use ($request, $inscription) {
+            $student = $inscription->student;
+            
+            // Mise à jour de l'étudiant
+            $student->update([
+                'name' => $request->name,
+                'gendre' => $request->gendre,
+                'date_of_birth' => $request->date_of_birth,
+                'phone' => $request->phone,
+                'institution_id' => $request->institution_id,
+            ]);
 
-        // Mise à jour de l'inscription
-        $inscription->update([
-            'academic_year_id' => $request->academic_year_id,
-            'promotion_id' => $request->promotion_id,
-        ]);
+            // Mise à jour de l'inscription
+            $inscription->update([
+                'academic_year_id' => $request->academic_year_id,
+                'promotion_id' => $request->promotion_id,
+            ]);
 
-        return redirect()->route('subscriptions.index')->with([
-            'flash' => [
-                'type' => 'success',
-                'message' => 'Inscription mise à jour avec succès !',
-            ],
-        ]);
+            // Mise à jour de la table pivot institution_user
+            if ($student->user) {
+                $student->user->institutions()->sync([$request->institution_id]);
+            }
+
+            return redirect()->route('subscriptions.index')->with([
+                'flash' => [
+                    'type' => 'success',
+                    'message' => 'Inscription mise à jour avec succès !',
+                ],
+            ]);
+        });
     }
 
     public function destroy(Inscription $inscription)
@@ -204,20 +216,26 @@ class SubscriptionController extends Controller
             abort(403, 'Action non autorisée');
         }
 
-        // Supprimer l'inscription et l'étudiant associé
-        $student = $inscription->student;
-        $inscription->delete();
-        $student->delete();
+        return DB::transaction(function () use ($inscription) {
+            $student = $inscription->student;
+            
+            // Supprimer le compte utilisateur associé
+            if ($student->user) {
+                $student->user->delete();
+            }
 
-        return redirect()->route('subscriptions.index')->with([
-            'flash' => [
-                'type' => 'success',
-                'message' => 'Inscription supprimée avec succès !',
-            ],
-        ]);
+            // Supprimer l'inscription et l'étudiant
+            $inscription->delete();
+            $student->delete();
+
+            return redirect()->route('subscriptions.index')->with([
+                'flash' => [
+                    'type' => 'success',
+                    'message' => 'Inscription supprimée avec succès !',
+                ],
+            ]);
+        });
     }
-
-
 
     public function import(Request $request)
     {
@@ -246,34 +264,43 @@ class SubscriptionController extends Controller
         ]);
     }
 
-    private function generateStudentEmail(string $name, int $institutionId): string
+    private function createStudentUser(StoreInscriptionRequest $request)
     {
-        $institution = Institution::find($institutionId);
-        $baseEmail = Str::slug($name) . '.' . Str::random(4) . '@' . Str::slug($institution->name) . '.edu';
-        return strtolower($baseEmail);
-    }
-
-    private function createStudentUser(Student $student)
-    {
-        $password = Hash::make(Str::random(12));
+        $password = Hash::make('12345678');
+        $email = $this->generateStudentEmail($request->name, $request->institution_id);
 
         $user = User::create([
-            'name' => $student->name,
-            'email' => $student->email,
+            'name' => $request->name,
+            'email' => $email,
             'password' => $password,
             'is_active' => true,
         ]);
 
         $user->assignRole('Etudiant');
-        $user->institutions()->attach($student->institution_id);
+        $user->institutions()->attach($request->institution_id);
 
-        // Envoyer l'email de bienvenue avec les identifiants
-        // (À implémenter selon votre système d'email)
+        return $user;
+    }
+
+    private function generateStudentEmail(string $name, int $institutionId): string
+    {
+        $institution = Institution::find($institutionId);
+        $baseEmail = Str::slug($name) . '@' . Str::slug($institution->name) . '.edu';
+        
+        // Vérification de l'unicité
+        $counter = 1;
+        $email = $baseEmail;
+        
+        while (User::where('email', $email)->exists()) {
+            $email = Str::slug($name) . $counter . '@' . Str::slug($institution->name) . '.edu';
+            $counter++;
+        }
+        
+        return strtolower($email);
     }
 
     private function getFlashMessages()
     {
-
         return session('flash') ? [
             'message' => session('flash')['message'] ?? null,
             'type' => session('flash')['type'] ?? null

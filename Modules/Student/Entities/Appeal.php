@@ -28,6 +28,10 @@ class Appeal extends Model implements HasMedia
     public function course() {
         return $this->belongsTo(Course::class, 'course_id', 'id');
     }
+
+    public function appealDocuments() {
+        return $this->hasMany(AppealDocument::class, 'appeal_id', 'id');
+    }
     
 
 }

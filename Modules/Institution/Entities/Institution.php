@@ -67,4 +67,13 @@ class Institution extends Model implements HasMedia
     {
         return $this->hasMany(Jury::class);
     }
+
+    public function studentForUser($userId)
+    {
+        return $this->students()
+            ->where('user_id', $userId)
+            ->first();
+    }
+
+    
 }
