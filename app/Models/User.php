@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Modules\Institution\Entities\Institution;
+use Modules\Institution\Entities\Jury;
 use Modules\Student\Entities\Student;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
@@ -24,7 +25,7 @@ class User extends Authenticatable implements HasMedia
     public $preventsLazyLoading = true;
 
 
-    protected $with = ['institutions', 'media', 'roles', 'permissions', 'teacher'];
+    protected $with = ['institutions', 'media', 'roles', 'permissions', 'teacher', 'student'];
 
     /**
      * The attributes that are mass assignable.
@@ -81,7 +82,7 @@ class User extends Authenticatable implements HasMedia
 
     public function teacher()
     {
-        return $this->hasOne(Teacher::class); 
+        return $this->hasOne(Teacher::class);
     }
 
 
@@ -100,5 +101,11 @@ class User extends Authenticatable implements HasMedia
         return $this->getAllPermissions()->contains('name', $permission);
     }
 
-    
+
+    public function juryRoles()
+    {
+        return $this->hasMany(Jury::class, 'president_id')
+            ->orWhere('secretary_id', $this->id)
+            ->orWhere('member_id', $this->id);
+    }
 }

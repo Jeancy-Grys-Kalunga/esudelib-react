@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Institution\Entities\Course;
+use Modules\Institution\Entities\CourseProgramDetail;
 use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Palmares;
 use Modules\RegistrationDesk\Entities\Inscription;
@@ -63,5 +64,11 @@ class Student extends Model implements HasMedia
     public function courses()
     {
         return $this->belongsToMany(Course::class, 'course_student');
+    }
+
+    // Dans app/Models/Student.php
+    public function courseProgramDetails()
+    {
+        return $this->hasMany(CourseProgramDetail::class);
     }
 }

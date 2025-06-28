@@ -9,6 +9,7 @@ use Modules\Institution\Http\Controllers\PromotionController;
 use Modules\Institution\Http\Controllers\UnitsTeachingController;
 use Modules\Institution\Http\Controllers\CourseController;
 use Modules\Institution\Http\Controllers\AssignmentController;
+use Modules\Institution\Http\Controllers\ExamSessionController;
 use Modules\Institution\Http\Controllers\JuryController;
 use Modules\Institution\Http\Controllers\ProgramController;
 
@@ -33,10 +34,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('courses/mass-edit', [CourseController::class, 'massEdit'])->name('courses.mass-edit');
     Route::put('courses/mass-update', [CourseController::class, 'massUpdate'])->name('courses.mass-update');
 
-    Route::resource('assignments', AssignmentController::class)->names('assignments');
+    Route::get('assignments/export', [AssignmentController::class, 'export'])
+        ->name('assignments.export');
+
+    // Import Excel
+    Route::post('assignments/import', [AssignmentController::class, 'import'])
+        ->name('assignments.import');
+
+
+    Route::resource('assignments', AssignmentController::class, ['except' => ['show']])->names('assignments');
 
     Route::post('assignmentsbulk', [AssignmentController::class, 'bulkStore'])->name('assignments.bulk');
     Route::post('/assignments/bulk', [AssignmentController::class, 'storeBulk'])->name('assignments.store.bulk');
+
+    Route::resource('exam-sessions',ExamSessionController::class)->except(['create', 'edit', 'show']);
 
     // Routes pour les programmes
     Route::resource('programs', ProgramController::class)->names('programs');

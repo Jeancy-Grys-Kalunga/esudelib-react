@@ -54,4 +54,17 @@ class Course extends Model
     {
         return $this->hasMany(Appeal::class, 'course_id', 'id');
     }
+
+    // Dans app/Models/Course.php
+    public function courseProgramDetails()
+    {
+        return $this->hasMany(CourseProgramDetail::class);
+    }
+
+    public function studentCourse()
+    {
+        return $this->belongsToMany(Student::class)
+            ->using(CourseProgramDetail::class)
+            ->withPivot(['promotion_id', 'academic_year_id']);
+    }
 }

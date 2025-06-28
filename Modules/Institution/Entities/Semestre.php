@@ -16,4 +16,9 @@ class Semestre extends Model
     protected $fillable = [];
     
 
+    public function courseProgramDetails()
+    {
+        return $this->hasMany(CourseProgramDetail::class);
+    }
+
 }

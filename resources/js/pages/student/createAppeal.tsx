@@ -1,5 +1,5 @@
-import { Head, router } from '@inertiajs/react';
-import { useState, Dispatch, SetStateAction, ChangeEvent } from 'react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { useState, Dispatch, SetStateAction, ChangeEvent, useEffect } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { FileInput } from '@/components/ui/file-input';
 import { Badge } from '@/components/ui/badge';
+import { Plus, X } from 'lucide-react';
 
 type PageProps = {
     course: {
@@ -23,43 +24,46 @@ type PageProps = {
     appeal_fee: number;
 };
 
-interface JustificationFieldProps {
-    justification: string;
-    setJustification: Dispatch<SetStateAction<string>>;
-}
-
-const JustificationField: React.FC<JustificationFieldProps> = ({ justification, setJustification }) => (
-    <div className="space-y-2">
-        <Label htmlFor="justification" className="font-medium text-gray-700">
-            Justification Détaillée *
-        </Label>
-        <Textarea
-            id="justification"
-            value={justification}
-            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setJustification(e.target.value)}
-            placeholder="Décrivez précisément les raisons de votre recours..."
-            required
-            rows={6}
-            className="border-gray-300 focus:border-blue-500 min-h-[150px]"
-        />
-    </div>
-);
-
-export default function CreateAppeal({ course, note, appeal_fee }: PageProps) {
-    const [object, setObject] = useState('');
+const CreateAppeal = ({ course, note, appeal_fee }: PageProps) => {
+    const [objects, setObjects] = useState(['']);
     const [justification, setJustification] = useState('');
     const [documents, setDocuments] = useState<File[]>([]);
 
+    const handleAddObject = () => {
+        setObjects([...objects, '']);
+    };
+
+    const handleRemoveObject = (index: number) => {
+        const newObjects = [...objects];
+        newObjects.splice(index, 1);
+        setObjects(newObjects);
+    };
+
+    const handleObjectChange = (index: number, value: string) => {
+        const newObjects = [...objects];
+        newObjects[index] = value;
+        setObjects(newObjects);
+    };
+
     const submit = () => {
         const formData = new FormData();
-        formData.append('object', object);
         formData.append('justification', justification);
+        objects.forEach((obj, index) => {
+            formData.append(`objects[${index}]`, obj);
+        });
         documents.forEach((file, index) => {
             formData.append(`documents[${index}]`, file);
         });
 
         router.post(`/student/appeals/${course.id}`, formData);
     };
+
+    const { props } = usePage();
+    useEffect(() => {
+        if (typeof props.redirect_url === 'string' && props.redirect_url) {
+            window.location.href = props.redirect_url;
+        }
+    }, [props.redirect_url]);
 
     return (
         <AppLayout>
@@ -107,7 +111,7 @@ export default function CreateAppeal({ course, note, appeal_fee }: PageProps) {
                                 
                                 <div className="space-y-1 pt-4 border-t">
                                     <Label className="text-gray-500">Frais de Recours</Label>
-                                    <p className="text-lg font-semibold text-red-600">{appeal_fee} €</p>
+                                    <p className="text-lg font-semibold text-red-600">{appeal_fee} CDF</p>
                                     <p className="text-sm text-gray-500 italic">(Non remboursable)</p>
                                 </div>
                             </CardContent>
@@ -128,23 +132,56 @@ export default function CreateAppeal({ course, note, appeal_fee }: PageProps) {
                                     }}
                                     className="space-y-6"
                                 >
-                                    {/* Objet du Recours */}
-                                    <div className="space-y-2">
-                                        <Label htmlFor="object" className="font-medium text-gray-700">
-                                            Objet du Recours *
+                                    {/* Objets du Recours */}
+                                    <div className="space-y-3">
+                                        <Label className="font-medium text-gray-700">
+                                            Objets du Recours *
                                         </Label>
-                                        <Input
-                                            id="object"
-                                            value={object}
-                                            onChange={e => setObject(e.target.value)}
-                                            placeholder="Ex: Contestation de la note"
-                                            required
-                                            className="border-gray-300 focus:border-blue-500"
-                                        />
+                                        {objects.map((obj, index) => (
+                                            <div key={index} className="flex gap-2 items-center">
+                                                <Input
+                                                    value={obj}
+                                                    onChange={(e) => handleObjectChange(index, e.target.value)}
+                                                    placeholder={`Objet ${index + 1}`}
+                                                    required
+                                                />
+                                                {objects.length > 1 && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="destructive"
+                                                        size="icon"
+                                                        onClick={() => handleRemoveObject(index)}
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))}
+                                        <Button 
+                                            type="button"
+                                            variant="secondary"
+                                            onClick={handleAddObject}
+                                        >
+                                            <Plus className="mr-2 h-4 w-4" />
+                                            Ajouter un autre objet
+                                        </Button>
                                     </div>
 
                                     {/* Champ Justification */}
-                                    <JustificationField justification={justification} setJustification={setJustification} />
+                                    <div className="space-y-2">
+                                        <Label htmlFor="justification" className="font-medium text-gray-700">
+                                            Justification Détaillée *
+                                        </Label>
+                                        <Textarea
+                                            id="justification"
+                                            value={justification}
+                                            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setJustification(e.target.value)}
+                                            placeholder="Décrivez précisément les raisons de votre recours..."
+                                            required
+                                            rows={6}
+                                            className="border-gray-300 focus:border-blue-500 min-h-[150px]"
+                                        />
+                                    </div>
 
                                     {/* Téléchargement de Documents */}
                                     <div className="space-y-2">
@@ -182,7 +219,7 @@ export default function CreateAppeal({ course, note, appeal_fee }: PageProps) {
                                         <Button 
                                             type="submit"
                                             className="bg-blue-600 hover:bg-blue-700 px-8 py-6 text-lg font-semibold"
-                                            disabled={!object || !justification}
+                                            disabled={objects.length === 0 || !justification}
                                         >
                                             Soumettre le Recours
                                         </Button>
@@ -195,4 +232,6 @@ export default function CreateAppeal({ course, note, appeal_fee }: PageProps) {
             </div>
         </AppLayout>
     );
-}
+};
+
+export default CreateAppeal;

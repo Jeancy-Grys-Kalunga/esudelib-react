@@ -6,14 +6,17 @@ use App\Exports\CourseStudentsExport;
 use App\Http\Controllers\Controller;
 use App\Imports\GradesImport;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
+use Modules\Institution\Entities\AcademicYear;
 use Modules\Institution\Entities\Course;
 use Modules\Institution\Entities\Institution;
+use Modules\Institution\Entities\Promotion;
 use Modules\Student\Entities\Appeal;
 use Modules\Teacher\Entities\Teacher;
 use Modules\Teacher\Http\Requests\StoreTeacherRequest;
@@ -291,6 +294,8 @@ class TeacherController extends Controller
 
         return Inertia::render('teacher/submitGrades', [
             'course' => $course->only('id', 'title'),
+            'academicYears' => AcademicYear::all(['id', 'title']),
+            'promotions' => Promotion::all(['id', 'title']),
         ]);
     }
 
@@ -304,7 +309,22 @@ class TeacherController extends Controller
             'grades_file' => 'required|file|mimes:xlsx,xls',
         ]);
 
-        Excel::import(new GradesImport($course, $request->session), $request->file('grades_file'));
+        $request->validate([
+            'grades_file' => 'required|mimes:xlsx,xls',
+            'promotion_id' => 'required|exists:promotions,id',
+            'academic_year_id' => 'required|exists:academic_years,id',
+            'session' => 'required|string'
+        ]);
+
+        $academicYear = AcademicYear::find($request->academic_year_id);
+        $promotion = Promotion::find($request->promotion_id);
+
+        Excel::import(
+            new GradesImport($course, $promotion, $academicYear, $request->session),
+            $request->file('grades_file')
+        );
+
+
 
         $successRate = $this->calculateSuccessRate($course);
 
@@ -318,7 +338,7 @@ class TeacherController extends Controller
         ]);
     }
 
-    public function appeals(Course $course)
+   public function appeals(Course $course)
     {
         if (!$this->isTeacherAssignedToCourse($course)) {
             abort(403, 'Action non autorisée');
@@ -330,7 +350,7 @@ class TeacherController extends Controller
             ->map(function ($appeal) {
                 return [
                     'id' => $appeal->id,
-                    'object' => $appeal->object,
+                    'object' => json_decode($appeal->objects), // Décoder les objets multiples
                     'status' => $appeal->status,
                     'created_at' => $appeal->created_at->format('d/m/Y'),
                     'student' => $appeal->student->name,
@@ -341,6 +361,9 @@ class TeacherController extends Controller
                     ]),
                 ];
             });
+
+        // Marquer les notifications comme lues
+        NotificationService::markAsReadForCourseAppeals($course->id);
 
         return Inertia::render('teacher/appeals', [
             'appeals' => $appeals,

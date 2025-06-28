@@ -17,11 +17,16 @@ use Spatie\Permission\Models\Permission;
 use Illuminate\Support\Collection;
 use Modules\Institution\Entities\AcademicYear;
 use Modules\Institution\Entities\Course;
+use Modules\Institution\Entities\CourseProgramDetail;
+use Modules\Institution\Entities\Promotion;
 use Modules\Teacher\Entities\Teacher;
 use App\Services\InfoBipService;
 use App\Services\TwilioService;
 use App\Services\VonageService;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\AssignmentsExport;
+use App\Imports\AssignmentsImport;
 
 class AssignmentController extends Controller
 {
@@ -55,7 +60,7 @@ class AssignmentController extends Controller
         $query = Assignment::with([
             'holder',
             'collaborator',
-            'course', // Nouvelle relation
+            'course',
             'academicYear',
             'institution'
         ]);
@@ -80,11 +85,14 @@ class AssignmentController extends Controller
                     ->orWhereHas('collaborator', function ($q) use ($searchTerm) {
                         $q->where('name', 'LIKE', "%$searchTerm%");
                     })
-                    ->orWhereHas('course', function ($q) use ($searchTerm) { // Nouvelle relation
+                    ->orWhereHas('course', function ($q) use ($searchTerm) {
                         $q->where('title', 'LIKE', "%$searchTerm%");
                     })
                     ->orWhereHas('institution', function ($q) use ($searchTerm) {
                         $q->where('name', 'LIKE', "%$searchTerm%");
+                    })
+                    ->orWhereHas('promotion', function ($q) use ($searchTerm) {
+                        $q->where('title', 'LIKE', "%$searchTerm%");
                     });
             });
         }
@@ -93,18 +101,39 @@ class AssignmentController extends Controller
 
         // Formatage des données pour Inertia
         $formattedAssignments = $assignments->map(function ($assignment) {
+            // Valeurs par défaut
+            $promotion = $assignment->promotion?->title ?? 'Promotion inconnue';
+            $semester = 'Non défini';
+            $cm = $td = $tp = $credits = 0;
+
+            // Récupération des détails du cours
+            if ($assignment->course && $assignment->course->courseProgramDetails->isNotEmpty()) {
+                $details = $assignment->course->courseProgramDetails->first();
+                $semester = $details->semestre->title ?? 'Non défini';
+                $cm = $details->cm ?? 0;
+                $td = $details->td ?? 0;
+                $tp = $details->tp ?? 0;
+                $credits = $details->credits ?? 0;
+            }
+
             return [
                 'id' => $assignment->id,
-                'holder_id' => $assignment->holder_id,
+                'promotion' => $promotion,
+                'course' => $assignment->course?->title ?? 'Cours inconnu',
+                'semester' => $semester,
+                'cm' => $cm,
+                'tp' => $tp,
+                'td' => $td,
+                'credits' => $credits,
                 'holder' => $assignment->holder?->name ?? 'Non assigné',
-                'collaborator_id' => $assignment->collaborator_id,
                 'collaborator' => $assignment->collaborator?->name ?? 'Aucun',
-                'course_id' => $assignment->course_id, // Nouveau champ
-                'course' => $assignment->course?->title ?? 'Cours inconnu', // Nouveau champ
+                // Conserver les autres champs nécessaires pour les actions
+                'holder_id' => $assignment->holder_id,
+                'collaborator_id' => $assignment->collaborator_id,
+                'course_id' => $assignment->course_id,
                 'academic_year_id' => $assignment->academic_year_id,
                 'academic_year' => $assignment->academicYear?->title ?? 'Année non définie',
                 'observation' => $assignment->observation,
-                'institution_id' => $assignment->institution_id,
                 'institution' => $assignment->institution?->name ?? 'Institution inconnue',
             ];
         });
@@ -113,8 +142,12 @@ class AssignmentController extends Controller
         $institutions = $this->getUserInstitutions($user);
 
         // Formatage avec alias cohérents
-        $formattedCourses = Course::all(['id', 'title'])->map(function ($course) {
-            return ['id' => $course->id, 'name' => $course->title];
+        $formattedCourses = Course::with('courseProgramDetails')->get(['id', 'title'])->map(function ($course) {
+            return [
+                'id' => $course->id,
+                'name' => $course->title,
+                'details' => $course->details
+            ];
         });
 
         $formattedAcademicYears = AcademicYear::all(['id', 'title'])->map(function ($year) {
@@ -127,7 +160,7 @@ class AssignmentController extends Controller
             'filters' => $request->only(['search', 'academic_year']),
             'institutions' => $institutions,
             'teachers' => Teacher::all(['id', 'name']),
-            'courses' => $formattedCourses, // Nouveau dataset
+            'courses' => $formattedCourses,
             'academic_years' => $formattedAcademicYears,
         ]);
     }
@@ -161,8 +194,9 @@ class AssignmentController extends Controller
             // Conversion des types
             $data['institution_id'] = $this->getUserInstitutionId();
             $data['academic_year_id'] = (int)$data['academic_year_id'];
-            $data['course_id'] = (int)$data['course_id']; // Nouveau champ
+            $data['course_id'] = (int)$data['course_id'];
             $data['holder_id'] = (int)$data['holder_id'];
+            $data['promotion_id'] = (int)$data['promotion_id'];
 
             // Gestion du collaborator_id
             $data['collaborator_id'] = ($data['collaborator_id'] && $data['collaborator_id'] !== 'none')
@@ -189,7 +223,6 @@ class AssignmentController extends Controller
         );
 
         $this->sendAssignmentNotifications($newAssignments);
-
 
         return redirect()->route('assignments.index')->with([
             'flash' => [
@@ -259,8 +292,9 @@ class AssignmentController extends Controller
             // Conversion des types
             $data['institution_id'] = $this->getUserInstitutionId();
             $data['academic_year_id'] = (int)$data['academic_year_id'];
-            $data['course_id'] = (int)$data['course_id']; // Nouveau champ
+            $data['course_id'] = (int)$data['course_id'];
             $data['holder_id'] = (int)$data['holder_id'];
+            $data['promotion_id'] = (int)$data['promotion_id'];
 
             // Gestion du collaborator_id
             $data['collaborator_id'] = ($data['collaborator_id'] && $data['collaborator_id'] !== 'none')
@@ -282,6 +316,101 @@ class AssignmentController extends Controller
         ]);
     }
 
+    public function export(Request $request)
+    {
+        try {
+            // Construction de la requête avec relations nécessaires
+            $query = Assignment::query()->with([
+                'course' => function ($query) {
+                    $query->with(['courseProgramDetails.promotion', 'courseProgramDetails.semestre']);
+                },
+                'holder',
+                'collaborator'
+            ]);
+
+            // Appliquer les filtres
+            if ($request->has('academic_year') && $request->academic_year) {
+                $query->where('academic_year_id', (int)$request->academic_year);
+            }
+
+            if ($request->has('search') && $request->search) {
+                $searchTerm = $request->search;
+                $query->where(function ($q) use ($searchTerm) {
+                    $q->whereHas('holder', function ($q) use ($searchTerm) {
+                        $q->where('name', 'LIKE', "%$searchTerm%");
+                    })
+                        ->orWhereHas('collaborator', function ($q) use ($searchTerm) {
+                            $q->where('name', 'LIKE', "%$searchTerm%");
+                        })
+                        ->orWhereHas('course', function ($q) use ($searchTerm) {
+                            $q->where('title', 'LIKE', "%$searchTerm%");
+                        });
+                });
+            }
+
+            // Exécuter la requête
+            $assignments = $query->get();
+
+            // Vérifier si des données existent
+            if ($assignments->isEmpty()) {
+                return back()->with([
+                    'flash' => [
+                        'type' => 'warning',
+                        'message' => 'Aucune donnée à exporter'
+                    ]
+                ]);
+            }
+
+            // Nettoyer les buffers de sortie
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+
+            // Définir les headers manuellement
+            $headers = [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ];
+
+            // Exporter les données
+            return Excel::download(
+                new \App\Exports\AssignmentsExport($assignments),
+                'charge_horaire_' . now()->format('Ymd_His') . '.xlsx',
+                \Maatwebsite\Excel\Excel::XLSX,
+                $headers
+            );
+        } catch (\Exception $e) {
+            // Journaliser l'erreur complète
+            \Log::error("Export error: " . $e->getMessage(), [
+                'exception' => $e,
+                'request' => $request->all(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => 'Échec de l\'exportation: ' . $e->getMessage()
+                ]
+            ]);
+        }
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv'
+        ]);
+
+        Excel::import(new AssignmentsImport, $request->file('file'));
+
+        return back()->with([
+            'flash' => [
+                'type' => 'success',
+                'message' => 'Attributions importées avec succès'
+            ]
+        ]);
+    }
+
     private function sendAssignmentNotifications(array $assignments)
     {
         if (empty($assignments)) return;
@@ -295,13 +424,7 @@ class AssignmentController extends Controller
             ]);
         }
 
-        // $smsService = new InfoBipService();
-
-        // $vonageService = new VonageService();
-
         $twilioService = new TwilioService();
-
-
 
         foreach ($assignments as $assignment) {
             $teacher = $assignment->holder;
@@ -309,8 +432,6 @@ class AssignmentController extends Controller
 
             try {
                 $message = $this->generateAssignmentMessage($assignment, $teacher);
-                //$smsService->sendInfobipSms($teacher->phone, $message);
-                //$vonageService->sendVonageSms($teacher->phone, $message);
                 $twilioService->sendTwilioSms($teacher->phone, $message);
             } catch (\Exception $e) {
                 Log::error("Erreur envoi SMS à {$teacher->phone}: " . $e->getMessage());

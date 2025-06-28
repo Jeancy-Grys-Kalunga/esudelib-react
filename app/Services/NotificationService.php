@@ -2,12 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\Notification;
 use Illuminate\Support\Facades\DB;
 use Modules\Student\Entities\Student;
 use Modules\Teacher\Entities\Teacher;
 use Modules\Student\Entities\Note;
 use Modules\Course\Entities\Course;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Modules\Student\Entities\Appeal;
 use Modules\Student\Entities\Payment;
 
@@ -185,5 +187,32 @@ class NotificationService
         }
 
         return $notifications;
+    }
+
+    /**
+     * Marque comme lues les notifications de recours pour un cours spécifique
+     */
+    public static function markAsReadForCourseAppeals($courseId)
+    {
+        $userId = Auth::id();
+        Notification::where('user_id', $userId)
+            ->where('url', 'like', '%appeals%') // Filtre par type "recours"
+            ->where('url', 'like', "%$courseId%") // Filtre par cours spécifique
+            ->whereNull('read_at') // Seulement les non lues
+            ->update(['read_at' => now()]);
+    }
+
+    /**
+     * Crée une notification pour l'enseignant
+     */
+    public static function createTeacherNotification($teacherId, $title, $message, $url)
+    {
+        Notification::create([
+            'user_id' => $teacherId,
+            'title' => $title,
+            'message' => $message,
+            'url' => $url,
+            'read_at' => null
+        ]);
     }
 }

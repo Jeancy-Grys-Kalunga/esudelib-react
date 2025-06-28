@@ -12,17 +12,35 @@ type Course = {
     code: string;
 };
 
-type PageProps = {
-    course: Course;
+type Promotion = {
+    id: number;
+    title: string;
 };
 
-export default function SubmitGrades({ course }: PageProps) {
+type AcademicYear = {
+    id: number;
+    title: string;
+};
+
+
+
+type PageProps = {
+    course: Course;
+    promotions: Promotion[];
+    academicYears: AcademicYear[];
+};
+
+export default function SubmitGrades({ course, promotions, academicYears }: PageProps) {
     const { data, setData, post, errors, processing } = useForm<{
         grades_file: File | null;
         session: string;
+        promotion_id: string;
+        academic_year_id?: string;
     }>({
         grades_file: null,
-        session: ''
+        session: '',
+        promotion_id: '',
+        academic_year_id: ''
     });
     
     const [fileName, setFileName] = useState('');
@@ -68,12 +86,59 @@ export default function SubmitGrades({ course }: PageProps) {
                                     required
                                 >
                                     <option value="" disabled>Sélectionner une session</option>
-                                    <option value="1ère Session">1ère Session</option>
-                                    <option value="2ème Session">2ème Session</option>
-                                    <option value="Session Unique">Session Unique</option>
+                                    <option value="Premier Semestre">Premier Semestre</option>
+                                    <option value="Rattrapage Premier Semestre">Rattrapage Premier Semestre</option>
+                                    <option value="Second Semestre">Second Semestre</option>
+                                    <option value="Rattrapage Second Semestre">Rattrapage Second Semestre</option>
                                 </select>
                                 {errors.session && (
                                     <p className="text-sm text-red-500 mt-1">{errors.session}</p>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="promotion_id" className="block mb-2">
+                                    Promotion
+                                </Label>
+                                <select
+                                    id="promotion_id"
+                                    className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    value={data.promotion_id || ''}
+                                    onChange={e => setData('promotion_id', e.target.value)}
+                                    required
+                                >
+                                    <option value="" disabled>Sélectionner une promotion</option>
+                                    {promotions.map(promotion => (
+                                        <option key={promotion.id} value={promotion.id}>
+                                            {promotion.title}
+                                        </option>
+                                    ))}
+                                </select>
+                                {errors.promotion_id && (
+                                    <p className="text-sm text-red-500 mt-1">{errors.promotion_id}</p>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="academic_year_id" className="block mb-2">
+                                    Année académique
+                                </Label>
+                                <select
+                                    id="academic_year_id"
+                                    className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    value={data.academic_year_id || ''}
+                                    onChange={e => setData('academic_year_id', e.target.value)}
+                                    required
+                                >
+                                    <option value="" disabled>Sélectionner une année académique</option>
+                                    {academicYears.map(year => (
+                                        <option key={year.id} value={year.id}>
+                                            {year.title}
+                                        </option>
+                                    ))}
+                                </select>
+                                {errors.academic_year_id && (
+                                    <p className="text-sm text-red-500 mt-1">{errors.academic_year_id}</p>
                                 )}
                             </div>
 
@@ -98,6 +163,7 @@ export default function SubmitGrades({ course }: PageProps) {
                                             {fileName || 'Sélectionner un fichier...'}
                                         </label>
                                     </div>
+                                    
                                     <Button
                                         asChild
                                         variant="secondary"
@@ -121,7 +187,7 @@ export default function SubmitGrades({ course }: PageProps) {
                             <div className="flex justify-end">
                                 <Button 
                                     type="submit" 
-                                    disabled={processing || !data.grades_file || !data.session}
+                                    disabled={processing || !data.grades_file || !data.session || !data.promotion_id || !data.academic_year_id}
                                     className="gap-2"
                                 >
                                     {processing ? (

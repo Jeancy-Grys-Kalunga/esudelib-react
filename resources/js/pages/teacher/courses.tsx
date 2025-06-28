@@ -165,7 +165,7 @@ export default function TeacherCourses({ courses, flash }: PageProps) {
                                                                 ) : (
                                                                     <span className="group flex items-center">
                                                                         <Download className="mr-1 h-4 w-4 group-hover:animate-bounce" />
-                                                                        Exporter
+                                                                        Fiche cotation
                                                                     </span>
                                                                 )}
                                                             </Button>

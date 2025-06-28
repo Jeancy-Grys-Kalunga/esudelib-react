@@ -20,6 +20,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Modules\Institution\Entities\Program;
 use Modules\Calendar\Entities\CalendarEvent; // Nouveau module
 use App\Services\NotificationService;
+use Modules\Teacher\Entities\Teacher;
 
 class StudentController extends Controller
 {
@@ -227,7 +228,7 @@ class StudentController extends Controller
                     ->whereIn('status', ['pending', 'accepted'])
                     ->exists();
 
-                $canAppeal = $note->situation === 'Échec' && !$hasExistingAppeal;
+                $canAppeal = $note->cote < 10 && !$hasExistingAppeal;
 
                 return [
                     'course_id' => $note->course_id, // Nouveau champ
@@ -264,9 +265,10 @@ class StudentController extends Controller
             abort(403, "Vous n'êtes pas inscrit à ce cours ou la note n'est pas disponible.");
         }
 
-        return Inertia::render('Student/CreateAppeal', [
+        return Inertia::render('student/createAppeal', [
             'course' => $course->only('id', 'title', 'code'),
             'note' => $note->only('cote', 'session', 'situation'),
+            'appeal_fee' => 10000, // Frais de recours
         ]);
     }
 
@@ -280,7 +282,8 @@ class StudentController extends Controller
 
         // Validation
         $request->validate([
-            'object' => 'required|string|max:255',
+            'objects' => 'required|array|min:1',
+            'objects.*' => 'string|max:255',
             'justification' => 'required|string',
             'documents' => 'nullable|array',
             'documents.*' => 'file|mimes:pdf,doc,docx,jpg,png|max:2048',
@@ -288,10 +291,11 @@ class StudentController extends Controller
 
         // Créer le recours
         $appeal = Appeal::create([
-            'object' => $request->object,
+            'objects' => json_encode($request->objects),
             'justification' => $request->justification,
             'course_id' => $course->id,
             'student_id' => $student->id,
+            'status' => 'pending',
         ]);
 
         // Enregistrer les documents
@@ -306,12 +310,23 @@ class StudentController extends Controller
             }
         }
 
+        // Notification à l'enseignant titulaire
+        $teacher = $course->teacher; // Supposons que la relation est définie dans le modèle Course
+        if ($teacher) {
+            NotificationService::createTeacherNotification(
+                $teacher->id,
+                'Nouveau recours - ' . $course->title,
+                "L'étudiant {$student->name} a déposé un recours concernant votre cours",
+                route('teacher.appeals', $course)
+            );
+        }
+
         // Créer un paiement pour le recours (frais de recours)
         $payment = Payment::create([
             'amount' => 10000, // 10000 CDF par exemple
             'student_id' => $student->id,
-            'appeal_id' => $appeal->id,
             'status' => 'pending',
+            'appeal_id' => $appeal->id,
         ]);
 
         // Initier le paiement avec CinetPay
@@ -333,13 +348,34 @@ class StudentController extends Controller
 
         $paymentResponse = $cinetPay->createPayment($paymentParams);
 
+        if (!$paymentResponse || $paymentResponse['code'] !== '00') {
+            Log::error('CinetPay payment error: ' . json_encode($paymentResponse));
+            return redirect()->back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => 'Erreur lors de l\'initiation du paiement. Veuillez réessayer plus tard.'
+                ]
+            ]);
+        }
         // Sauvegarder l'ID de paiement CinetPay
         $payment->update([
-            'cinetpay_transaction_id' => $paymentResponse['data']['payment_token'],
+            'cinetpay_transaction_id' => $paymentResponse['data']['payment_token'] ?? null,
         ]);
 
-        // Rediriger vers l'URL de paiement
-        return redirect()->away($paymentResponse['data']['payment_url']);
+        // Vérifier que l'URL de paiement existe avant de rediriger
+        if (isset($paymentResponse['data']['payment_url'])) {
+            return response()->json([
+                'redirect_url' => $paymentResponse['data']['payment_url']
+            ], 303);
+        }
+
+        // Si l'URL n'est pas présente, afficher une erreur
+        return redirect()->back()->with([
+            'flash' => [
+                'type' => 'error',
+                'message' => 'Impossible de récupérer l\'URL de paiement. Veuillez réessayer plus tard.'
+            ]
+        ]);
     }
 
     // Télécharger le bulletin en PDF
@@ -372,5 +408,4 @@ class StudentController extends Controller
 
         return $user->student;
     }
-
 }

@@ -179,6 +179,11 @@ class PermissionsTableSeeder extends Seeder
             'access_users',
             'show_users',
 
+            'access_exam_sessions',
+            'create_exam_sessions',
+            'edit_exam_sessions',
+            'delete_exam_sessions'
+
         ];
 
         foreach ($permissions as $permission) {
