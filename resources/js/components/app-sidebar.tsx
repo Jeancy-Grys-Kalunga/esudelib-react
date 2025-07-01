@@ -98,6 +98,14 @@ const secretaryItems: NavItem[] = [
         isActive: route().current('programs.index'),
         color: 'text-indigo-500',
     },
+
+    {
+        title: 'Gérer Session Examen',
+        href: '/exam-sessions',
+        icon: FilePlus,
+        isActive: route().current('exam-sessions.index'),
+        color: 'text-indigo-500',
+    },
 ];
 
 const TeacherFeaturesItems: NavItem[] = [
@@ -107,7 +115,7 @@ const TeacherFeaturesItems: NavItem[] = [
         icon: Bookmark,
         isActive: route().current('teacher.courses.index'),
         color: 'text-indigo-500',
-    }
+    },
 ];
 
 const StudentItems: NavItem[] = [

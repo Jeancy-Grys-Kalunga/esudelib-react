@@ -72,11 +72,11 @@ export default function Login({ status, canResetPassword, institutions = [], fla
     }, [flash]);
 
     useEffect(() => {
-        // Vérifie si l'email contient "admin" ou "super"
+        // Logique de masquage du champ institution pour les admins
         const shouldHideInstitution = data.email.includes('admin') || data.email.includes('super');
         setShowInstitutionField(!shouldHideInstitution);
 
-        // Si l'email contient admin ou super, on réinitialise institution_id
+        // Réinitialisation de l'institution si admin
         if (shouldHideInstitution) {
             setData('institution_id', '');
         }
@@ -84,7 +84,6 @@ export default function Login({ status, canResetPassword, institutions = [], fla
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-
         post(route('login'), {
             onFinish: () => reset('password'),
             onError: (errors) => {
@@ -168,7 +167,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                             </div>
 
                             {/* Institution Field - Conditionnellement affiché */}
-                            {institutions && institutions.length > 0 && showInstitutionField && (
+                            {institutions && institutions.length > 0 && showInstitutionField && !isJury && (
                                 <div className="animate-fade-in space-y-2">
                                     <Label htmlFor="institution_id" className="flex items-center gap-1">
                                         <University className="h-4 w-4" />
@@ -181,7 +180,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                                             value={data.institution_id}
                                             onChange={(e) => setData('institution_id', e.target.value)}
                                             className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 pl-10 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                            required={showInstitutionField}
+                                            required={showInstitutionField && !isJury}
                                         >
                                             <option value="">Sélectionnez une institution</option>
                                             {institutions.map((institution) => (
@@ -203,8 +202,13 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                                     name="is_jury"
                                     checked={data.is_jury}
                                     onClick={() => {
-                                        setData('is_jury', !data.is_jury);
-                                        setIsJury(!data.is_jury);
+                                        const newIsJury = !data.is_jury;
+                                        setData('is_jury', newIsJury);
+                                        setIsJury(newIsJury);
+                                        if (!newIsJury) {
+                                            setData('academic_year_id', '');
+                                            setData('promotion_id', '');
+                                        }
                                     }}
                                 />
                                 <Label htmlFor="is_jury">Se connecter en tant que jury</Label>
@@ -236,6 +240,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                                             </select>
                                             <CalendarDays className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform text-gray-400" />
                                         </div>
+                                        <InputError message={errors.academic_year_id} />
                                     </div>
 
                                     {/* Promotion Field */}
@@ -262,6 +267,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                                             </select>
                                             <Users className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform text-gray-400" />
                                         </div>
+                                        <InputError message={errors.promotion_id} />
                                     </div>
                                 </>
                             )}

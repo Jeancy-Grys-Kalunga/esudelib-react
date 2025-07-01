@@ -361,22 +361,13 @@ class AssignmentController extends Controller
                 ]);
             }
 
-            // Nettoyer les buffers de sortie
-            while (ob_get_level() > 0) {
-                ob_end_clean();
-            }
 
-            // Définir les headers manuellement
-            $headers = [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ];
+            $fileName = 'etudiants_' . '_' . now()->format('Ymd_His') . '.xlsx';
 
             // Exporter les données
             return Excel::download(
-                new \App\Exports\AssignmentsExport($assignments),
-                'charge_horaire_' . now()->format('Ymd_His') . '.xlsx',
-                \Maatwebsite\Excel\Excel::XLSX,
-                $headers
+                new AssignmentsExport($assignments),
+                $fileName
             );
         } catch (\Exception $e) {
             // Journaliser l'erreur complète

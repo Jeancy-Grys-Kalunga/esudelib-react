@@ -34,6 +34,10 @@ type Institution = {
 type PageProps = {
     examSessions: ExamSession[];
     institutions: Institution[];
+    userInstitution?: { 
+        id: number;
+        name: string;
+    } | null;
     can: {
         create: boolean;
         edit: boolean;
@@ -49,7 +53,7 @@ type PageProps = {
     };
 };
 
-export default function ExamSessionIndex({ examSessions: allExamSessions, institutions, can, flash, filters }: PageProps) {
+export default function ExamSessionIndex({ examSessions: allExamSessions, institutions, can, flash, filters,  userInstitution }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentExamSession, setCurrentExamSession] = useState<ExamSession | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -63,7 +67,7 @@ export default function ExamSessionIndex({ examSessions: allExamSessions, instit
         title: '',
         status: 'open',
         acceptance_rate: 0,
-        institution_id: '',
+        institution_id: userInstitution ? userInstitution.id.toString() : '',
     });
 
     const handleSearch = useMemo(() => {
@@ -273,7 +277,10 @@ export default function ExamSessionIndex({ examSessions: allExamSessions, instit
                                                 <TableRow key={session.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                                     <TableCell className="font-medium">{session.title}</TableCell>
                                                     <TableCell>
-                                                        <Badge variant={session.status === 'open' ? 'success' : 'destructive'}>
+                                                    
+                                                        <Badge 
+                                                        // @ts-ignore
+                                                        variant={session.status === 'open' ? 'success' : 'destructive'}>
                                                             {session.status === 'open' ? 'Ouverte' : 'Fermée'}
                                                         </Badge>
                                                     </TableCell>
@@ -394,20 +401,36 @@ export default function ExamSessionIndex({ examSessions: allExamSessions, instit
                                     {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
                                 </div>
 
-                                <div className="space-y-2">
-                                    <Label>
-                                        Institution *
-                                    </Label>
+                                  <div className="space-y-2">
+                                <Label>
+                                    Institution *
+                                </Label>
+                                {userInstitution ? (
+                                    // Afficher l'institution de l'utilisateur sans possibilité de modification
+                                    <div className="flex flex-col gap-1">
+                                        <Input 
+                                            value={userInstitution.name} 
+                                            readOnly 
+                                            className="bg-gray-100 dark:bg-gray-800"
+                                        />
+                                        <input 
+                                            type="hidden" 
+                                            value={userInstitution.id} 
+                                            name="institution_id" 
+                                        />
+                                        <p className="text-sm text-muted-foreground">
+                                            Vous êtes associé à cette institution
+                                        </p>
+                                    </div>
+                                ) : (
+                                    // Afficher le sélecteur pour les administrateurs
                                     <Select 
                                         value={data.institution_id} 
                                         onValueChange={(value) => setData('institution_id', value)} 
                                         required
                                     >
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Sélectionnez une institution">
-                                                {institutions.find((i) => i.id.toString() === data.institution_id)?.name ||
-                                                    'Sélectionnez une institution'}
-                                            </SelectValue>
+                                            <SelectValue placeholder="Sélectionnez une institution" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {institutions.map((institution) => (
@@ -417,8 +440,9 @@ export default function ExamSessionIndex({ examSessions: allExamSessions, instit
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    {errors.institution_id && <p className="text-sm text-red-500">{errors.institution_id}</p>}
-                                </div>
+                                )}
+                                {errors.institution_id && <p className="text-sm text-red-500">{errors.institution_id}</p>}
+                            </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">

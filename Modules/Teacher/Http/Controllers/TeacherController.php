@@ -345,7 +345,7 @@ class TeacherController extends Controller
         }
 
         $appeals = Appeal::where('course_id', $course->id)
-            ->with(['student:id,name,matricule', 'documents'])
+            ->with(['student:id,name,matricule', 'appealDocuments'])
             ->get()
             ->map(function ($appeal) {
                 return [
@@ -355,7 +355,7 @@ class TeacherController extends Controller
                     'created_at' => $appeal->created_at->format('d/m/Y'),
                     'student' => $appeal->student->name,
                     'matricule' => $appeal->student->matricule,
-                    'documents' => $appeal->documents->map(fn($doc) => [
+                    'documents' => $appeal->appealDocuments->map(fn($doc) => [
                         'name' => $doc->name,
                         'url' => Storage::url($doc->path),
                     ]),
