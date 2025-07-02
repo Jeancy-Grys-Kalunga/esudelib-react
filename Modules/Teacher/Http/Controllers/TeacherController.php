@@ -8,13 +8,16 @@ use App\Imports\GradesImport;
 use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 use Modules\Institution\Entities\AcademicYear;
 use Modules\Institution\Entities\Course;
+use Modules\Institution\Entities\ExamSession;
 use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Promotion;
 use Modules\Student\Entities\Appeal;
@@ -292,10 +295,14 @@ class TeacherController extends Controller
             abort(403, 'Action non autorisée');
         }
 
+        $institutionId = auth()->user()->teacher->institutions()->first()->id;
+
         return Inertia::render('teacher/submitGrades', [
             'course' => $course->only('id', 'title'),
             'academicYears' => AcademicYear::all(['id', 'title']),
             'promotions' => Promotion::all(['id', 'title']),
+            'examSessions' => ExamSession::where('institution_id', $institutionId)
+                ->get(['id', 'title', 'status', 'acceptance_rate']),
         ]);
     }
 
@@ -306,39 +313,54 @@ class TeacherController extends Controller
         }
 
         $request->validate([
-            'grades_file' => 'required|file|mimes:xlsx,xls',
-        ]);
-
-        $request->validate([
             'grades_file' => 'required|mimes:xlsx,xls',
             'promotion_id' => 'required|exists:promotions,id',
             'academic_year_id' => 'required|exists:academic_years,id',
-            'session' => 'required|string'
+            'exam_session_id' => 'required|exists:exam_sessions,id',
         ]);
 
         $academicYear = AcademicYear::find($request->academic_year_id);
         $promotion = Promotion::find($request->promotion_id);
+        $examSession = ExamSession::find($request->exam_session_id);
+
+        // Vérifier si la session est ouverte
+        if ($examSession->status !== 'open') {
+            return back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => 'La session d\'examen est fermée. Vous ne pouvez pas soumettre de notes.',
+                ],
+            ]);
+        }
 
         Excel::import(
-            new GradesImport($course, $promotion, $academicYear, $request->session),
+            new GradesImport($course, $promotion, $academicYear, $request->session, $examSession->id),
             $request->file('grades_file')
         );
 
-
-
         $successRate = $this->calculateSuccessRate($course);
+
+        // Vérifier le taux de réussite
+        if ($successRate < $examSession->acceptance_rate) {
+            return back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => "Le taux de réussite ($successRate%) est inférieur au minimum requis ({$examSession->acceptance_rate}%).",
+                ],
+            ]);
+        }
 
         return redirect()->route('teacher.courses')->with([
             'flash' => [
-                'type' => $successRate >= 70 ? 'success' : 'warning',
-                'message' => $successRate >= 70
+                'type' => $successRate >= $examSession->acceptance_rate ? 'success' : 'warning',
+                'message' => $successRate >= $examSession->acceptance_rate
                     ? 'Cotation soumise avec succès et acceptée par le jury'
                     : 'Cotation soumise mais taux de réussite insuffisant (' . $successRate . '%)',
             ],
         ]);
     }
 
-   public function appeals(Course $course)
+    public function appeals(Course $course)
     {
         if (!$this->isTeacherAssignedToCourse($course)) {
             abort(403, 'Action non autorisée');
@@ -368,6 +390,201 @@ class TeacherController extends Controller
         return Inertia::render('teacher/appeals', [
             'appeals' => $appeals,
             'course' => $course->only('id', 'title'),
+        ]);
+    }
+
+    /**
+     * Affiche l'éditeur en ligne pour un cours
+     */
+    public function showOnlineEditor(Course $course, Request $request)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $institutionId = auth()->user()->teacher->institutions()->first()->id;
+        
+        // Récupérer la promotion associée au cours
+        $courseProgramDetail = $course->courseProgramDetails()->first();
+        $promotion = $courseProgramDetail ? $courseProgramDetail->promotion : null;
+
+        return Inertia::render('teacher/online-editor', [
+            'course' => $course->only('id', 'title', 'code'),
+            'academicYears' => AcademicYear::all(['id', 'title']),
+            'promotion' => $promotion ? ['id' => $promotion->id, 'title' => $promotion->title] : null,
+            'examSessions' => ExamSession::where('institution_id', $institutionId)
+                ->get(['id', 'title', 'status', 'acceptance_rate']),
+        ]);
+    }
+
+    /**
+     * API pour récupérer les étudiants avec leurs notes pour l'éditeur en ligne
+     */
+    public function getOnlineEditorData(Course $course, Request $request)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            return response()->json(['error' => 'Action non autorisée'], 403);
+        }
+
+        // Validation des paramètres
+        $validator = Validator::make($request->all(), [
+            'academic_year_id' => 'required|exists:academic_years,id',
+            'exam_session_id' => 'required|exists:exam_sessions,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Paramètres invalides',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        // Récupérer la promotion du cours
+        $courseProgramDetail = $course->courseProgramDetails()->first();
+        if (!$courseProgramDetail) {
+            return response()->json(['error' => 'Ce cours n\'est associé à aucune promotion.'], 404);
+        }
+        $promotionId = $courseProgramDetail->promotion_id;
+
+        $academicYearId = $request->input('academic_year_id');
+        $examSessionId = $request->input('exam_session_id');
+
+        // Récupération des étudiants avec leurs notes
+        $students = $course->students()
+            ->with(['notes' => function ($query) use ($course, $academicYearId, $promotionId, $examSessionId) {
+                $query->where('course_id', $course->id)
+                    ->where('academic_year_id', $academicYearId)
+                    ->where('promotion_id', $promotionId)
+                    ->where('exam_session_id', $examSessionId);
+            }])
+            ->get()
+            ->map(function ($student) {
+                $note = $student->notes->first();
+                return [
+                    'uid' => (string) $student->id,
+                    'id' => $student->id,
+                    'matricule' => $student->matricule,
+                    'name' => $student->name,
+                    'cote' => $note->cote ?? null,
+                    'observation' => $note->observation ?? null,
+                    'situation' => $note->situation ?? null,
+                    'participation' => $note->participation ?? null,
+                ];
+            });
+
+        return response()->json([
+            'students' => $students,
+        ]);
+    }
+
+    public function saveGrades(Request $request, Course $course)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            abort(403, 'Action non autorisée');
+        }
+
+        // Récupérer la promotion du cours
+        $courseProgramDetail = $course->courseProgramDetails()->first();
+        if (!$courseProgramDetail) {
+            return response()->json(['error' => 'Ce cours n\'est associé à aucune promotion.'], 404);
+        }
+        $promotionId = $courseProgramDetail->promotion_id;
+
+        // Validation des données
+        $validator = Validator::make($request->all(), [
+            'grades' => 'required|array',
+            'grades.*.student_id' => 'required|exists:students,id',
+            'grades.*.cote' => 'nullable|numeric|min:0|max:20',
+            'grades.*.observation' => 'nullable|string|max:255',
+            'grades.*.situation' => 'nullable|string|max:50',
+            'grades.*.participation' => 'nullable|string|max:50',
+            'academic_year_id' => 'required|exists:academic_years,id',
+            'exam_session_id' => 'required|exists:exam_sessions,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'type' => 'error',
+                'message' => 'Erreur de validation',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $examSession = ExamSession::find($request->exam_session_id);
+
+        // Vérifier si la session est ouverte
+        if ($examSession->status !== 'open') {
+            return back()->with([
+                'flash' => [
+                    'type' => 'error',
+                'message' => 'La session d\'examen est fermée. Vous ne pouvez pas soumettre de notes.'
+                ],
+            ]);
+        }
+
+        // Nouvelle logique: Vérification et mise à jour des notes existantes
+        $successCount = 0;
+        $totalStudents = count($request->grades);
+        $hasGrades = false;
+        $updatedStudents = [];
+
+        foreach ($request->grades as $grade) {
+            $existingNote = DB::table('notes')
+                ->where('course_id', $course->id)
+                ->where('student_id', $grade['student_id'])
+                ->where('academic_year_id', $request->academic_year_id)
+                ->where('promotion_id', $promotionId) // Utiliser la promotion du cours
+                ->where('exam_session_id', $request->exam_session_id)
+                ->first();
+
+            $data = [
+                'cote' => $grade['cote'] ?? null,
+                'observation' => $grade['observation'] ?? '',
+                'situation' => $grade['situation'] ?? '',
+                'participation' => $grade['participation'] ?? '',
+                'is_submitted' => true,
+                'updated_at' => now(),
+            ];
+
+            if ($existingNote) {
+                // Mise à jour si la note existe
+                DB::table('notes')
+                    ->where('id', $existingNote->id)
+                    ->update($data);
+            } else {
+                // Création si nouvelle note
+                DB::table('notes')->insert(array_merge([
+                    'course_id' => $course->id,
+                    'student_id' => $grade['student_id'],
+                    'academic_year_id' => $request->academic_year_id,
+                    'promotion_id' => $promotionId, // Utiliser la promotion du cours
+                    'exam_session_id' => $request->exam_session_id,
+                    'created_at' => now(),
+                ], $data));
+            }
+
+            // Calcul du taux de réussite
+            if (isset($grade['cote']) && $grade['cote'] !== null) {
+                $hasGrades = true;
+                if ($grade['cote'] >= 10) $successCount++;
+            }
+
+            $updatedStudents[] = [
+                'student_id' => $grade['student_id'],
+                'cote' => $grade['cote'] ?? null,
+                'observation' => $grade['observation'] ?? null,
+                'situation' => $grade['situation'] ?? null,
+                'participation' => $grade['participation'] ?? null,
+            ];
+        }
+
+        $successRate = $hasGrades && $totalStudents > 0 ? ($successCount / $totalStudents) * 100 : 0;
+
+        return response()->json([
+            'type' => 'success',
+            'message' => 'Modifications enregistrées avec succès!',
+            'students' => $updatedStudents,
+            'success_rate' => round($successRate, 2)
         ]);
     }
 

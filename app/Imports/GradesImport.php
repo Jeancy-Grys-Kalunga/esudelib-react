@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Imports;
 
 use Maatwebsite\Excel\Concerns\ToModel;
@@ -12,16 +13,18 @@ use Illuminate\Support\Facades\DB;
 class GradesImport implements ToModel, WithHeadingRow
 {
     protected $course;
-    protected $session;
-    protected $academicYear;
     protected $promotion;
+    protected $academicYear;
+    protected $session;
+    protected $examSessionId;
 
-    public function __construct(Course $course, Promotion $promotion, AcademicYear $academicYear, string $session = '')
+    public function __construct(Course $course, Promotion $promotion, AcademicYear $academicYear, string $session = '', int $examSessionId)
     {
         $this->course = $course;
-        $this->session = $session;
-        $this->academicYear = $academicYear;
         $this->promotion = $promotion;
+        $this->academicYear = $academicYear;
+        $this->session = $session;
+        $this->examSessionId = $examSessionId;
     }
 
     public function model(array $row)
@@ -40,7 +43,7 @@ class GradesImport implements ToModel, WithHeadingRow
                     'student_id' => $student->id,
                     'academic_year_id' => $this->academicYear->id,
                     'promotion_id' => $this->promotion->id,
-                    'session' => $session,
+                    'exam_session_id' => $this->examSessionId,
                 ],
                 [
                     'cote' => isset($row['point20']) ? floatval(str_replace(',', '.', $row['point20'])) : null,

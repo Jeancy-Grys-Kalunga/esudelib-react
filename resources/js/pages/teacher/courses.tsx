@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import AppLayout from '@/layouts/app-layout';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Download, FileWarning, Upload } from 'lucide-react';
+import { Download, FileWarning, Edit, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -168,6 +168,17 @@ export default function TeacherCourses({ courses, flash }: PageProps) {
                                                                         Fiche cotation
                                                                     </span>
                                                                 )}
+                                                            </Button>
+                                                            <Button
+                                                                asChild
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="border-orange-400 text-orange-700 shadow-sm transition-all hover:scale-105 hover:bg-orange-50"
+                                                            >
+                                                                <Link href={route('teacher.courses.online-editor', course.id)} preserveScroll>
+                                                                    <Edit className="mr-1 h-4 w-4 group-hover:animate-bounce" />
+                                                                    Encoder en ligne
+                                                                </Link>
                                                             </Button>
                                                             <Button
                                                                 asChild
