@@ -5,6 +5,7 @@ namespace Modules\Institution\Entities;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Institution\Database\factories\CourseFactory;
+use Modules\Student\Entities\Appeal;
 use Modules\Student\Entities\Note;
 use Modules\Student\Entities\Student;
 
@@ -20,7 +21,7 @@ class Course extends Model
 
     public $preventsLazyLoading = true;
 
-    protected $with = ['institution'];
+    protected $with = ['institution', 'unitsTeaching', 'assignments', 'students', 'notes', 'appeals'];
 
 
     public function institution()
@@ -47,5 +48,23 @@ class Course extends Model
     public function students()
     {
         return $this->belongsToMany(Student::class, 'course_student');
+    }
+
+    public function appeals()
+    {
+        return $this->hasMany(Appeal::class, 'course_id', 'id');
+    }
+
+    // Dans app/Models/Course.php
+    public function courseProgramDetails()
+    {
+        return $this->hasMany(CourseProgramDetail::class);
+    }
+
+    public function studentCourse()
+    {
+        return $this->belongsToMany(Student::class)
+            ->using(CourseProgramDetail::class)
+            ->withPivot(['promotion_id', 'academic_year_id']);
     }
 }

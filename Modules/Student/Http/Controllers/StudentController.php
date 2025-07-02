@@ -20,6 +20,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Modules\Institution\Entities\Program;
 use Modules\Calendar\Entities\CalendarEvent; // Nouveau module
 use App\Services\NotificationService;
+use Modules\Teacher\Entities\Teacher;
 
 class StudentController extends Controller
 {
@@ -227,7 +228,7 @@ class StudentController extends Controller
                     ->whereIn('status', ['pending', 'accepted'])
                     ->exists();
 
-                $canAppeal = $note->situation === 'Échec' && !$hasExistingAppeal;
+                $canAppeal = $note->cote < 10 && !$hasExistingAppeal;
 
                 return [
                     'course_id' => $note->course_id, // Nouveau champ
@@ -251,11 +252,9 @@ class StudentController extends Controller
     }
 
 
-    // Affiche le formulaire de recours pour un cours spécifique
     public function createAppeal(Course $course)
     {
         $student = Auth::user()->student;
-        // Vérifier si l'étudiant est inscrit à ce cours et a une note
         $note = Note::where('student_id', $student->id)
             ->where('course_id', $course->id)
             ->first();
@@ -264,55 +263,54 @@ class StudentController extends Controller
             abort(403, "Vous n'êtes pas inscrit à ce cours ou la note n'est pas disponible.");
         }
 
-        return Inertia::render('Student/CreateAppeal', [
+        // Vérifier si un paiement est déjà en attente pour ce cours
+        $pendingPayment = Payment::where('student_id', $student->id)
+            ->where('status', 'pending')
+            ->first();
+
+        return Inertia::render('student/createAppeal', [
             'course' => $course->only('id', 'title', 'code'),
             'note' => $note->only('cote', 'session', 'situation'),
+            'appeal_fee' => 10000,
+            'has_pending_payment' => !!$pendingPayment,
+            'pending_payment_url' => $pendingPayment->payment_url ?? null,
         ]);
     }
 
-    // Enregistre le recours et initie le paiement
+    // Enregistre le recours et initie le paiement (CORRIGÉ)
     public function storeAppeal(Request $request, Course $course, CinetPayService $cinetPay)
     {
         $student = $this->getCurrentStudent();
-        $note = Note::where('student_id', $student->id)
-            ->where('course_id', $course->id)
-            ->firstOrFail();
 
         // Validation
-        $request->validate([
-            'object' => 'required|string|max:255',
+        $validated = $request->validate([
+            'objects' => 'required|array|min:1',
+            'objects.*' => 'string|max:255',
             'justification' => 'required|string',
             'documents' => 'nullable|array',
             'documents.*' => 'file|mimes:pdf,doc,docx,jpg,png|max:2048',
         ]);
 
-        // Créer le recours
-        $appeal = Appeal::create([
-            'object' => $request->object,
-            'justification' => $request->justification,
-            'course_id' => $course->id,
+        // Créer d'abord le paiement
+        $payment = Payment::create([
+            'amount' => 10000,
             'student_id' => $student->id,
+            'status' => 'pending',
+            'metadata' => json_encode([
+                'objects' => $validated['objects'],
+                'justification' => $validated['justification'],
+                'documents' => $request->hasFile('documents')
+                    ? array_map(fn($file) => $file->getClientOriginalName(), $request->file('documents'))
+                    : [],
+            ]),
         ]);
 
-        // Enregistrer les documents
+        // Stocker temporairement les fichiers
         if ($request->hasFile('documents')) {
             foreach ($request->file('documents') as $file) {
-                $path = $file->store('appeal_documents', 'public');
-                AppealDocument::create([
-                    'name' => $file->getClientOriginalName(),
-                    'path' => $path,
-                    'appeal_id' => $appeal->id,
-                ]);
+                $path = $file->store('temp_documents/' . $payment->id, 'public');
             }
         }
-
-        // Créer un paiement pour le recours (frais de recours)
-        $payment = Payment::create([
-            'amount' => 10000, // 10000 CDF par exemple
-            'student_id' => $student->id,
-            'appeal_id' => $appeal->id,
-            'status' => 'pending',
-        ]);
 
         // Initier le paiement avec CinetPay
         $paymentParams = [
@@ -326,20 +324,95 @@ class StudentController extends Controller
             'customer_phone_number' => $student->phone,
             'customer_address' => $student->address ?? 'Non renseigné',
             'customer_city' => $student->city ?? 'Non renseigné',
-            'customer_country' => 'CI',
+            'customer_country' => 'CD',
             'customer_state' => $student->region ?? 'Non renseigné',
             'customer_zip_code' => $student->postal_code ?? '0000',
         ];
 
         $paymentResponse = $cinetPay->createPayment($paymentParams);
 
-        // Sauvegarder l'ID de paiement CinetPay
-        $payment->update([
-            'cinetpay_transaction_id' => $paymentResponse['data']['payment_token'],
-        ]);
+        // Vérifier si la réponse est valide et contient les données nécessaires
+        if (!$paymentResponse || !isset($paymentResponse['code']) || $paymentResponse['code'] !== '201') {
+            Log::error('CinetPay payment error: ' . json_encode($paymentResponse));
+            return back()->withErrors([
+                'payment_error' => 'Erreur lors de l\'initiation du paiement. Veuillez réessayer plus tard.'
+            ])->withInput();
+        }
 
-        // Rediriger vers l'URL de paiement
-        return redirect()->away($paymentResponse['data']['payment_url']);
+        // Mettre à jour le paiement avec les données de CinetPay
+        $paymentData = [
+            'cinetpay_transaction_id' => $paymentResponse['data']['payment_token'] ?? null,
+            'payment_url' => $paymentResponse['data']['payment_url'] ?? null,
+        ];
+
+        $payment->update($paymentData);
+
+        // CORRECTION : Retourner avec l'URL dans la session au lieu d'une réponse JSON
+        return back()->with([
+            'payment_redirect' => $paymentResponse['data']['payment_url']
+        ]);
+    }
+
+
+    // Callback pour les paiements réussis (à ajouter dans routes/web.php)
+    public function handlePaymentSuccess(Request $request, CinetPayService $cinetPay)
+    {
+        $paymentId = $request->input('payment_id');
+        $payment = Payment::findOrFail($paymentId);
+
+        // Valider le paiement avec CinetPay
+        $verification = $cinetPay->getPaymentDetails($payment->cinetpay_transaction_id);
+
+        if ($verification['code'] === '00') {
+            $payment->update(['status' => 'paid']);
+
+            // Créer le recours maintenant que le paiement est validé
+            $metadata = json_decode($payment->metadata, true);
+
+            $appeal = Appeal::create([
+                'object' => json_encode($metadata['objects']), // Correction ici (object au singulier)
+                'justification' => $metadata['justification'],
+                'course_id' => $payment->course_id,
+                'student_id' => $payment->student_id,
+                'status' => 'pending',
+                'payment_id' => $payment->id,
+            ]);
+
+            // Déplacer les fichiers temporaires vers le stockage permanent
+            $tempPath = 'temp_documents/' . $payment->id;
+            $files = Storage::disk('public')->files($tempPath);
+
+            foreach ($files as $file) {
+                $newPath = str_replace('temp_documents/', 'appeal_documents/', $file);
+                Storage::disk('public')->move($file, $newPath);
+
+                AppealDocument::create([
+                    'name' => basename($file),
+                    'path' => $newPath,
+                    'appeal_id' => $appeal->id,
+                ]);
+            }
+
+            // Supprimer le dossier temporaire
+            Storage::disk('public')->deleteDirectory($tempPath);
+
+            // Notification à l'enseignant
+            $course = Course::find($payment->course_id);
+            if ($course && $course->teacher) {
+                NotificationService::createTeacherNotification(
+                    $course->teacher->id,
+                    'Nouveau recours - ' . $course->title,
+                    "L'étudiant {$student->name} a déposé un recours concernant votre cours",
+                    route('teacher.courses.appeals', $course)
+                );
+            }
+
+            return redirect()->route('student.results')
+                ->with('success', 'Votre recours a été soumis avec succès !');
+        }
+
+        return redirect()->route('student.appeals.create', $payment->course_id)
+            ->with('error', 'Échec de la validation du paiement');
     }
 
     // Télécharger le bulletin en PDF
@@ -372,5 +445,4 @@ class StudentController extends Controller
 
         return $user->student;
     }
-
 }

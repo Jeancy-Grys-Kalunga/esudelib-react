@@ -205,6 +205,15 @@ const permissionCategories = [
         ],
     },
     {
+        title: 'Session Examen',
+        permissions: [
+            { id: 'access_exam_sessions', label: 'Accès' },
+            { id: 'create_exam_sessions', label: 'Créer' },
+            { id: 'edit_exam_sessions', label: 'Edition' },
+            { id: 'delete_exam_sessions', label: 'Supprimer' },
+        ],
+    },
+    {
         title: 'Dévises',
         permissions: [
             { id: 'access_currencies', label: 'Accès' },
@@ -239,6 +248,11 @@ const permissionCategories = [
     {
         title: 'Fonctionnalités Partenaire',
         permissions: [{ id: 'access_partner_features', label: 'Accès' }],
+    },
+
+    {
+        title: 'Fonctionnalités Enseignant',
+        permissions: [{ id: 'access_teacher_features', label: 'Accès' }],
     },
 ];
 

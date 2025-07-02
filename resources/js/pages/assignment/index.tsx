@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Edit, GraduationCap, Loader2, Plus, Search, Trash2, X } from 'lucide-react';
+import { Download, Edit, GraduationCap, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -11,10 +11,17 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { Label } from '@radix-ui/react-label';
 
 type Course = {
     id: number;
     name: string;
+    details?: {
+        cm: number;
+        td: number;
+        tp: number;
+        credits: number;
+    };
 };
 
 type AcademicYear = {
@@ -28,13 +35,20 @@ interface Assignment {
     holder: string;
     collaborator_id: number | null;
     collaborator: string;
-    course_id: number; // Nouveau champ
-    course: string; // Nouveau champ
+    course_id: number;
+    course: string;
     academic_year_id: number;
     academic_year: string;
     institution_id: number;
     institution: string;
     observation: string | null;
+    promotion_id: number;
+    promotion: string;
+    semester: string;
+    cm: number;
+    tp: number;
+    td: number;
+    credits: number;
 }
 
 type Teacher = {
@@ -49,17 +63,18 @@ type Institution = {
 
 type AssignmentFormData = {
     id?: number;
-    course_id: string; // Nouveau champ
+    course_id: string;
     academic_year_id: string;
     holder_id: string;
     collaborator_id: string;
     observation: string;
+    promotion_id: string;
 };
 
 type PageProps = {
     assignments: Assignment[];
     teachers: Teacher[];
-    courses: Course[]; // Nouveau dataset
+    courses: Course[];
     academic_years: AcademicYear[];
     institutions: Institution[];
     can: {
@@ -81,7 +96,7 @@ type PageProps = {
 export default function AssignmentManager({
     assignments: allAssignments,
     teachers,
-    courses, // Nouveau dataset
+    courses,
     academic_years,
     institutions,
     can,
@@ -100,6 +115,9 @@ export default function AssignmentManager({
     const [currentAcademicYear, setCurrentAcademicYear] = useState(filters?.academic_year || 'all');
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [importFile, setImportFile] = useState<File | null>(null);
+    const [isImporting, setIsImporting] = useState(false);
 
     const { post, errors, processing, reset, setData } = useForm({
         assignments: [] as AssignmentFormData[],
@@ -116,8 +134,9 @@ export default function AssignmentManager({
                 (assignment) =>
                     assignment.holder.toLowerCase().includes(term) ||
                     (assignment.collaborator && assignment.collaborator.toLowerCase().includes(term)) ||
-                    assignment.course.toLowerCase().includes(term) || // Nouveau champ
-                    assignment.institution.toLowerCase().includes(term),
+                    assignment.course.toLowerCase().includes(term) ||
+                    assignment.promotion.toLowerCase().includes(term) ||
+                    assignment.semester.toLowerCase().includes(term)
             );
         }
 
@@ -168,11 +187,12 @@ export default function AssignmentManager({
             setBulkAssignments([
                 {
                     id: assignment.id,
-                    course_id: assignment.course_id.toString(), // Nouveau champ
+                    course_id: assignment.course_id.toString(),
                     academic_year_id: assignment.academic_year_id.toString(),
                     holder_id: assignment.holder_id.toString(),
                     collaborator_id: assignment.collaborator_id?.toString() || 'none',
                     observation: assignment.observation || '',
+                    promotion_id: assignment.promotion_id.toString(),
                 },
             ]);
         } else {
@@ -183,11 +203,12 @@ export default function AssignmentManager({
     };
 
     const createEmptyAssignment = (): AssignmentFormData => ({
-        course_id: courses.length > 0 ? courses[0].id.toString() : '', // Nouveau champ
+        course_id: courses.length > 0 ? courses[0].id.toString() : '',
         academic_year_id: currentAcademicYear !== 'all' ? currentAcademicYear : academic_years.length > 0 ? academic_years[0].id.toString() : '',
         holder_id: teachers.length > 0 ? teachers[0].id.toString() : '',
         collaborator_id: 'none',
         observation: '',
+        promotion_id: '',
     });
 
     const closeModal = () => {
@@ -225,12 +246,13 @@ export default function AssignmentManager({
         const payload = {
             assignments: bulkAssignments.map((a) => ({
                 ...a,
-                course_id: a.course_id, // Nouveau champ
+                course_id: a.course_id,
                 academic_year_id: a.academic_year_id,
                 holder_id: a.holder_id,
                 // Convertir 'none' en null
                 collaborator_id: a.collaborator_id === 'none' ? null : a.collaborator_id,
                 observation: a.observation,
+                promotion_id: a.promotion_id,
             })),
         };
 
@@ -290,6 +312,43 @@ export default function AssignmentManager({
         );
     };
 
+    // Fonction pour exporter les données
+    const exportAssignments = () => {
+        router.get(route('assignments.export'), {
+            // On peut passer des paramètres de filtrage si nécessaire
+            academic_year: currentAcademicYear !== 'all' ? currentAcademicYear : undefined,
+            search: searchTerm,
+        });
+    };
+
+    // Fonction pour gérer l'import
+    const handleImportSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!importFile) {
+            toast.error("Veuillez sélectionner un fichier");
+            return;
+        }
+
+        setIsImporting(true);
+
+        const formData = new FormData();
+        formData.append('file', importFile);
+
+        router.post(route('assignments.import'), formData, {
+            onSuccess: () => {
+                setIsImportModalOpen(false);
+                setIsImporting(false);
+                setImportFile(null);
+                toast.success("Importation réussie !");
+            },
+            onError: (errors) => {
+                setIsImporting(false);
+                toast.error(errors.file || "Erreur lors de l'importation");
+            },
+            forceFormData: true,
+        });
+    };
+
     if (!can.access) {
         return (
             <AppLayout>
@@ -323,6 +382,18 @@ export default function AssignmentManager({
                                 <Plus size={16} />
                                 Ajouter en masse
                             </Button>
+                        )}
+                        {can.edit && (
+                            <>
+                                <Button onClick={exportAssignments} className="gap-2 shadow-sm">
+                                    <Download size={16} />
+                                    Exporter Excel
+                                </Button>
+                                <Button onClick={() => setIsImportModalOpen(true)} className="gap-2 shadow-sm">
+                                    <Upload size={16} />
+                                    Importer Excel
+                                </Button>
+                            </>
                         )}
                         <Button variant="outline" onClick={resetFilters} className="gap-2 shadow-sm">
                             <X size={16} />
@@ -378,24 +449,30 @@ export default function AssignmentManager({
                                     <Table>
                                         <TableHeader className="bg-gray-50 dark:bg-gray-800">
                                             <TableRow>
-                                                <TableHead>Institution</TableHead>
+                                                <TableHead>Promotion</TableHead>
+                                                <TableHead>Nom du cours</TableHead>
+                                                <TableHead>Semestre</TableHead>
+                                                <TableHead>CM</TableHead>
+                                                <TableHead>TP</TableHead>
+                                                <TableHead>TD</TableHead>
+                                                <TableHead>Crédits</TableHead>
                                                 <TableHead>Titulaire</TableHead>
                                                 <TableHead>Collaborateur</TableHead>
-                                                <TableHead>Cours</TableHead> {/* Nouvel intitulé */}
-                                                <TableHead>Année académique</TableHead>
-                                                <TableHead>Observation</TableHead>
                                                 <TableHead className="text-right">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {paginatedAssignments.map((assignment) => (
                                                 <TableRow key={assignment.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                    <TableCell>{assignment.institution}</TableCell>
+                                                    <TableCell>{assignment.promotion}</TableCell>
+                                                    <TableCell>{assignment.course}</TableCell>
+                                                    <TableCell>{assignment.semester}</TableCell>
+                                                    <TableCell>{assignment.cm}</TableCell>
+                                                    <TableCell>{assignment.tp}</TableCell>
+                                                    <TableCell>{assignment.td}</TableCell>
+                                                    <TableCell>{assignment.credits}</TableCell>
                                                     <TableCell>{assignment.holder}</TableCell>
                                                     <TableCell>{assignment.collaborator || '-'}</TableCell>
-                                                    <TableCell>{assignment.course}</TableCell> {/* Nouveau champ */}
-                                                    <TableCell>{assignment.academic_year}</TableCell>
-                                                    <TableCell>{assignment.observation || '-'}</TableCell>
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
                                                             {can.edit && (
@@ -523,7 +600,7 @@ export default function AssignmentManager({
                                     <Table>
                                         <TableHeader className="bg-gray-100">
                                             <TableRow>
-                                                <TableHead className="w-[180px]">Cours *</TableHead> {/* Nouvel intitulé */}
+                                                <TableHead className="w-[180px]">Cours *</TableHead>
                                                 <TableHead className="w-[150px]">Année académique *</TableHead>
                                                 <TableHead className="w-[180px]">Titulaire *</TableHead>
                                                 <TableHead className="w-[180px]">Collaborateur</TableHead>
@@ -536,7 +613,7 @@ export default function AssignmentManager({
                                                 <TableRow key={index}>
                                                     <TableCell>
                                                         <Select
-                                                            value={assignment.course_id} // Nouveau champ
+                                                            value={assignment.course_id}
                                                             onValueChange={(value) => handleAssignmentChange(index, 'course_id', value)}
                                                         >
                                                             <SelectTrigger>
@@ -729,6 +806,64 @@ export default function AssignmentManager({
                                 )}
                             </Button>
                         </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal Importation Excel */}
+                <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+                    <DialogContent className="sm:max-w-[600px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-xl">
+                                <Upload className="h-5 w-5" />
+                                Importer des attributions
+                            </DialogTitle>
+                            <DialogDescription>
+                                Téléversez un fichier Excel contenant la liste des attributions
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleImportSubmit} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>Fichier Excel *</Label>
+                                <div 
+                                    className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer bg-gray-50"
+                                    onClick={() => document.getElementById('import-file')?.click()}
+                                >
+                                    <input 
+                                        id="import-file"
+                                        type="file" 
+                                        className="hidden" 
+                                        accept=".xlsx,.xls,.csv"
+                                        onChange={(e) => {
+                                            if (e.target.files?.[0]) {
+                                                setImportFile(e.target.files[0]);
+                                            }
+                                        }}
+                                    />
+                                    {importFile ? (
+                                        <p className="font-medium">{importFile.name}</p>
+                                    ) : (
+                                        <>
+                                            <Download className="mx-auto h-8 w-8 text-gray-400" />
+                                            <p className="mt-2 font-medium">Glissez votre fichier ici</p>
+                                            <p className="text-sm text-gray-500">Formats supportés: XLSX, XLS, CSV</p>
+                                            <Button type="button" variant="outline" className="mt-2">
+                                                Sélectionner un fichier
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setIsImportModalOpen(false)}>
+                                    Annuler
+                                </Button>
+                                <Button type="submit" disabled={isImporting} className="gap-2">
+                                    {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                    Importer
+                                </Button>
+                            </DialogFooter>
+                        </form>
                     </DialogContent>
                 </Dialog>
             </div>

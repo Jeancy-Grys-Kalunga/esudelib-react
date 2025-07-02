@@ -12,6 +12,7 @@ use Modules\Institution\Entities\Promotion;
 use Modules\Institution\Entities\UnitsTeaching;
 use Modules\Institution\Entities\CourseCategory;
 use Modules\Institution\Entities\CourseProgramDetail;
+use Modules\Institution\Entities\Semestre; // Ajouté
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
@@ -95,8 +96,9 @@ class ProgramController extends Controller
             'defaultInstitution' => $defaultInstitution,
             'promotions' => Promotion::all(['id', 'title as name']),
             'units' => UnitsTeaching::all(['id', 'title as name']),
-            'categories' => CourseCategory::all(['id', 'title as name']),
+            'categories' => CourseCategory::all(['id', 'name']),
             'courses' => Course::all(['id', 'title as name']),
+            'semestres' => Semestre::all(['id', 'title']), // Ajouté
         ]);
     }
 
@@ -168,6 +170,7 @@ class ProgramController extends Controller
             'units' => UnitsTeaching::all(['id', 'title as name']),
             'categories' => CourseCategory::all(['id', 'name']),
             'courses' => Course::all(['id', 'title as name']),
+            'semestres' => Semestre::all(['id', 'title']), // Ajouté
         ]);
     }
 
@@ -192,6 +195,7 @@ class ProgramController extends Controller
                 'course_details.*.promotion_id' => 'required|exists:promotions,id',
                 'course_details.*.units_teaching_id' => 'required|exists:units_teachings,id',
                 'course_details.*.course_category_id' => 'required|exists:course_categories,id',
+                'course_details.*.semestre_id' => 'required|exists:semestres,id', // Ajouté
                 'course_details.*.cm' => 'required|numeric|min:0',
                 'course_details.*.td' => 'required|numeric|min:0',
                 'course_details.*.tp' => 'required|numeric|min:0',
@@ -206,6 +210,7 @@ class ProgramController extends Controller
                     'promotion_id' => $detail['promotion_id'],
                     'units_teaching_id' => $detail['units_teaching_id'],
                     'course_category_id' => $detail['course_category_id'],
+                    'semestre_id' => $detail['semestre_id'], // Ajouté
                     'cm' => (float)$detail['cm'],
                     'td' => (float)$detail['td'],
                     'tp' => (float)$detail['tp'],
@@ -243,7 +248,9 @@ class ProgramController extends Controller
         }
 
         // Charger les détails avec la méthode optimisée
-        $program = $program->loadDetails();
+        $program->load(['courseDetails' => function ($query) {
+            $query->with(['course', 'promotion', 'unitsTeaching', 'category', 'semestre']);
+        }]);
 
         return Inertia::render('program/details', [
             'program' => [
@@ -261,6 +268,8 @@ class ProgramController extends Controller
                         'units_teaching' => $detail->unitsTeaching?->title,
                         'course_category_id' => $detail->course_category_id,
                         'course_category' => $detail->category?->name,
+                        'semestre_id' => $detail->semestre_id, // Ajouté
+                        'semestre' => $detail->semestre?->title, // Ajouté
                         'cm' => $detail->cm,
                         'td' => $detail->td,
                         'tp' => $detail->tp,
@@ -272,6 +281,7 @@ class ProgramController extends Controller
             'units' => UnitsTeaching::all(['id', 'title as name']),
             'categories' => CourseCategory::all(['id', 'name']),
             'courses' => Course::all(['id', 'title as name']),
+            'semestres' => Semestre::all(['id', 'title']), // Ajouté
         ]);
     }
 
@@ -296,6 +306,7 @@ class ProgramController extends Controller
                 'course_details.*.promotion_id' => 'required|exists:promotions,id',
                 'course_details.*.units_teaching_id' => 'required|exists:units_teachings,id',
                 'course_details.*.course_category_id' => 'required|exists:course_categories,id',
+                'course_details.*.semestre_id' => 'required|exists:semestres,id', // Ajouté
                 'course_details.*.cm' => 'required|numeric|min:0',
                 'course_details.*.td' => 'required|numeric|min:0',
                 'course_details.*.tp' => 'required|numeric|min:0',
@@ -309,6 +320,7 @@ class ProgramController extends Controller
                     'promotion_id' => $detail['promotion_id'],
                     'units_teaching_id' => $detail['units_teaching_id'],
                     'course_category_id' => $detail['course_category_id'],
+                    'semestre_id' => $detail['semestre_id'], // Ajouté
                     'cm' => (float)$detail['cm'],
                     'td' => (float)$detail['td'],
                     'tp' => (float)$detail['tp'],

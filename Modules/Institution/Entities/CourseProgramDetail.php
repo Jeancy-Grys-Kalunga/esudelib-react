@@ -18,7 +18,8 @@ class CourseProgramDetail extends Model
         'cm',
         'td',
         'tp',
-        'credits'
+        'credits',
+        'semestre_id'
     ];
 
     protected $casts = [
@@ -52,5 +53,10 @@ class CourseProgramDetail extends Model
     public function category()
     {
         return $this->belongsTo(CourseCategory::class, 'course_category_id');
+    }
+
+     public function semestre()
+    {
+        return $this->belongsTo(Semestre::class);
     }
 }

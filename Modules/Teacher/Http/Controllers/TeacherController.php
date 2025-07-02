@@ -2,13 +2,25 @@
 
 namespace Modules\Teacher\Http\Controllers;
 
+use App\Exports\CourseStudentsExport;
 use App\Http\Controllers\Controller;
+use App\Imports\GradesImport;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
+use Modules\Institution\Entities\AcademicYear;
+use Modules\Institution\Entities\Course;
+use Modules\Institution\Entities\ExamSession;
 use Modules\Institution\Entities\Institution;
+use Modules\Institution\Entities\Promotion;
+use Modules\Student\Entities\Appeal;
 use Modules\Teacher\Entities\Teacher;
 use Modules\Teacher\Http\Requests\StoreTeacherRequest;
 use Modules\Teacher\Http\Requests\UpdateTeacherRequest;
@@ -113,7 +125,14 @@ class TeacherController extends Controller
         $teacher = Teacher::create($request->except('document', 'institutions'));
         $teacher->institutions()->sync($request->institutions);
 
-        $this->handleUserCreation($teacher, $request->institutions);
+        // Création des utilisateurs et récupération du premier ID
+        $firstUserId = $this->handleUserCreation($teacher, $request->institutions);
+
+        // Mise à jour du teacher avec le user_id
+        if ($firstUserId) {
+            $teacher->update(['user_id' => $firstUserId]);
+        }
+
         $this->handleMediaUpload($teacher, $request->document);
 
         return redirect()->route('teachers.index')->with([
@@ -123,6 +142,7 @@ class TeacherController extends Controller
             ],
         ]);
     }
+
 
     public function edit(Teacher $teacher)
     {
@@ -162,6 +182,18 @@ class TeacherController extends Controller
             }
         }
 
+        // Synchroniser le user_id principal si nécessaire
+        if (!$teacher->user_id && $teacher->institutions->isNotEmpty()) {
+            $firstInstitution = $teacher->institutions->first();
+            $email = Str::slug($teacher->name) . Str::slug($firstInstitution->name) . '@esudelib.com';
+            $user = User::where('email', $email)->first();
+
+            if ($user) {
+                $teacher->update(['user_id' => $user->id]);
+            }
+        }
+
+
         return redirect()->route('teachers.index')->with([
             'flash' => [
                 'type'    => 'info',
@@ -186,11 +218,412 @@ class TeacherController extends Controller
         ]);
     }
 
+
+    /**
+     * Affiche la liste des cours attribués à l'enseignant
+     */
+    public function courses(Request $request)
+    {
+        $user = auth()->user();
+
+        // Vérifier si l'utilisateur a un enseignant associé
+        if (!$user->teacher) {
+            abort(403, "Vous n'êtes pas associé à un enseignant");
+        }
+
+        // Récupérer les cours de l'enseignant avec les détails du programme et de la catégorie
+        $courses = Course::select(
+            'courses.id',
+            'courses.title',
+            'course_program_details.cm',
+            'course_program_details.td',
+            'course_program_details.tp',
+            'course_program_details.credits',
+            'course_categories.name as category_name',
+            'programs.name as program'
+        )
+            ->join('course_program_details', 'courses.id', '=', 'course_program_details.course_id')
+            ->join('course_categories', 'course_program_details.course_category_id', '=', 'course_categories.id')
+            ->join('programs', 'course_program_details.program_id', '=', 'programs.id')
+            ->whereIn('courses.id', $user->teacher->courses()->pluck('courses.id'))
+            ->get()
+            ->map(function ($course) {
+                return [
+                    'id' => $course->id,
+                    'title' => $course->title,
+                    'cm' => $course->cm,
+                    'td' => $course->td,
+                    'tp' => $course->tp,
+                    'credits' => $course->credits,
+                    'program' => $course->program,
+                    'category_name' => $course->category_name,
+                    'student_count' => Course::find($course->id)->students()->count(),
+                    'appeals_count' => Course::find($course->id)->appeals()->count(),
+                ];
+            });
+
+        return Inertia::render('teacher/courses', [
+            'courses' => $courses,
+        ]);
+    }
+
+
+    public function exportStudents(Course $course)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $fileName = 'etudiants_' . Str::slug($course->title) . '_' . now()->format('Ymd_His') . '.xlsx';
+
+        try {
+            return Excel::download(
+                new CourseStudentsExport($course),
+                $fileName
+            );
+        } catch (\Throwable $e) {
+            \Log::error('Erreur export étudiants : ' . $e->getMessage(), ['exception' => $e]);
+            return response()->json([
+                'error' => 'Échec de l\'exportation des étudiants. Veuillez réessayer.',
+            ], 500);
+        }
+    }
+
+    public function showSubmitForm(Course $course)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $institutionId = auth()->user()->teacher->institutions()->first()->id;
+
+        return Inertia::render('teacher/submitGrades', [
+            'course' => $course->only('id', 'title'),
+            'academicYears' => AcademicYear::all(['id', 'title']),
+            'promotions' => Promotion::all(['id', 'title']),
+            'examSessions' => ExamSession::where('institution_id', $institutionId)
+                ->get(['id', 'title', 'status', 'acceptance_rate']),
+        ]);
+    }
+
+    public function submitGrades(Request $request, Course $course)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $request->validate([
+            'grades_file' => 'required|mimes:xlsx,xls',
+            'promotion_id' => 'required|exists:promotions,id',
+            'academic_year_id' => 'required|exists:academic_years,id',
+            'exam_session_id' => 'required|exists:exam_sessions,id',
+        ]);
+
+        $academicYear = AcademicYear::find($request->academic_year_id);
+        $promotion = Promotion::find($request->promotion_id);
+        $examSession = ExamSession::find($request->exam_session_id);
+
+        // Vérifier si la session est ouverte
+        if ($examSession->status !== 'open') {
+            return back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => 'La session d\'examen est fermée. Vous ne pouvez pas soumettre de notes.',
+                ],
+            ]);
+        }
+
+        Excel::import(
+            new GradesImport($course, $promotion, $academicYear, $request->session, $examSession->id),
+            $request->file('grades_file')
+        );
+
+        $successRate = $this->calculateSuccessRate($course);
+
+        // Vérifier le taux de réussite
+        if ($successRate < $examSession->acceptance_rate) {
+            return back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => "Le taux de réussite ($successRate%) est inférieur au minimum requis ({$examSession->acceptance_rate}%).",
+                ],
+            ]);
+        }
+
+        return redirect()->route('teacher.courses')->with([
+            'flash' => [
+                'type' => $successRate >= $examSession->acceptance_rate ? 'success' : 'warning',
+                'message' => $successRate >= $examSession->acceptance_rate
+                    ? 'Cotation soumise avec succès et acceptée par le jury'
+                    : 'Cotation soumise mais taux de réussite insuffisant (' . $successRate . '%)',
+            ],
+        ]);
+    }
+
+    public function appeals(Course $course)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $appeals = Appeal::where('course_id', $course->id)
+            ->with(['student:id,name,matricule', 'appealDocuments'])
+            ->get()
+            ->map(function ($appeal) {
+                return [
+                    'id' => $appeal->id,
+                    'object' => json_decode($appeal->objects), // Décoder les objets multiples
+                    'status' => $appeal->status,
+                    'created_at' => $appeal->created_at->format('d/m/Y'),
+                    'student' => $appeal->student->name,
+                    'matricule' => $appeal->student->matricule,
+                    'documents' => $appeal->appealDocuments->map(fn($doc) => [
+                        'name' => $doc->name,
+                        'url' => Storage::url($doc->path),
+                    ]),
+                ];
+            });
+
+        // Marquer les notifications comme lues
+        NotificationService::markAsReadForCourseAppeals($course->id);
+
+        return Inertia::render('teacher/appeals', [
+            'appeals' => $appeals,
+            'course' => $course->only('id', 'title'),
+        ]);
+    }
+
+    /**
+     * Affiche l'éditeur en ligne pour un cours
+     */
+    public function showOnlineEditor(Course $course, Request $request)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $institutionId = auth()->user()->teacher->institutions()->first()->id;
+        
+        // Récupérer la promotion associée au cours
+        $courseProgramDetail = $course->courseProgramDetails()->first();
+        $promotion = $courseProgramDetail ? $courseProgramDetail->promotion : null;
+
+        return Inertia::render('teacher/online-editor', [
+            'course' => $course->only('id', 'title', 'code'),
+            'academicYears' => AcademicYear::all(['id', 'title']),
+            'promotion' => $promotion ? ['id' => $promotion->id, 'title' => $promotion->title] : null,
+            'examSessions' => ExamSession::where('institution_id', $institutionId)
+                ->get(['id', 'title', 'status', 'acceptance_rate']),
+        ]);
+    }
+
+    /**
+     * API pour récupérer les étudiants avec leurs notes pour l'éditeur en ligne
+     */
+    public function getOnlineEditorData(Course $course, Request $request)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            return response()->json(['error' => 'Action non autorisée'], 403);
+        }
+
+        // Validation des paramètres
+        $validator = Validator::make($request->all(), [
+            'academic_year_id' => 'required|exists:academic_years,id',
+            'exam_session_id' => 'required|exists:exam_sessions,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Paramètres invalides',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        // Récupérer la promotion du cours
+        $courseProgramDetail = $course->courseProgramDetails()->first();
+        if (!$courseProgramDetail) {
+            return response()->json(['error' => 'Ce cours n\'est associé à aucune promotion.'], 404);
+        }
+        $promotionId = $courseProgramDetail->promotion_id;
+
+        $academicYearId = $request->input('academic_year_id');
+        $examSessionId = $request->input('exam_session_id');
+
+        // Récupération des étudiants avec leurs notes
+        $students = $course->students()
+            ->with(['notes' => function ($query) use ($course, $academicYearId, $promotionId, $examSessionId) {
+                $query->where('course_id', $course->id)
+                    ->where('academic_year_id', $academicYearId)
+                    ->where('promotion_id', $promotionId)
+                    ->where('exam_session_id', $examSessionId);
+            }])
+            ->get()
+            ->map(function ($student) {
+                $note = $student->notes->first();
+                return [
+                    'uid' => (string) $student->id,
+                    'id' => $student->id,
+                    'matricule' => $student->matricule,
+                    'name' => $student->name,
+                    'cote' => $note->cote ?? null,
+                    'observation' => $note->observation ?? null,
+                    'situation' => $note->situation ?? null,
+                    'participation' => $note->participation ?? null,
+                ];
+            });
+
+        return response()->json([
+            'students' => $students,
+        ]);
+    }
+
+    public function saveGrades(Request $request, Course $course)
+    {
+        if (!$this->isTeacherAssignedToCourse($course)) {
+            abort(403, 'Action non autorisée');
+        }
+
+        // Récupérer la promotion du cours
+        $courseProgramDetail = $course->courseProgramDetails()->first();
+        if (!$courseProgramDetail) {
+            return response()->json(['error' => 'Ce cours n\'est associé à aucune promotion.'], 404);
+        }
+        $promotionId = $courseProgramDetail->promotion_id;
+
+        // Validation des données
+        $validator = Validator::make($request->all(), [
+            'grades' => 'required|array',
+            'grades.*.student_id' => 'required|exists:students,id',
+            'grades.*.cote' => 'nullable|numeric|min:0|max:20',
+            'grades.*.observation' => 'nullable|string|max:255',
+            'grades.*.situation' => 'nullable|string|max:50',
+            'grades.*.participation' => 'nullable|string|max:50',
+            'academic_year_id' => 'required|exists:academic_years,id',
+            'exam_session_id' => 'required|exists:exam_sessions,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'type' => 'error',
+                'message' => 'Erreur de validation',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $examSession = ExamSession::find($request->exam_session_id);
+
+        // Vérifier si la session est ouverte
+        if ($examSession->status !== 'open') {
+            return back()->with([
+                'flash' => [
+                    'type' => 'error',
+                'message' => 'La session d\'examen est fermée. Vous ne pouvez pas soumettre de notes.'
+                ],
+            ]);
+        }
+
+        // Nouvelle logique: Vérification et mise à jour des notes existantes
+        $successCount = 0;
+        $totalStudents = count($request->grades);
+        $hasGrades = false;
+        $updatedStudents = [];
+
+        foreach ($request->grades as $grade) {
+            $existingNote = DB::table('notes')
+                ->where('course_id', $course->id)
+                ->where('student_id', $grade['student_id'])
+                ->where('academic_year_id', $request->academic_year_id)
+                ->where('promotion_id', $promotionId) // Utiliser la promotion du cours
+                ->where('exam_session_id', $request->exam_session_id)
+                ->first();
+
+            $data = [
+                'cote' => $grade['cote'] ?? null,
+                'observation' => $grade['observation'] ?? '',
+                'situation' => $grade['situation'] ?? '',
+                'participation' => $grade['participation'] ?? '',
+                'is_submitted' => true,
+                'updated_at' => now(),
+            ];
+
+            if ($existingNote) {
+                // Mise à jour si la note existe
+                DB::table('notes')
+                    ->where('id', $existingNote->id)
+                    ->update($data);
+            } else {
+                // Création si nouvelle note
+                DB::table('notes')->insert(array_merge([
+                    'course_id' => $course->id,
+                    'student_id' => $grade['student_id'],
+                    'academic_year_id' => $request->academic_year_id,
+                    'promotion_id' => $promotionId, // Utiliser la promotion du cours
+                    'exam_session_id' => $request->exam_session_id,
+                    'created_at' => now(),
+                ], $data));
+            }
+
+            // Calcul du taux de réussite
+            if (isset($grade['cote']) && $grade['cote'] !== null) {
+                $hasGrades = true;
+                if ($grade['cote'] >= 10) $successCount++;
+            }
+
+            $updatedStudents[] = [
+                'student_id' => $grade['student_id'],
+                'cote' => $grade['cote'] ?? null,
+                'observation' => $grade['observation'] ?? null,
+                'situation' => $grade['situation'] ?? null,
+                'participation' => $grade['participation'] ?? null,
+            ];
+        }
+
+        $successRate = $hasGrades && $totalStudents > 0 ? ($successCount / $totalStudents) * 100 : 0;
+
+        return response()->json([
+            'type' => 'success',
+            'message' => 'Modifications enregistrées avec succès!',
+            'students' => $updatedStudents,
+            'success_rate' => round($successRate, 2)
+        ]);
+    }
+
+    /**
+     * Vérifie si l'enseignant est assigné au cours
+     */
+    private function isTeacherAssignedToCourse(Course $course): bool
+    {
+        return auth()->user()->teacher->courses()
+            ->where('course_id', $course->id)
+            ->exists();
+    }
+
+    /**
+     * Calcule le taux de réussite pour un cours
+     */
+    private function calculateSuccessRate(Course $course): float
+    {
+        $students = $course->students()->with('notes')->get();
+        $totalStudents = $students->count();
+        $successCount = 0;
+
+        foreach ($students as $student) {
+            $note = $student->notes->firstWhere('course_id', $course->id);
+            if ($note && $note->cote >= 10) {
+                $successCount++;
+            }
+        }
+
+        return $totalStudents > 0 ? round(($successCount / $totalStudents) * 100, 2) : 0;
+    }
+
     private function handleUserCreation(Teacher $teacher, array $institutionIds)
     {
+        $firstUserId = null;
+
         foreach ($institutionIds as $institutionId) {
             $institution = Institution::find($institutionId);
-            $email       = Str::slug($teacher->name) . Str::slug($institution->name) . '@esudelib.com';
+            $email = Str::slug($teacher->name) . Str::slug($institution->name) . '@esudelib.com';
 
             $user = User::create([
                 'name'      => $teacher->name,
@@ -201,8 +634,16 @@ class TeacherController extends Controller
 
             $user->assignRole('Enseignant');
             $user->institutions()->attach($institutionId);
+
+            // Stocker le premier user_id créé
+            if (is_null($firstUserId)) {
+                $firstUserId = $user->id;
+            }
         }
+
+        return $firstUserId;
     }
+
 
     private function syncInstitutions(Teacher $teacher, array $newInstitutions)
     {

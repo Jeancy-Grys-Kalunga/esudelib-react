@@ -2,6 +2,7 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { BookOpen, Calendar, Download, Edit, Loader2, Plus, Search, Trash2, Upload, User, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
+import { Checkbox } from '@/components/ui/checkbox';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -36,6 +37,7 @@ type AcademicYear = {
 type Promotion = {
     id: string;
     title: string;
+    institution_id?: string;
 };
 
 type PageProps = {
@@ -50,6 +52,7 @@ type PageProps = {
     flash?: {
         type: 'success' | 'error' | 'warning' | 'info';
         message: string;
+        equivalences?: any[];
     };
     institutions: Institution[];
     academicYears: AcademicYear[];
@@ -67,6 +70,15 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
     const [itemsPerPage] = useState(10);
     const [file, setFile] = useState<File | null>(null);
     const [isImporting, setIsImporting] = useState(false);
+    
+    // États pour la recherche d'équivalence
+    const [isTransferStudent, setIsTransferStudent] = useState(false);
+    const [oldInstitutionId, setOldInstitutionId] = useState('');
+    const [oldPromotionId, setOldPromotionId] = useState('');
+    const [oldInstitutions, setOldInstitutions] = useState<Institution[]>([]);
+    const [oldPromotions, setOldPromotions] = useState<Promotion[]>([]);
+    const [showEquivalenceModal, setShowEquivalenceModal] = useState(false);
+    const [equivalenceResults, setEquivalenceResults] = useState<any[]>([]);
 
     const { data, setData, post, errors, processing, reset } = useForm({
         name: '',
@@ -76,6 +88,9 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
         institution_id: '',
         academic_year_id: '',
         promotion_id: '',
+        is_transfer: false,
+        old_institution_id: '',
+        old_promotion_id: '',
     });
 
     const importForm = useForm<{
@@ -106,6 +121,35 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
         setFilteredInscriptions(results);
         setCurrentPage(1);
     }, [searchTerm, allInscriptions]);
+
+    useEffect(() => {
+        // Mettre à jour les anciennes institutions (exclure l'institution actuelle)
+        if (data.institution_id && institutions.length > 0) {
+            const filtered = institutions.filter(inst => inst.id !== data.institution_id);
+            setOldInstitutions(filtered);
+        } else {
+            setOldInstitutions([...institutions]);
+        }
+    }, [data.institution_id, institutions]);
+
+    useEffect(() => {
+        // Mettre à jour les anciennes promotions basées sur l'institution sélectionnée
+        if (oldInstitutionId && promotions.length > 0) {
+            const filtered = promotions.filter(promo => 
+                promo.institution_id === oldInstitutionId
+            );
+            setOldPromotions(filtered);
+        } else {
+            setOldPromotions([]);
+        }
+    }, [oldInstitutionId, promotions]);
+
+    useEffect(() => {
+        if (flash?.equivalences) {
+            setEquivalenceResults(flash.equivalences);
+            setShowEquivalenceModal(true);
+        }
+    }, [flash]);
 
     const paginatedInscriptions = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
@@ -138,6 +182,9 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
     const closeModal = () => {
         setIsModalOpen(false);
+        setIsTransferStudent(false);
+        setOldInstitutionId('');
+        setOldPromotionId('');
         reset();
     };
 
@@ -149,7 +196,18 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        
+        // Ajouter les données de transfert si nécessaire
+        const formData = {
+            ...data,
+            is_transfer: isTransferStudent,
+            old_institution_id: isTransferStudent ? oldInstitutionId : '',
+            old_promotion_id: isTransferStudent ? oldPromotionId : '',
+        };
+        
         post(route('subscriptions.store'), {
+            // @ts-ignore
+            data: formData,
             onSuccess: () => closeModal(),
         });
     };
@@ -373,7 +431,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
                 {/* Modal Nouvelle Inscription */}
                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogContent className="max-h-[90vh] sm:max-w-[700px]">
+                    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[700px]">
                         <DialogHeader>
                             <DialogTitle className="flex items-center gap-2 text-xl">
                                 <BookOpen className="h-5 w-5" />
@@ -484,6 +542,67 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                 </div>
                             </div>
 
+                            {/* Section Étudiant transféré */}
+                            <div className="pt-4 border-t">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Checkbox 
+                                        id="is_transfer"
+                                        checked={isTransferStudent}
+                                        onCheckedChange={(checked) => setIsTransferStudent(checked === true)}
+                                    />
+                                    <Label htmlFor="is_transfer" className="font-medium">
+                                        Étudiant transféré d'une autre institution
+                                    </Label>
+                                </div>
+
+                                {isTransferStudent && (
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                        <div className="space-y-2">
+                                            <Label>Ancienne institution *</Label>
+                                            <Select 
+                                                value={oldInstitutionId} 
+                                                onValueChange={setOldInstitutionId}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Sélectionnez l'ancienne institution" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {oldInstitutions.map((inst) => (
+                                                        <SelectItem key={inst.id} value={inst.id}>
+                                                            {inst.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Ancienne promotion *</Label>
+                                            <Select 
+                                                value={oldPromotionId} 
+                                                onValueChange={setOldPromotionId}
+                                                disabled={!oldInstitutionId}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={
+                                                        oldInstitutionId 
+                                                            ? "Sélectionnez l'ancienne promotion" 
+                                                            : "Sélectionnez d'abord une institution"
+                                                    } />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {oldPromotions.map((promo) => (
+                                                        <SelectItem key={promo.id} value={promo.id}>
+                                                            {promo.title}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <DialogFooter>
                                 <Button type="button" variant="outline" onClick={closeModal}>
                                     Annuler
@@ -494,6 +613,76 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                 </Button>
                             </DialogFooter>
                         </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal Résultats d'Équivalence */}
+                <Dialog open={showEquivalenceModal} onOpenChange={setShowEquivalenceModal}>
+                    <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-3xl">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-xl">
+                                <BookOpen className="h-5 w-5" />
+                                Résultats d'équivalence de formation
+                            </DialogTitle>
+                            <DialogDescription>
+                                {equivalenceResults.length > 0 
+                                    ? `${equivalenceResults.length} cours équivalents trouvés` 
+                                    : "Aucune équivalence trouvée entre les programmes"}
+                            </DialogDescription>
+                        </DialogHeader>
+                        
+                        <div className="space-y-4">
+                            {equivalenceResults.length > 0 ? (
+                                <div className="overflow-hidden rounded-lg border">
+                                    <Table>
+                                        <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                                            <TableRow>
+                                                <TableHead className="w-2/5">Cours précédent</TableHead>
+                                                <TableHead className="w-2/5">Équivalent actuel</TableHead>
+                                                <TableHead className="w-1/5 text-right">Correspondance</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {equivalenceResults.map((result, index) => (
+                                                <TableRow key={index}>
+                                                    <TableCell className="font-medium">{result.old_course}</TableCell>
+                                                    <TableCell>{result.new_course}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="flex items-center justify-end">
+                                                            <span className="mr-2 font-medium text-green-600">
+                                                                {Math.round(result.match_percentage)}%
+                                                            </span>
+                                                            <div className="relative h-2 w-32 rounded-full bg-gray-200">
+                                                                <div 
+                                                                    className="absolute inset-y-0 left-0 rounded-full bg-green-500 transition-all duration-700"
+                                                                    style={{ width: `${result.match_percentage}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-8">
+                                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                                        <X className="h-8 w-8 text-gray-500" />
+                                    </div>
+                                    <h3 className="text-lg font-medium">Aucune équivalence trouvée</h3>
+                                    <p className="text-muted-foreground text-center mt-2">
+                                        Les programmes des deux institutions ne présentent pas de cours équivalents.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <DialogFooter>
+                            <Button onClick={() => setShowEquivalenceModal(false)}>
+                                Fermer
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
 

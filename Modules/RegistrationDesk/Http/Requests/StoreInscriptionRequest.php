@@ -28,7 +28,11 @@ class StoreInscriptionRequest extends FormRequest
                 })
             ],
             'academic_year_id' => 'required|exists:academic_years,id',
-            'promotion_id' => 'required|exists:promotions,id'
+            'promotion_id' => 'required|exists:promotions,id',
+            'is_transfer' => 'sometimes|boolean',
+            'old_institution_id' => 'required_if:is_transfer,true|exists:institutions,id',
+            'old_promotion_id' => 'required_if:is_transfer,true|exists:promotions,id'
+
         ];
     }
 

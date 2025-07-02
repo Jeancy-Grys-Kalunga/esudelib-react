@@ -20,6 +20,10 @@ use Modules\Institution\Entities\Promotion;
 use Modules\RegistrationDesk\Http\Requests\UpdateInscriptionRequest as RequestsUpdateInscriptionRequest;
 use Modules\Student\Entities\Student;
 use Spatie\Permission\Models\Permission;
+// Ajout des nouveaux modèles nécessaires
+use Modules\Institution\Entities\Course;
+use Modules\Institution\Entities\Program;
+use Modules\Institution\Entities\CourseProgramDetail;
 
 class SubscriptionController extends Controller
 {
@@ -138,6 +142,19 @@ class SubscriptionController extends Controller
                 'institution_id' => $request->institution_id,
                 'promotion_id' => $request->promotion_id,
             ]);
+
+            // Vérification d'équivalence si étudiant transféré
+            if ($request->is_transfer) {
+                $equivalences = $this->checkCourseEquivalence(
+                    $request->old_institution_id,
+                    $request->old_promotion_id,
+                    $request->institution_id,
+                    $request->promotion_id
+                );
+
+                // Stocker les équivalences en session pour affichage
+                session()->flash('equivalences', $equivalences);
+            }
 
             return redirect()->route('subscriptions.index')->with([
                 'flash' => [
@@ -303,7 +320,71 @@ class SubscriptionController extends Controller
     {
         return session('flash') ? [
             'message' => session('flash')['message'] ?? null,
-            'type' => session('flash')['type'] ?? null
+            'type' => session('flash')['type'] ?? null,
+            'equivalences' => session('flash')['equivalences'] ?? null,
         ] : null;
+    }
+
+    /**
+     * Vérifie les équivalences de cours entre deux institutions
+     *
+     * @param int $oldInstitutionId
+     * @param int $oldPromotionId
+     * @param int $newInstitutionId
+     * @param int $newPromotionId
+     * @return array
+     */
+    private function checkCourseEquivalence($oldInstitutionId, $oldPromotionId, $newInstitutionId, $newPromotionId)
+    {
+        // Récupérer les programmes des deux institutions
+        $oldProgram = Program::where('institution_id', $oldInstitutionId)
+                        ->where('promotion_id', $oldPromotionId)
+                        ->first();
+
+        $newProgram = Program::where('institution_id', $newInstitutionId)
+                        ->where('promotion_id', $newPromotionId)
+                        ->first();
+
+        if (!$oldProgram || !$newProgram) {
+            return [];
+        }
+
+        // Récupérer les cours des deux programmes
+        $oldCourses = CourseProgramDetail::with('course')
+                    ->where('program_id', $oldProgram->id)
+                    ->get();
+
+        $newCourses = CourseProgramDetail::with('course')
+                    ->where('program_id', $newProgram->id)
+                    ->get();
+
+        // Trouver les équivalences
+        $equivalences = [];
+        $matchedCourseIds = [];
+
+        foreach ($oldCourses as $oldCourse) {
+            foreach ($newCourses as $newCourse) {
+                // Comparaison par titre de cours (peut être amélioré avec des codes uniques)
+                $similarity = 0;
+                similar_text(
+                    strtolower($oldCourse->course->name), 
+                    strtolower($newCourse->course->name), 
+                    $similarity
+                );
+
+                if ($similarity > 80 && !in_array($newCourse->course_id, $matchedCourseIds)) {
+                    $equivalences[] = [
+                        'old_course' => $oldCourse->course->name,
+                        'new_course' => $newCourse->course->name,
+                        'match_percentage' => $similarity
+                    ];
+
+                    $matchedCourseIds[] = $newCourse->course_id;
+                    break;
+                }
+            }
+        }
+
+        return $equivalences;
     }
 }

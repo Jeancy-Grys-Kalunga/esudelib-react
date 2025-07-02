@@ -58,4 +58,12 @@ class Assignment extends Model
     {
         return $this->belongsTo(Institution::class);
     }
+
+
+     public function getPromotionAttribute()
+    {
+        return $this->course->courseProgramDetails
+            ->where('promotion_id', $this->course->courseProgramDetails->first()->promotion_id)
+            ->first()->promotion ?? null;
+    }
 }

@@ -98,6 +98,24 @@ const secretaryItems: NavItem[] = [
         isActive: route().current('programs.index'),
         color: 'text-indigo-500',
     },
+
+    {
+        title: 'Gérer Session Examen',
+        href: '/exam-sessions',
+        icon: FilePlus,
+        isActive: route().current('exam-sessions.index'),
+        color: 'text-indigo-500',
+    },
+];
+
+const TeacherFeaturesItems: NavItem[] = [
+    {
+        title: 'Mes Cours',
+        href: '/teacher/courses',
+        icon: Bookmark,
+        isActive: route().current('teacher.courses.index'),
+        color: 'text-indigo-500',
+    },
 ];
 
 const StudentItems: NavItem[] = [
@@ -233,6 +251,15 @@ const groupedNavItems: GroupedNavItem[] = [
         items: secretaryItems,
         permission: 'access_secretary_features',
         isActive: route().current('courses.*') || route().current('units-teachings.*'),
+    },
+
+    {
+        groupTitle: 'Espace Enseignant',
+        icon: ClipboardCheck,
+        color: 'text-cyan-500',
+        items: TeacherFeaturesItems,
+        permission: 'access_teacher_features',
+        isActive: route().current('teachers.*') || route().current('teacher.courses.*') || route().current('teacher.courses.appeals'),
     },
 
     {

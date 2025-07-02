@@ -1,6 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import { Edit, Loader2, Plus, Trash2 } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
 import { Button } from '@/components/ui/button';
@@ -31,12 +31,18 @@ type CourseCategory = {
     name: string;
 };
 
+type Semestre = {
+    id: number;
+    title: string;
+};
+
 type CourseDetail = {
     id?: number;
     course_id: string;
     promotion_id: string;
     units_teaching_id: string;
     course_category_id: string;
+    semestre_id: string; // Ajouté
     cm: number | string;
     td: number | string;
     tp: number | string;
@@ -57,14 +63,24 @@ interface ProgramDetailsPageProps extends PageProps {
     promotions: Promotion[];
     units: UnitsTeaching[];
     categories: CourseCategory[];
+    semestres: Semestre[]; // Ajouté
 }
 
-export default function ProgramDetailsForm({ program, courses, promotions, units, categories, flash }: ProgramDetailsPageProps) {
+export default function ProgramDetailsForm({ 
+    program, 
+    courses, 
+    promotions, 
+    units, 
+    categories, 
+    semestres, // Ajouté
+    flash 
+}: ProgramDetailsPageProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [courseDetails, setCourseDetails] = useState<CourseDetail[]>(
         program.course_details?.length
             ? program.course_details.map((detail) => ({
                   ...detail,
+                  semestre_id: detail.semestre_id || '', // Ajouté
                   cm: detail.cm.toString(),
                   td: detail.td.toString(),
                   tp: detail.tp.toString(),
@@ -77,6 +93,7 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
                       promotion_id: promotions.length > 0 ? promotions[0].id.toString() : '',
                       units_teaching_id: units.length > 0 ? units[0].id.toString() : '',
                       course_category_id: categories.length > 0 ? categories[0].id.toString() : '',
+                      semestre_id: semestres.length > 0 ? semestres[0].id.toString() : '', // Ajouté
                       cm: '',
                       td: '',
                       tp: '',
@@ -94,11 +111,47 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
         setData('course_details', courseDetails);
     }, [courseDetails]);
 
+    // Calculer les cours disponibles (non utilisés)
+    const availableCourses = useMemo(() => {
+        const usedCourseIds = new Set(
+            courseDetails.map(detail => detail.course_id)
+        );
+        
+        return courses.filter(
+            course => !usedCourseIds.has(course.id.toString())
+        );
+    }, [courses, courseDetails]);
+
+    // Fonction de calcul des crédits
+    const calculateCredits = (cm: string | number, td: string | number, tp: string | number): string => {
+        const safeConvert = (value: string | number): number => {
+            if (typeof value === 'number') return value;
+            const trimmed = String(value).trim();
+            if (trimmed === '') return 0;
+            const normalized = trimmed.replace(',', '.');
+            const num = parseFloat(normalized);
+            return isNaN(num) ? 0 : num;
+        };
+
+        const cmValue = safeConvert(cm);
+        const tdValue = safeConvert(td);
+        const tpValue = safeConvert(tp);
+        const totalHours = cmValue + tdValue + tpValue;
+        const creditsValue = totalHours / 15;
+        return parseFloat(creditsValue.toFixed(2)).toString();
+    };
+
     const validateFields = () => {
         const newErrors: Record<string, string> = {};
 
         courseDetails.forEach((detail, index) => {
-            const requiredFields: Array<keyof CourseDetail> = ['course_id', 'promotion_id', 'units_teaching_id', 'course_category_id'];
+            const requiredFields: Array<keyof CourseDetail> = [
+                'course_id', 
+                'promotion_id', 
+                'units_teaching_id', 
+                'course_category_id',
+                'semestre_id' // Ajouté
+            ];
 
             requiredFields.forEach((field) => {
                 if (!detail[field] || detail[field] === '') {
@@ -137,13 +190,19 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
     }, [flash]);
 
     const addCourseDetail = () => {
+        if (availableCourses.length === 0) {
+            toast.warning('Tous les cours sont déjà ajoutés');
+            return;
+        }
+
         setCourseDetails([
             ...courseDetails,
             {
-                course_id: courses.length > 0 ? courses[0].id.toString() : '',
+                course_id: availableCourses.length > 0 ? availableCourses[0].id.toString() : '',
                 promotion_id: promotions.length > 0 ? promotions[0].id.toString() : '',
                 units_teaching_id: units.length > 0 ? units[0].id.toString() : '',
                 course_category_id: categories.length > 0 ? categories[0].id.toString() : '',
+                semestre_id: semestres.length > 0 ? semestres[0].id.toString() : '', // Ajouté
                 cm: '',
                 td: '',
                 tp: '',
@@ -162,7 +221,18 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
 
     const updateCourseDetail = (index: number, field: keyof CourseDetail, value: string | number) => {
         const newDetails = [...courseDetails];
-        newDetails[index] = { ...newDetails[index], [field]: value };
+        const updatedDetail = { ...newDetails[index], [field]: value };
+
+        // Recalcul automatique si modification de CM/TD/TP
+        if (field === 'cm' || field === 'td' || field === 'tp') {
+            updatedDetail.credits = calculateCredits(
+                updatedDetail.cm,
+                updatedDetail.td,
+                updatedDetail.tp
+            );
+        }
+
+        newDetails[index] = updatedDetail;
         setCourseDetails(newDetails);
     };
 
@@ -203,13 +273,11 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
                     preserveScroll: true,
                     onSuccess: () => reset(),
                     onError: (errors) => {
-                        // Affiche les erreurs globales
                         if (errors.course_details) {
                             toast.error(errors.course_details);
                         } else {
                             toast.error('Erreur de validation');
                         }
-                        // Affiche les erreurs spécifiques dans le formulaire
                         Object.entries(errors).forEach(([key, value]) => {
                             if (typeof value === 'string') {
                                 toast.error(`${key}: ${value}`);
@@ -223,13 +291,11 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
                     preserveScroll: true,
                     onSuccess: () => reset(),
                     onError: (errors) => {
-                        // Affiche les erreurs globales
                         if (errors.course_details) {
                             toast.error(errors.course_details);
                         } else {
                             toast.error('Erreur de validation');
                         }
-                        // Affiche les erreurs spécifiques dans le formulaire
                         Object.entries(errors).forEach(([key, value]) => {
                             if (typeof value === 'string') {
                                 toast.error(`${key}: ${value}`);
@@ -263,7 +329,14 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
                     <div className="border-t pt-6">
                         <div className="mb-6 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
                             <h3 className="text-lg font-medium">Cours du programme</h3>
-                            <Button type="button" onClick={addCourseDetail} variant="outline" size="sm" className="flex items-center gap-1">
+                            <Button 
+                                type="button" 
+                                onClick={addCourseDetail} 
+                                variant="outline" 
+                                size="sm" 
+                                className="flex items-center gap-1"
+                                disabled={availableCourses.length === 0}
+                            >
                                 <Plus className="h-4 w-4" />
                                 Ajouter un cours
                             </Button>
@@ -275,15 +348,44 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
                                     key={index}
                                     className="mb-2 grid grid-cols-1 gap-6 rounded-xl border bg-white p-6 shadow-sm transition-all md:grid-cols-2 lg:grid-cols-4 dark:bg-gray-900"
                                 >
+                                    {/* Semestre */}
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`semestre_id_${index}`}>Semestre *</Label>
+                                        <Select
+                                            value={detail.semestre_id}
+                                            onValueChange={(value) => updateCourseDetail(index, 'semestre_id', value)}
+                                        >
+                                            <SelectTrigger className="focus:ring-primary-500 w-full min-w-0 border-gray-300 focus:ring-2">
+                                                <SelectValue placeholder="Sélectionnez un semestre" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {semestres.map((semestre) => (
+                                                    <SelectItem key={semestre.id} value={semestre.id.toString()}>
+                                                        {semestre.title}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {fieldErrors[`${index}_semestre_id`] && (
+                                            <p className="text-sm text-red-500">{fieldErrors[`${index}_semestre_id`]}</p>
+                                        )}
+                                    </div>
+
                                     {/* Cours */}
                                     <div className="col-span-1 space-y-2 lg:col-span-2">
                                         <Label htmlFor={`course_id_${index}`}>Cours *</Label>
-                                        <Select value={detail.course_id} onValueChange={(value) => updateCourseDetail(index, 'course_id', value)}>
+                                        <Select 
+                                            value={detail.course_id} 
+                                            onValueChange={(value) => updateCourseDetail(index, 'course_id', value)}
+                                        >
                                             <SelectTrigger className="focus:ring-primary-500 w-full max-w-full min-w-0 truncate border-gray-300 focus:ring-2">
-                                                <SelectValue placeholder="Sélectionnez un cours" className="truncate" />
+                                                <SelectValue 
+                                                    placeholder={availableCourses.length ? "Sélectionnez un cours" : "Aucun cours disponible"} 
+                                                    className="truncate" 
+                                                />
                                             </SelectTrigger>
                                             <SelectContent className="max-h-72 w-[350px] md:w-[420px]">
-                                                {courses.map((course) => (
+                                                {availableCourses.map((course) => (
                                                     <SelectItem
                                                         key={course.id}
                                                         value={course.id.toString()}
@@ -370,13 +472,12 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
 
                                     {/* CM */}
                                     <div className="space-y-2">
-                                        <Label htmlFor={`cm_${index}`}>CM (h)</Label>
+                                        <Label htmlFor={`cm_${index}`}>CMI (h)</Label>
                                         <Input
-                                            type="text" // Changé en type "text" pour gérer les virgules
+                                            type="text"
                                             value={detail.cm}
                                             onChange={(e) => {
                                                 const value = e.target.value;
-                                                // On permet les nombres à virgule
                                                 if (value === '' || /^[0-9]*[,.]?[0-9]*$/.test(value)) {
                                                     updateCourseDetail(index, 'cm', value);
                                                 }
@@ -426,27 +527,37 @@ export default function ProgramDetailsForm({ program, courses, promotions, units
                                         )}
                                     </div>
 
-                                    {/* Crédits */}
+                                    {/* Crédits (lecture seule) */}
                                     <div className="space-y-2">
                                         <Label htmlFor={`credits_${index}`}>Crédits</Label>
                                         <Input
                                             type="text"
                                             value={detail.credits}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-                                                if (value === '' || /^[0-9]*[,.]?[0-9]*$/.test(value)) {
-                                                    updateCourseDetail(index, 'credits', value);
-                                                }
-                                            }}
-                                            className="w-full"
+                                            readOnly
+                                            className="w-full bg-gray-100 dark:bg-gray-800 cursor-default"
                                         />
                                         {fieldErrors[`${index}_credits`] && (
                                             <p className="text-sm text-red-500">{fieldErrors[`${index}_credits`]}</p>
                                         )}
                                     </div>
 
-                                    {/* Supprimer */}
-                                    <div className="col-span-1 mt-2 flex justify-end lg:col-span-4">
+                                    {/* Boutons */}
+                                    <div className="col-span-1 mt-2 flex justify-between lg:col-span-4">
+                                        <div>
+                                            {index === courseDetails.length - 1 && (
+                                                <Button
+                                                    type="button"
+                                                    onClick={addCourseDetail}
+                                                    variant="outline"
+                                                    className="flex items-center gap-1"
+                                                    disabled={availableCourses.length === 0}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                    Ajouter un autre cours
+                                                </Button>
+                                            )}
+                                        </div>
+                                        
                                         <Button
                                             type="button"
                                             variant="destructive"

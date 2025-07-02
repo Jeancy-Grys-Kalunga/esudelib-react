@@ -41,4 +41,11 @@ class AcademicYear extends Model
     {
         return $this->hasMany(Assignment::class, 'academic_year_id', 'id');
     }
+
+
+    // Dans Modules\Institution\Entities\AcademicYear.php
+    public static function current()
+    {
+        return self::latest()->first();
+    }
 }
