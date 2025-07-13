@@ -1,7 +1,9 @@
 'use client';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink } from '@/components/ui/pagination';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,20 +15,24 @@ import {
     AlertTriangle,
     ArrowLeft,
     ArrowRight,
+    ArrowRightLeft,
+    ArrowUpDown,
     Award,
     BarChart,
     Check,
     Download,
     GraduationCap,
+    Layers,
     Loader2,
     Pencil,
     PlusCircle,
     Save,
+    Scale,
     Search,
     User,
     X,
 } from 'lucide-react';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 
@@ -35,6 +41,7 @@ type Course = {
     id: number;
     title: string;
     credit?: number;
+    orientation?: string;
 };
 
 type NoteData = {
@@ -70,6 +77,12 @@ type GridData = {
     }>;
 };
 
+type TeachingUnit = {
+    id: number;
+    title: string;
+    courses: Course[];
+};
+
 type ResultsGridProps = {
     students: {
         data: Student[];
@@ -80,6 +93,7 @@ type ResultsGridProps = {
     allCourses: Course[];
     gridData: GridData;
     flash?: { type: string; message: string };
+    teachingUnits: TeachingUnit[];
 };
 
 // Composant EditableCell
@@ -224,35 +238,50 @@ const ResultsTable = ({
         if (highlightedStudentId && rowRefs.current[highlightedStudentId]) {
             rowRefs.current[highlightedStudentId]?.scrollIntoView({
                 behavior: 'smooth',
-                block: 'center'
+                block: 'center',
             });
         }
     }, [highlightedStudentId]);
 
     // Fonction pour obtenir la couleur de la décision
     const getDecisionColor = (decision: string) => {
-        switch(decision) {
-            case 'A': return 'bg-purple-100 text-purple-800';
-            case 'B': return 'bg-blue-100 text-blue-800';
-            case 'C': return 'bg-green-100 text-green-800';
-            case 'D': return 'bg-teal-100 text-teal-800';
-            case 'E': return 'bg-amber-100 text-amber-800';
-            case 'F': return 'bg-orange-100 text-orange-800';
-            case 'G': return 'bg-red-100 text-red-800';
-            case 'AJ': return 'bg-red-200 text-red-900';
-            case 'DEF': return 'bg-gray-200 text-gray-900';
-            default: return 'bg-gray-100 text-gray-800';
+        switch (decision) {
+            case 'A':
+                return 'bg-purple-100 text-purple-800';
+            case 'B':
+                return 'bg-blue-100 text-blue-800';
+            case 'C':
+                return 'bg-green-100 text-green-800';
+            case 'D':
+                return 'bg-teal-100 text-teal-800';
+            case 'E':
+                return 'bg-amber-100 text-amber-800';
+            case 'F':
+                return 'bg-orange-100 text-orange-800';
+            case 'G':
+                return 'bg-red-100 text-red-800';
+            case 'AJ':
+                return 'bg-red-200 text-red-900';
+            case 'DEF':
+                return 'bg-gray-200 text-gray-900';
+            default:
+                return 'bg-gray-100 text-gray-800';
         }
     };
 
     // Fonction pour obtenir la couleur de la mention
     const getMentionColor = (mention: string) => {
-        switch(mention) {
-            case 'Admis': return 'bg-green-100 text-green-800';
-            case 'Comp': return 'bg-yellow-100 text-yellow-800';
-            case 'AJ': return 'bg-red-100 text-red-800';
-            case 'DEF': return 'bg-gray-100 text-gray-800';
-            default: return 'bg-gray-100 text-gray-800';
+        switch (mention) {
+            case 'Admis':
+                return 'bg-green-100 text-green-800';
+            case 'Comp':
+                return 'bg-yellow-100 text-yellow-800';
+            case 'AJ':
+                return 'bg-red-100 text-red-800';
+            case 'DEF':
+                return 'bg-gray-100 text-gray-800';
+            default:
+                return 'bg-gray-100 text-gray-800';
         }
     };
 
@@ -316,15 +345,17 @@ const ResultsTable = ({
                         <TableHead className="min-w-[100px] px-4 py-3 text-center">Besoin</TableHead>
                         <TableHead className="min-w-[100px] px-4 py-3 text-center">Décision</TableHead>
                         <TableHead className="min-w-[100px] px-4 py-3 text-center">Mention</TableHead>
-                        {showActions && <TableHead className="sticky right-0 min-w-[100px] bg-white px-4 py-3 text-center">Actions</TableHead>}
+                  
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {students.map((student) => (
-                        <TableRow 
-                            key={student.id} 
-                            ref={(el) => { rowRefs.current[student.id] = el; }}
-                            className={`hover:bg-gray-50 ${highlightedStudentId === student.id ? 'bg-yellow-100 animate-pulse duration-1000' : ''}`}
+                        <TableRow
+                            key={student.id}
+                            ref={(el) => {
+                                rowRefs.current[student.id] = el;
+                            }}
+                            className={`hover:bg-gray-50 ${highlightedStudentId === student.id ? 'animate-pulse bg-yellow-100 duration-1000' : ''}`}
                         >
                             <TableCell className="sticky left-0 border-b bg-white px-4 py-3">{student.matricule}</TableCell>
                             <TableCell className="sticky left-0 border-b bg-white px-4 py-3 font-medium">{student.name}</TableCell>
@@ -372,14 +403,7 @@ const ResultsTable = ({
                                     {student.mention}
                                 </Badge>
                             </TableCell>
-                            {showActions && (
-                                <TableCell className="sticky right-0 border-b bg-white px-4 py-3 text-center">
-                                    <Button variant="ghost" size="sm" className="text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800">
-                                        <Pencil className="mr-1 h-4 w-4" />
-                                        Modifier
-                                    </Button>
-                                </TableCell>
-                            )}
+          
                         </TableRow>
                     ))}
                 </TableBody>
@@ -405,7 +429,7 @@ const AcademicHistoryModal = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
             <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-xl bg-white p-6 shadow-lg">
                 <div className="flex items-center justify-between border-b pb-4">
                     <h2 className="text-2xl font-bold text-gray-900">
@@ -446,15 +470,9 @@ const AcademicHistoryModal = ({
                                 <table className="min-w-full">
                                     <thead className="bg-indigo-50">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-sm font-semibold text-indigo-800">
-                                                Promotion
-                                            </th>
-                                            <th className="px-6 py-3 text-left text-sm font-semibold text-indigo-800">
-                                                Cours Validés
-                                            </th>
-                                            <th className="px-6 py-3 text-left text-sm font-semibold text-indigo-800">
-                                                Cours Complémentaires
-                                            </th>
+                                            <th className="px-6 py-3 text-left text-sm font-semibold text-indigo-800">Promotion</th>
+                                            <th className="px-6 py-3 text-left text-sm font-semibold text-indigo-800">Cours Validés</th>
+                                            <th className="px-6 py-3 text-left text-sm font-semibold text-indigo-800">Cours Complémentaires</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
@@ -464,7 +482,7 @@ const AcademicHistoryModal = ({
 
                                             return (
                                                 <tr key={`${year.academic_year_id}-${year.promotion_id}`} className="hover:bg-gray-50">
-                                                    <td className="whitespace-nowrap px-6 py-4">
+                                                    <td className="px-6 py-4 whitespace-nowrap">
                                                         <div className="font-medium text-gray-900">{year.promotion}</div>
                                                         <div className="text-sm text-gray-500">{year.academic_year}</div>
                                                     </td>
@@ -480,20 +498,14 @@ const AcademicHistoryModal = ({
                                                                     >
                                                                         <div>
                                                                             <div className="font-medium">{course.title}</div>
-                                                                            <div className="text-sm text-gray-600">
-                                                                                {course.credits} crédits
-                                                                            </div>
+                                                                            <div className="text-sm text-gray-600">{course.credits} crédits</div>
                                                                         </div>
-                                                                        <Badge className="bg-green-100 text-green-800">
-                                                                            {course.note}/20
-                                                                        </Badge>
+                                                                        <Badge className="bg-green-100 text-green-800">{course.note}/20</Badge>
                                                                     </div>
                                                                 ))}
                                                             </div>
                                                         ) : (
-                                                            <div className="text-center italic text-gray-400">
-                                                                Aucun cours validé
-                                                            </div>
+                                                            <div className="text-center text-gray-400 italic">Aucun cours validé</div>
                                                         )}
                                                     </td>
 
@@ -508,22 +520,16 @@ const AcademicHistoryModal = ({
                                                                     >
                                                                         <div>
                                                                             <div className="font-medium">{course.title}</div>
-                                                                            <div className="text-sm text-gray-600">
-                                                                                {course.credits} crédits
-                                                                            </div>
+                                                                            <div className="text-sm text-gray-600">{course.credits} crédits</div>
                                                                         </div>
                                                                         <Badge className="bg-amber-100 text-amber-800">
-                                                                            {course.note
-                                                                                ? `${course.note}/20`
-                                                                                : 'Non suivi'}
+                                                                            {course.note ? `${course.note}/20` : 'Non suivi'}
                                                                         </Badge>
                                                                     </div>
                                                                 ))}
                                                             </div>
                                                         ) : (
-                                                            <div className="text-center italic text-gray-400">
-                                                                Aucun cours complémentaire
-                                                            </div>
+                                                            <div className="text-center text-gray-400 italic">Aucun cours complémentaire</div>
                                                         )}
                                                     </td>
                                                 </tr>
@@ -536,21 +542,14 @@ const AcademicHistoryModal = ({
                                                 <div className="flex justify-between">
                                                     <span>Total crédits validés:</span>
                                                     <span className="text-green-600">
-                                                        {historyData.history.reduce(
-                                                            (total: number, year: any) => {
-                                                                return (
-                                                                    total +
-                                                                    year.courses
-                                                                        .filter((c: any) => c.passed)
-                                                                        .reduce(
-                                                                            (sum: number, course: any) =>
-                                                                                sum + parseFloat(course.credits),
-                                                                            0
-                                                                        )
-                                                                );
-                                                            },
-                                                            0
-                                                        )}
+                                                        {historyData.history.reduce((total: number, year: any) => {
+                                                            return (
+                                                                total +
+                                                                year.courses
+                                                                    .filter((c: any) => c.passed)
+                                                                    .reduce((sum: number, course: any) => sum + parseFloat(course.credits), 0)
+                                                            );
+                                                        }, 0)}
                                                     </span>
                                                 </div>
                                             </td>
@@ -558,12 +557,9 @@ const AcademicHistoryModal = ({
                                                 <div className="flex justify-between">
                                                     <span>Total crédits complémentaires:</span>
                                                     <span className="text-amber-600">
-                                                        {historyData.complementary_courses.reduce(
-                                                            (total: number, course: any) => {
-                                                                return total + parseFloat(course.credits);
-                                                            },
-                                                            0
-                                                        )}
+                                                        {historyData.complementary_courses.reduce((total: number, course: any) => {
+                                                            return total + parseFloat(course.credits);
+                                                        }, 0)}
                                                     </span>
                                                 </div>
                                             </td>
@@ -588,9 +584,7 @@ const AcademicHistoryModal = ({
                                             >
                                                 <div className="font-medium text-amber-800">{course.title}</div>
                                                 <div className="mt-2 flex items-center justify-between">
-                                                    <div className="text-sm text-amber-700">
-                                                        {course.credits} crédits
-                                                    </div>
+                                                    <div className="text-sm text-amber-700">{course.credits} crédits</div>
                                                     <div className="text-sm font-semibold text-amber-800">
                                                         {course.note ? `${course.note}/20` : 'Non suivi'}
                                                     </div>
@@ -616,7 +610,7 @@ const AcademicHistoryModal = ({
     );
 };
 
-export default function ResultsGrid({ students, academicYear, promotion, allCourses, gridData, flash }: ResultsGridProps) {
+export default function ResultsGrid({ students, academicYear, promotion, allCourses, gridData, flash, teachingUnits = [] }: ResultsGridProps) {
     const [isSaving, setIsSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState<string | null>(null);
     const [changes, setChanges] = useState<
@@ -646,6 +640,43 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
     const [searchQuery, setSearchQuery] = useState('');
     const [highlightedStudentId, setHighlightedStudentId] = useState<number | null>(null);
     const tabsRef = useRef<HTMLDivElement>(null);
+
+    // États pour la pérequation
+    const [equalizationModalOpen, setEqualizationModalOpen] = useState(false);
+    const [selectedEqualizationOption, setSelectedEqualizationOption] = useState<number | null>(null);
+    const [selectedUE, setSelectedUE] = useState<number | null>(null);
+    const [selectedCredit, setSelectedCredit] = useState<number | null>(null);
+    const [applyingEqualization, setApplyingEqualization] = useState(false);
+
+    // Options de pérequation
+    const equalizationOptions = [
+        {
+            id: 1,
+            type: 'global',
+            title: 'Péréquation Globale',
+            description: 'Utilise la réserve totale pour combler les échecs dans tous les cours',
+            icon: <Scale className="h-6 w-6 text-purple-500" />,
+        },
+        {
+            id: 2,
+            type: 'ue',
+            title: 'Péréquation par UE',
+            description: "Utilise la réserve dans une unité d'enseignement pour combler ses échecs",
+            icon: <Layers className="h-6 w-6 text-blue-500" />,
+        },
+        {
+            id: 3,
+            type: 'coefficient',
+            title: 'Péréquation par Coefficient',
+            description: 'Utilise la réserve dans les cours de même crédit pour combler les échecs',
+            icon: <ArrowUpDown className="h-6 w-6 text-green-500" />,
+        },
+    ];
+
+    // Crédits distincts
+    const distinctCredits = Array.from(new Set(allCourses.map((course) => course.credit).filter((credit) => credit !== undefined) as number[])).sort(
+        (a, b) => a - b,
+    );
 
     useEffect(() => {
         if (flash?.message) {
@@ -806,7 +837,7 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
             const foundStudent = gridData.students.find(
                 (student) =>
                     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    student.matricule.toLowerCase().includes(searchQuery.toLowerCase())
+                    student.matricule.toLowerCase().includes(searchQuery.toLowerCase()),
             );
 
             if (foundStudent) {
@@ -815,13 +846,13 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
             } else {
                 toast.error('Aucun étudiant trouvé');
             }
-        } 
+        }
         // Recherche en mode Grille Individuelle
         else {
             const index = students.data.findIndex(
                 (student) =>
                     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    (student.matricule && student.matricule.toLowerCase().includes(searchQuery.toLowerCase()))
+                    (student.matricule && student.matricule.toLowerCase().includes(searchQuery.toLowerCase())),
             );
 
             if (index >= 0) {
@@ -840,30 +871,74 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
         setSearchQuery('');
     };
 
+    // Fonction pour appliquer la pérequation
+    const applyEqualization = async () => {
+        if (!selectedEqualizationOption || activeStudent === null) return;
+
+        const studentId = students.data[activeStudent]?.id;
+        if (!studentId) return;
+
+        const option = equalizationOptions.find((opt) => opt.id === selectedEqualizationOption);
+        if (!option) return;
+
+        setApplyingEqualization(true);
+        try {
+            await axios.post('/jury/apply-equalization', {
+                student_id: studentId,
+                type: option.type,
+                ue_id: selectedUE,
+                credit: selectedCredit,
+            });
+
+            toast.success('Péréquation appliquée avec succès');
+            router.reload({ only: ['students', 'gridData'] });
+        } catch (error) {
+            toast.error('Erreur lors de la péréquation');
+        } finally {
+            setApplyingEqualization(false);
+            setEqualizationModalOpen(false);
+        }
+    };
+
     // Fonction pour obtenir la couleur de la décision (pour la vue individuelle)
     const getDecisionColor = (decision: string) => {
-        switch(decision) {
-            case 'A': return 'bg-purple-100 text-purple-800';
-            case 'B': return 'bg-blue-100 text-blue-800';
-            case 'C': return 'bg-green-100 text-green-800';
-            case 'D': return 'bg-teal-100 text-teal-800';
-            case 'E': return 'bg-amber-100 text-amber-800';
-            case 'F': return 'bg-orange-100 text-orange-800';
-            case 'G': return 'bg-red-100 text-red-800';
-            case 'AJ': return 'bg-red-200 text-red-900';
-            case 'DEF': return 'bg-gray-200 text-gray-900';
-            default: return 'bg-gray-100 text-gray-800';
+        switch (decision) {
+            case 'A':
+                return 'bg-purple-100 text-purple-800';
+            case 'B':
+                return 'bg-blue-100 text-blue-800';
+            case 'C':
+                return 'bg-green-100 text-green-800';
+            case 'D':
+                return 'bg-teal-100 text-teal-800';
+            case 'E':
+                return 'bg-amber-100 text-amber-800';
+            case 'F':
+                return 'bg-orange-100 text-orange-800';
+            case 'G':
+                return 'bg-red-100 text-red-800';
+            case 'AJ':
+                return 'bg-red-200 text-red-900';
+            case 'DEF':
+                return 'bg-gray-200 text-gray-900';
+            default:
+                return 'bg-gray-100 text-gray-800';
         }
     };
 
     // Fonction pour obtenir la couleur de la mention (pour la vue individuelle)
     const getMentionColor = (mention: string) => {
-        switch(mention) {
-            case 'Admis': return 'bg-green-100 text-green-800';
-            case 'Comp': return 'bg-yellow-100 text-yellow-800';
-            case 'AJ': return 'bg-red-100 text-red-800';
-            case 'DEF': return 'bg-gray-100 text-gray-800';
-            default: return 'bg-gray-100 text-gray-800';
+        switch (mention) {
+            case 'Admis':
+                return 'bg-green-100 text-green-800';
+            case 'Comp':
+                return 'bg-yellow-100 text-yellow-800';
+            case 'AJ':
+                return 'bg-red-100 text-red-800';
+            case 'DEF':
+                return 'bg-gray-100 text-gray-800';
+            default:
+                return 'bg-gray-100 text-gray-800';
         }
     };
 
@@ -929,7 +1004,7 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-10"
                         />
-                        <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                        <Search className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-gray-400" />
                     </div>
                     <Button type="submit" variant="outline">
                         Rechercher
@@ -1002,6 +1077,14 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                                             >
                                                 <GraduationCap className="h-4 w-4" />
                                                 Voir le parcours académique
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => setEqualizationModalOpen(true)}
+                                                className="flex items-center gap-2 border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 hover:bg-purple-100"
+                                            >
+                                                <ArrowRightLeft className="h-4 w-4" />
+                                                Péréquation
                                             </Button>
                                             <Badge variant="outline" className={`${getDecisionColor(student.decision)} px-3 py-1 font-medium`}>
                                                 Décision: {student.decision}
@@ -1105,6 +1188,179 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                     loading={loadingHistory[student.id] || false}
                 />
             ))}
+
+            {/* Modal pour la pérequation */}
+            <Dialog open={equalizationModalOpen} onOpenChange={setEqualizationModalOpen}>
+                <DialogContent className="max-w-2xl rounded-xl bg-white shadow-xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-3 text-xl">
+                            <ArrowRightLeft className="h-6 w-6 text-purple-600" />
+                            <span>Péréquation des Notes</span>
+                        </DialogTitle>
+                        <DialogDescription>Transférez les points excédentaires pour combler les échecs</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-6 py-4">
+                        {activeStudent !== null && students.data[activeStudent] && (
+                            <div className="rounded-xl border border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50 p-5">
+                                <div className="mb-4 flex items-center gap-4">
+                                    <User className="h-5 w-5 text-indigo-600" />
+                                    <h3 className="font-semibold text-indigo-800">Étudiant: {students.data[activeStudent]?.name}</h3>
+                                    <Badge variant="outline" className="bg-indigo-100 text-indigo-800">
+                                        Réserve: {students.data[activeStudent]?.reserve}
+                                    </Badge>
+                                    <Badge variant="outline" className="bg-amber-100 text-amber-800">
+                                        Besoin: {students.data[activeStudent]?.need}
+                                    </Badge>
+                                </div>
+
+                                <Accordion type="single" collapsible>
+                                    {equalizationOptions.map((option) => (
+                                        <AccordionItem key={option.id} value={`item-${option.id}`} className="mb-3 border-b-0">
+                                            <AccordionTrigger
+                                                onClick={() => setSelectedEqualizationOption(option.id)}
+                                                className={`rounded-lg p-4 hover:no-underline ${
+                                                    selectedEqualizationOption === option.id ? 'border border-indigo-200 bg-indigo-50' : 'bg-gray-50'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className="rounded-lg border bg-white p-2">{option.icon}</div>
+                                                    <div className="text-left">
+                                                        <h4 className="font-semibold">{option.title}</h4>
+                                                        <p className="text-sm text-gray-500">{option.description}</p>
+                                                    </div>
+                                                </div>
+                                            </AccordionTrigger>
+
+                                            <AccordionContent className="rounded-lg border border-gray-100 bg-white px-4 pb-4 shadow-sm">
+                                                {option.type === 'global' && (
+                                                    <div className="space-y-4">
+                                                        <div className="flex items-center gap-3 rounded-lg bg-purple-50 p-3">
+                                                            <Scale className="h-5 w-5 text-purple-600" />
+                                                            <p className="text-sm">
+                                                                Cette option utilisera toute la réserve disponible (
+                                                                {students.data[activeStudent]?.reserve}) pour combler les échecs dans tous les cours.
+                                                            </p>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-3 rounded-lg bg-green-50 p-3">
+                                                            <Check className="h-5 w-5 text-green-600" />
+                                                            <p className="text-sm">
+                                                                Les points seront distribués proportionnellement aux besoins dans chaque cours.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {option.type === 'ue' && (
+                                                    <div className="space-y-4">
+                                                        <div className="flex items-center gap-3 rounded-lg bg-blue-50 p-3">
+                                                            <Layers className="h-5 w-5 text-blue-600" />
+                                                            <p className="text-sm">
+                                                                Sélectionnez une unité d'enseignement pour la pérequation interne.
+                                                            </p>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            {teachingUnits.map((ue) => (
+                                                                <div
+                                                                    key={ue.id}
+                                                                    className={`cursor-pointer rounded-lg border p-3 transition-all ${
+                                                                        selectedUE === ue.id
+                                                                            ? 'border-blue-500 bg-blue-50'
+                                                                            : 'border-gray-200 hover:border-blue-300'
+                                                                    }`}
+                                                                    onClick={() => setSelectedUE(ue.id)}
+                                                                >
+                                                                    <h4 className="font-medium">{ue.title}</h4>
+                                                                    <div className="mt-2 flex gap-2">
+                                                                        {ue.courses.slice(0, 3).map((course) => (
+                                                                            <Badge key={course.id} variant="outline" className="text-xs">
+                                                                                {course.title}
+                                                                            </Badge>
+                                                                        ))}
+                                                                        {ue.courses.length > 3 && (
+                                                                            <Badge variant="outline" className="text-xs">
+                                                                                +{ue.courses.length - 3}
+                                                                            </Badge>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {option.type === 'coefficient' && (
+                                                    <div className="space-y-4">
+                                                        <div className="flex items-center gap-3 rounded-lg bg-green-50 p-3">
+                                                            <ArrowUpDown className="h-5 w-5 text-green-600" />
+                                                            <p className="text-sm">
+                                                                Sélectionnez un coefficient pour la pérequation entre cours de même crédit.
+                                                            </p>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-4 gap-3">
+                                                            {distinctCredits.map((credit) => (
+                                                                <div
+                                                                    key={credit}
+                                                                    className={`cursor-pointer rounded-lg border p-3 text-center ${
+                                                                        selectedCredit === credit
+                                                                            ? 'border-green-500 bg-green-50'
+                                                                            : 'border-gray-200 hover:border-green-300'
+                                                                    }`}
+                                                                    onClick={() => setSelectedCredit(credit)}
+                                                                >
+                                                                    <div className="text-lg font-bold">{credit}</div>
+                                                                    <div className="text-xs text-gray-500">crédits</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    ))}
+                                </Accordion>
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-between">
+                            <div>
+                                {selectedEqualizationOption && (
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <Check className="h-4 w-4 text-green-500" />
+                                        <span>
+                                            Option sélectionnée:{' '}
+                                            <span className="font-medium">
+                                                {equalizationOptions.find((o) => o.id === selectedEqualizationOption)?.title}
+                                            </span>
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex gap-2">
+                                <Button variant="outline" onClick={() => setEqualizationModalOpen(false)}>
+                                    Annuler
+                                </Button>
+                                <Button
+                                    onClick={applyEqualization}
+                                    disabled={!selectedEqualizationOption || applyingEqualization}
+                                    className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700"
+                                >
+                                    {applyingEqualization ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <ArrowRightLeft className="mr-2 h-4 w-4" />
+                                    )}
+                                    Appliquer la péréquation
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }
