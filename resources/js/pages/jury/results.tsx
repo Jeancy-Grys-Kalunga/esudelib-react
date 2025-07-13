@@ -22,10 +22,11 @@ import {
     Pencil,
     PlusCircle,
     Save,
+    Search,
     User,
     X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 
@@ -178,6 +179,7 @@ const ResultsTable = ({
     showActions = false,
     onMassEdit,
     isSaving,
+    highlightedStudentId = null,
 }: {
     courses: Array<{ id: number; title: string; credit: number }>;
     students: Array<{
@@ -193,9 +195,11 @@ const ResultsTable = ({
     showActions?: boolean;
     onMassEdit?: (courseId: number, points: number) => void;
     isSaving?: boolean;
+    highlightedStudentId?: number | null;
 }) => {
     const [massEditPoints, setMassEditPoints] = useState<Record<number, string>>({});
     const [isMassEditing, setIsMassEditing] = useState<Record<number, boolean>>({});
+    const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
 
     const handleMassEdit = (courseId: number) => {
         if (onMassEdit) {
@@ -214,6 +218,16 @@ const ResultsTable = ({
         if (cote < 12) return 'bg-amber-100 text-amber-800';
         return 'bg-green-100 text-green-800';
     };
+
+    // Effet pour scroller vers l'étudiant surligné
+    useEffect(() => {
+        if (highlightedStudentId && rowRefs.current[highlightedStudentId]) {
+            rowRefs.current[highlightedStudentId]?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center'
+            });
+        }
+    }, [highlightedStudentId]);
 
     return (
         <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-lg">
@@ -278,7 +292,11 @@ const ResultsTable = ({
                 </TableHeader>
                 <TableBody>
                     {students.map((student) => (
-                        <TableRow key={student.id} className="hover:bg-gray-50">
+                        <TableRow 
+                            key={student.id} 
+                            ref={(el) => { rowRefs.current[student.id] = el; }}
+                            className={`hover:bg-gray-50 ${highlightedStudentId === student.id ? 'bg-yellow-100 animate-pulse duration-1000' : ''}`}
+                        >
                             <TableCell className="sticky left-0 border-b bg-white px-4 py-3">{student.matricule}</TableCell>
                             <TableCell className="sticky left-0 border-b bg-white px-4 py-3 font-medium">{student.name}</TableCell>
                             {courses.map((course) => {
@@ -586,6 +604,9 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
     const [loadingHistory, setLoadingHistory] = useState<Record<number, boolean>>({});
     const [saveTimer, setSaveTimer] = useState<NodeJS.Timeout | null>(null);
     const [academicHistoryModalOpen, setAcademicHistoryModalOpen] = useState<number | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [highlightedStudentId, setHighlightedStudentId] = useState<number | null>(null);
+    const tabsRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (flash?.message) {
@@ -737,6 +758,49 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
         loadAcademicHistory(studentId);
     };
 
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!searchQuery.trim()) return;
+
+        // Recherche en mode Grille d'Ensemble
+        if (viewMode === 'grid') {
+            const foundStudent = gridData.students.find(
+                (student) =>
+                    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    student.matricule.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+
+            if (foundStudent) {
+                setHighlightedStudentId(foundStudent.id);
+                setTimeout(() => setHighlightedStudentId(null), 3000);
+            } else {
+                toast.error('Aucun étudiant trouvé');
+            }
+        } 
+        // Recherche en mode Grille Individuelle
+        else {
+            const index = students.data.findIndex(
+                (student) =>
+                    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (student.matricule && student.matricule.toLowerCase().includes(searchQuery.toLowerCase()))
+            );
+
+            if (index >= 0) {
+                setActiveStudent(index);
+                // Scroller vers l'onglet
+                setTimeout(() => {
+                    if (tabsRef.current) {
+                        tabsRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 100);
+            } else {
+                toast.error('Aucun étudiant trouvé dans la page courante');
+            }
+        }
+
+        setSearchQuery('');
+    };
+
     return (
         <AppLayout>
             <div className="container mx-auto px-4 py-8">
@@ -789,6 +853,23 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                     </div>
                 </div>
 
+                {/* Barre de recherche */}
+                <form onSubmit={handleSearch} className="mb-6 flex items-center gap-2">
+                    <div className="relative flex-1">
+                        <Input
+                            type="text"
+                            placeholder="Rechercher un étudiant par nom ou matricule..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10"
+                        />
+                        <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                    </div>
+                    <Button type="submit" variant="outline">
+                        Rechercher
+                    </Button>
+                </form>
+
                 <Tabs value={viewMode} onValueChange={(v: any) => setViewMode(v)} className="mb-6">
                     {/* @ts-ignore */}
                     <TabsList className="w-full md:w-auto">
@@ -804,93 +885,96 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                         onChange={handleGradeChange}
                         onMassEdit={handleMassEdit}
                         isSaving={isSaving}
+                        highlightedStudentId={highlightedStudentId}
                     />
                 ) : (
-                    <Tabs value={activeStudent.toString()} onValueChange={(value) => setActiveStudent(Number(value))} className="mb-6">
-                        <TabsList
-                            value={activeStudent.toString()}
-                            onValueChange={(value) => setActiveStudent(Number(value))}
-                            className="flex w-full overflow-x-auto"
-                        >
+                    <div ref={tabsRef}>
+                        <Tabs value={activeStudent.toString()} onValueChange={(value) => setActiveStudent(Number(value))} className="mb-6">
+                            <TabsList
+                                value={activeStudent.toString()}
+                                onValueChange={(value) => setActiveStudent(Number(value))}
+                                className="flex w-full overflow-x-auto"
+                            >
+                                {students.data.map((student, index) => (
+                                    <TabsTrigger
+                                        key={student.id}
+                                        value={index.toString()}
+                                        className="flex items-center gap-2"
+                                        active={activeStudent === index}
+                                    >
+                                        <User className="h-4 w-4" />
+                                        {student.name}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+
                             {students.data.map((student, index) => (
-                                <TabsTrigger
-                                    key={student.id}
-                                    value={index.toString()}
-                                    className="flex items-center gap-2"
-                                    active={activeStudent === index}
-                                >
-                                    <User className="h-4 w-4" />
-                                    {student.name}
-                                </TabsTrigger>
+                                <TabsContent key={student.id} value={index.toString()} active={activeStudent === index} className="space-y-4">
+                                    <div className="mb-4">
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <GraduationCap className="h-5 w-5 text-indigo-600" />
+                                                <span className="text-lg font-semibold">{student.name}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <Badge variant="secondary" className="bg-indigo-600 px-3 py-1 font-bold text-white">
+                                                    Moyenne: {student.average.toFixed(2)}
+                                                </Badge>
+                                                <Badge variant="outline" className="bg-amber-50 px-3 py-1 text-amber-800">
+                                                    Réserve: {student.reserve}
+                                                </Badge>
+                                                <Badge variant="outline" className="bg-blue-50 px-3 py-1 text-blue-800">
+                                                    Besoin: {student.need}
+                                                </Badge>
+                                            </div>
+                                        </div>
+                                        <div className="mt-3">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => openAcademicHistoryModal(student.id)}
+                                                className="flex items-center gap-2"
+                                            >
+                                                <GraduationCap className="h-4 w-4" />
+                                                Voir le parcours académique
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <ResultsTable
+                                        courses={student.notes.map((note) => ({
+                                            id: note.course_id,
+                                            title: note.course?.title || 'Cours inconnu',
+                                            credit: note.course?.credit || 0,
+                                        }))}
+                                        students={[
+                                            {
+                                                id: student.id,
+                                                name: student.name,
+                                                matricule: student.matricule || '',
+                                                average: student.average,
+                                                reserve: student.reserve,
+                                                need: student.need,
+                                                notes: student.notes.reduce(
+                                                    (acc, note) => {
+                                                        acc[note.course_id] = {
+                                                            id: note.id,
+                                                            value: note.cote,
+                                                        };
+                                                        return acc;
+                                                    },
+                                                    {} as Record<number, NoteData>,
+                                                ),
+                                            },
+                                        ]}
+                                        onChange={handleGradeChange}
+                                        showActions={true}
+                                        onMassEdit={handleMassEdit}
+                                        isSaving={isSaving}
+                                    />
+                                </TabsContent>
                             ))}
-                        </TabsList>
-
-                        {students.data.map((student, index) => (
-                            <TabsContent key={student.id} value={index.toString()} active={activeStudent === index} className="space-y-4">
-                                <div className="mb-4">
-                                    <div className="mb-2 flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <GraduationCap className="h-5 w-5 text-indigo-600" />
-                                            <span className="text-lg font-semibold">{student.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <Badge variant="secondary" className="bg-indigo-600 px-3 py-1 font-bold text-white">
-                                                Moyenne: {student.average.toFixed(2)}
-                                            </Badge>
-                                            <Badge variant="outline" className="bg-amber-50 px-3 py-1 text-amber-800">
-                                                Réserve: {student.reserve}
-                                            </Badge>
-                                            <Badge variant="outline" className="bg-blue-50 px-3 py-1 text-blue-800">
-                                                Besoin: {student.need}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3">
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => openAcademicHistoryModal(student.id)}
-                                            className="flex items-center gap-2"
-                                        >
-                                            <GraduationCap className="h-4 w-4" />
-                                            Voir le parcours académique
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                <ResultsTable
-                                    courses={student.notes.map((note) => ({
-                                        id: note.course_id,
-                                        title: note.course?.title || 'Cours inconnu',
-                                        credit: note.course?.credit || 0,
-                                    }))}
-                                    students={[
-                                        {
-                                            id: student.id,
-                                            name: student.name,
-                                            matricule: student.matricule || '',
-                                            average: student.average,
-                                            reserve: student.reserve,
-                                            need: student.need,
-                                            notes: student.notes.reduce(
-                                                (acc, note) => {
-                                                    acc[note.course_id] = {
-                                                        id: note.id,
-                                                        value: note.cote,
-                                                    };
-                                                    return acc;
-                                                },
-                                                {} as Record<number, NoteData>,
-                                            ),
-                                        },
-                                    ]}
-                                    onChange={handleGradeChange}
-                                    showActions={true}
-                                    onMassEdit={handleMassEdit}
-                                    isSaving={isSaving}
-                                />
-                            </TabsContent>
-                        ))}
-                    </Tabs>
+                        </Tabs>
+                    </div>
                 )}
 
                 {viewMode === 'individual' && (
