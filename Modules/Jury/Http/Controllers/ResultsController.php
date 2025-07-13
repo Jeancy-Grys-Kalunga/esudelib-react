@@ -145,11 +145,36 @@ class ResultsController extends Controller
             return $student;
         });
 
+       $teachingUnits = UnitsTeaching::where('promotion_id', $promotion->id)
+        ->with(['courses' => function($query) use ($promotion) {
+            $query->whereHas('courseProgramDetails', function($q) use ($promotion) {
+                $q->where('promotion_id', $promotion->id);
+            });
+        }])
+        ->get()
+        ->map(function ($unit) {
+            // Transformez la relation pivot en structure directe
+            $unit->courses = $unit->courses->map(function ($course) {
+                return [
+                    'id' => $course->id,
+                    'title' => $course->title,
+                    'credit' => $course->pivot->credits ?? 0, // Accès au crédit via pivot
+                    'orientation' => $course->orientation
+                ];
+            });
+            
+            return $unit;
+        });
+
+
+
         return Inertia::render('jury/results', [
             'students' => $students,
             'academicYear' => $academicYear,
             'promotion' => $promotion,
             'gridData' => $gridData,
+            'teachingUnits' => $teachingUnits,
+            'allCourses' => $allCourses
         ]);
     }
 
@@ -398,5 +423,177 @@ class ResultsController extends Controller
             'history' => $history,
             'complementary_courses' => $complementaryCourses
         ]);
+    }
+
+
+    /**
+     * Appliquer la pérequation des notes
+     */
+    public function applyEqualization(Request $request)
+    {
+        $request->validate([
+            'student_id' => 'required|exists:students,id',
+            'type' => 'required|in:global,ue,coefficient',
+            'ue_id' => 'nullable|integer',
+            'credit' => 'nullable|integer',
+        ]);
+
+        $context = $request->session()->get('jury_context');
+        $academicYearId = $context['academic_year_id'];
+        $promotionId = $context['promotion_id'];
+
+        $student = Student::with(['notes' => function ($query) use ($academicYearId, $promotionId) {
+            $query->where('academic_year_id', $academicYearId)
+                ->where('promotion_id', $promotionId)
+                ->with('course');
+        }])->findOrFail($request->student_id);
+
+        $coursesWithCredits = DB::table('course_program_details')
+            ->where('promotion_id', $promotionId)
+            ->pluck('credits', 'course_id')
+            ->toArray();
+
+        switch ($request->type) {
+            case 'global':
+                $this->applyGlobalEqualization($student, $coursesWithCredits);
+                break;
+            case 'ue':
+                $this->applyUeEqualization($student, $request->ue_id, $coursesWithCredits);
+                break;
+            case 'coefficient':
+                $this->applyCoefficientEqualization($student, $request->credit, $coursesWithCredits);
+                break;
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Péréquation appliquée avec succès'
+        ]);
+    }
+
+    /**
+     * Option 1: Pérequation globale
+     */
+    private function applyGlobalEqualization($student, $coursesWithCredits)
+    {
+        $reserve = 0;
+        $needs = [];
+
+        foreach ($student->notes as $note) {
+            $credits = $coursesWithCredits[$note->course_id] ?? 0;
+
+            if ($note->cote > 10) {
+                $reserve += ($note->cote - 10) * $credits;
+            } elseif ($note->cote < 10) {
+                $needs[$note->course_id] = [
+                    'credits' => $credits,
+                    'need' => (10 - $note->cote) * $credits
+                ];
+            }
+        }
+
+        $totalNeed = array_sum(array_column($needs, 'need'));
+
+        if ($reserve > 0 && $totalNeed > 0) {
+            $ratio = min(1, $reserve / $totalNeed);
+
+            foreach ($needs as $courseId => $data) {
+                $pointsToAdd = $data['need'] * $ratio / $data['credits'];
+                $note = $student->notes->firstWhere('course_id', $courseId);
+
+                if ($note) {
+                    $newNote = min(10, $note->cote + $pointsToAdd);
+                    $note->cote = round($newNote, 2);
+                    $note->save();
+                }
+            }
+        }
+    }
+
+    /**
+     * Option 2: Pérequation par unité d'enseignement
+     */
+    private function applyUeEqualization($student, $ueId, $coursesWithCredits)
+    {
+        $ue = UnitsTeaching::with(['courses' => function ($query) {
+            $query->with('courseProgramDetails');
+        }])->findOrFail($ueId);
+
+        $ueCourseIds = $ue->courses->pluck('id')->toArray();
+
+        $reserve = 0;
+        $needs = [];
+
+        foreach ($student->notes as $note) {
+            if (!in_array($note->course_id, $ueCourseIds)) continue;
+
+            $credits = $coursesWithCredits[$note->course_id] ?? 0;
+
+            if ($note->cote > 10) {
+                $reserve += ($note->cote - 10) * $credits;
+            } elseif ($note->cote < 10) {
+                $needs[$note->course_id] = [
+                    'credits' => $credits,
+                    'need' => (10 - $note->cote) * $credits
+                ];
+            }
+        }
+
+        $totalNeed = array_sum(array_column($needs, 'need'));
+
+        if ($reserve > 0 && $totalNeed > 0) {
+            $ratio = min(1, $reserve / $totalNeed);
+
+            foreach ($needs as $courseId => $data) {
+                $pointsToAdd = $data['need'] * $ratio / $data['credits'];
+                $note = $student->notes->firstWhere('course_id', $courseId);
+
+                if ($note) {
+                    $newNote = min(10, $note->cote + $pointsToAdd);
+                    $note->cote = round($newNote, 2);
+                    $note->save();
+                }
+            }
+        }
+    }
+
+    /**
+     * Option 3: Pérequation par coefficient
+     */
+    private function applyCoefficientEqualization($student, $credit, $coursesWithCredits)
+    {
+        $reserve = 0;
+        $needs = [];
+
+        foreach ($student->notes as $note) {
+            $courseCredit = $coursesWithCredits[$note->course_id] ?? 0;
+            if ($courseCredit != $credit) continue;
+
+            if ($note->cote > 10) {
+                $reserve += ($note->cote - 10) * $credit;
+            } elseif ($note->cote < 10) {
+                $needs[$note->course_id] = [
+                    'credits' => $credit,
+                    'need' => (10 - $note->cote) * $credit
+                ];
+            }
+        }
+
+        $totalNeed = array_sum(array_column($needs, 'need'));
+
+        if ($reserve > 0 && $totalNeed > 0) {
+            $ratio = min(1, $reserve / $totalNeed);
+
+            foreach ($needs as $courseId => $data) {
+                $pointsToAdd = $data['need'] * $ratio / $data['credits'];
+                $note = $student->notes->firstWhere('course_id', $courseId);
+
+                if ($note) {
+                    $newNote = min(10, $note->cote + $pointsToAdd);
+                    $note->cote = round($newNote, 2);
+                    $note->save();
+                }
+            }
+        }
     }
 }

@@ -26,4 +26,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/jury/export-results', [ResultsController::class, 'exportResults'])
         ->name('jury.export-results');
+    
+    Route::post('/jury/apply-equalization', [ResultsController::class, 'applyEqualization'])->name('jury.apply_equalization');
 });
