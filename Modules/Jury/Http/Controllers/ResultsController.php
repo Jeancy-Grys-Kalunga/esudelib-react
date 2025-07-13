@@ -15,77 +15,73 @@ use App\Models\User;
 use App\Services\TwilioService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
+use Modules\Jury\Exports\ResultsExport;
 use Modules\RegistrationDesk\Entities\Inscription;
 
 class ResultsController extends Controller
 {
     public function index(Request $request)
     {
+
+    //    $student_Id = Student::where('id', 3)->first();
+
+    //     $history = $this->getStudentAcademicHistory($student_Id);
+ 
+    //     dd($history);
+
         $context = $request->session()->get('jury_context');
         $academicYear = AcademicYear::find($context['academic_year_id']);
         $promotion = Promotion::find($context['promotion_id']);
 
-        // Récupération des crédits des cours depuis course_program_details
         $coursesWithCredits = DB::table('course_program_details')
             ->where('promotion_id', $promotion->id)
             ->pluck('credits', 'course_id')
             ->toArray();
 
-        // Récupération de tous les cours avec leurs crédits
         $allTeachingUnits = UnitsTeaching::with(['courses' => function ($query) use ($context) {
             $query->with(['notes' => function ($q) use ($context) {
                 $q->where('academic_year_id', $context['academic_year_id'])
-                    ->where('promotion_id', $context['promotion_id']);
+                    ->where('promotion_id', $context['promotion_id'])
+                    ->with('student');
             }]);
         }])->get();
 
         $allCourses = $allTeachingUnits->flatMap(function ($unit) {
             return $unit->courses;
-        });
-
-        // Ajout des crédits aux cours
-        $allCourses->each(function ($course) use ($coursesWithCredits) {
+        })->each(function ($course) use ($coursesWithCredits) {
             $course->credit = $coursesWithCredits[$course->id] ?? 0;
         });
 
-        // Pagination des étudiants avec leurs notes et cours
+        $gridData = [
+            'courses' => $allCourses->map(fn($c) => [
+                'id' => $c->id,
+                'title' => $c->title,
+                'credit' => $c->credit
+            ]),
+            'students' => []
+        ];
+
         $students = Student::with(['notes' => function ($query) use ($context) {
             $query->where('academic_year_id', $context['academic_year_id'])
                 ->where('promotion_id', $context['promotion_id'])
                 ->with('course');
         }])->paginate(10);
 
-        // Calcul des résultats par étudiant
-        $students->getCollection()->transform(function ($student) use ($allCourses, $coursesWithCredits) {
-            // Ajouter les cours manquants
-            $studentCourses = $student->notes->map(fn($note) => $note->course);
-            $missingCourses = $allCourses->diff($studentCourses);
-
-            foreach ($missingCourses as $course) {
-                $student->notes->push(new Note([
-                    'course_id' => $course->id,
-                    'cote' => null,
-                    'course' => $course,
-                ]));
-            }
-
-            // Calcul de la moyenne pondérée par crédits
+        $students->getCollection()->transform(function ($student) use ($coursesWithCredits, &$gridData) {
             $sommeNotesPonderees = 0;
             $totalCredits = 0;
             $reserve = 0;
             $need = 0;
 
             foreach ($student->notes as $note) {
-                // Récupérer les crédits du cours
                 $credits = $coursesWithCredits[$note->course_id] ?? 0;
 
-                // Ne considérer que les cours avec crédits définis et notes existantes
                 if ($note->cote !== null) {
                     $sommeNotesPonderees += $note->cote * $credits;
                     $totalCredits += $credits;
                 }
 
-                // Calcul de la réserve et des besoins
                 if ($note->cote > 10) {
                     $reserve += ($note->cote - 10);
                 } elseif ($note->cote < 10 && $note->cote !== null) {
@@ -93,7 +89,6 @@ class ResultsController extends Controller
                 }
             }
 
-            // Calcul de la moyenne générale (somme notes pondérées / somme crédits)
             $student->average = $totalCredits > 0
                 ? round($sommeNotesPonderees / $totalCredits, 2)
                 : 0;
@@ -101,6 +96,26 @@ class ResultsController extends Controller
             $student->reserve = round($reserve, 2);
             $student->need = round($need, 2);
 
+            $gridStudent = [
+                'id' => $student->id,
+                'name' => $student->name,
+                'matricule' => $student->matricule,
+                'average' => $student->average,
+                'reserve' => $student->reserve,
+                'need' => $student->need,
+                'notes' => []
+            ];
+
+            // Seulement les cours suivis par l'étudiant
+            foreach ($student->notes as $note) {
+                $gridStudent['notes'][$note->course_id] = [
+                    'id' => $note->id,
+                    'value' => $note->cote,
+                    'is_submitted' => $note->is_submitted
+                ];
+            }
+
+            $gridData['students'][] = $gridStudent;
             return $student;
         });
 
@@ -108,8 +123,53 @@ class ResultsController extends Controller
             'students' => $students,
             'academicYear' => $academicYear,
             'promotion' => $promotion,
-            'allCourses' => $allCourses,
+            'gridData' => $gridData,
         ]);
+    }
+
+    public function saveGrades(Request $request)
+    {
+        $request->validate([
+            'changes' => 'sometimes|array',
+            'massChanges' => 'sometimes|array',
+        ]);
+
+        DB::beginTransaction();
+        $context = $request->session()->get('jury_context');
+
+        try {
+            foreach ($request->changes as $change) {
+                if ($change['isNew']) {
+                    Note::create([
+                        'student_id' => $change['studentId'],
+                        'course_id' => $change['courseId'],
+                        'cote' => $change['value'],
+                        'academic_year_id' => $context['academic_year_id'],
+                        'promotion_id' => $context['promotion_id']
+                    ]);
+                } else {
+                    $note = Note::find($change['id']);
+                    if ($note) {
+                        $note->update(['cote' => $change['value']]);
+                    }
+                }
+            }
+
+            foreach ($request->massChanges as $massChange) {
+                Note::where('course_id', $massChange['courseId'])
+                    ->whereNotNull('cote')
+                    ->update([
+                        'cote' => DB::raw("LEAST(cote + {$massChange['points']}, 20)")
+                    ]);
+            }
+
+            DB::commit();
+            return response()->json(['success' => true, 'message' => 'Modifications sauvegardées']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Erreur sauvegarde notes: " . $e->getMessage());
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 
 
@@ -118,13 +178,11 @@ class ResultsController extends Controller
         $context = $request->session()->get('jury_context');
         $promotion = Promotion::find($context['promotion_id']);
 
-        // Récupération des crédits des cours
         $coursesWithCredits = DB::table('course_program_details')
             ->where('promotion_id', $promotion->id)
             ->pluck('credits', 'course_id')
             ->toArray();
 
-        // Récupérer tous les étudiants avec leurs résultats
         $students = Student::with(['notes' => function ($query) use ($context) {
             $query->where('academic_year_id', $context['academic_year_id'])
                 ->where('promotion_id', $context['promotion_id'])
@@ -135,7 +193,6 @@ class ResultsController extends Controller
             if ($student->phone) {
                 $message = "L'étudiant(e): " . $student->name . "  Vos résultats :\n";
 
-                // Calcul de la moyenne pour SMS
                 $sommeNotesPonderees = 0;
                 $totalCredits = 0;
 
@@ -153,20 +210,26 @@ class ResultsController extends Controller
                     ? round($sommeNotesPonderees / $totalCredits, 2)
                     : 0;
 
-                $message .= "\nMoyenne générale: {$average}/20";
-                $message .= "\nMerci pour votre confiance.";
-
-                // Envoyer le SMS via Twilio
+                $message .= "\nMoyenne générale: {$average}/20\nMerci pour votre confiance.";
                 $this->sendSMS($student->phone, $message);
             }
         }
 
         return redirect()->back()->with([
-            'flash' => [
-                'type' => 'success',
-                'message' => 'Résultats publiés avec succès par SMS'
-            ]
+            'flash' => ['type' => 'success', 'message' => 'Résultats publiés avec succès par SMS']
         ]);
+    }
+
+    public function exportResults(Request $request)
+    {
+        $context = $request->session()->get('jury_context');
+        $academicYear = AcademicYear::find($context['academic_year_id']);
+        $promotion = Promotion::find($context['promotion_id']);
+
+        return Excel::download(
+            new ResultsExport($academicYear->id, $promotion->id),
+            "resultats-{$promotion->title}-{$academicYear->title}.xlsx"
+        );
     }
 
 
@@ -230,67 +293,68 @@ class ResultsController extends Controller
     /**
      * Récupère le parcours académique d'un étudiant
      */
-     public function getStudentAcademicHistory(Student $student)
+    public function getStudentAcademicHistory(Student $student)
     {
-        // Récupérer l'année académique en cours
-        $currentAcademicYear = AcademicYear::latest()->first();
-        $currentAcademicYearId = $currentAcademicYear ? $currentAcademicYear->id : null;
-
         // Récupérer toutes les inscriptions de l'étudiant
         $inscriptions = Inscription::with(['academicYear', 'promotion'])
             ->where('student_id', $student->id)
-            ->orderBy('academic_year_id')
+            ->orderBy('academic_year_id', 'asc')
             ->get();
 
         $history = [];
-        $passedCourses = []; // Pour stocker les cours déjà validés
-        $complementaryCourses = []; // Cours complémentaires
+        $passedCourses = []; // Cours validés (>= 10)
+        $complementaryCourses = []; // Cours à repasser
+        $processedCourses = []; // Pour éviter les doublons
 
         foreach ($inscriptions as $inscription) {
             $academicYear = $inscription->academicYear;
             $promotion = $inscription->promotion;
 
-            // Récupérer les cours via la table pivot course_program_details
+            // Récupérer les cours de la promotion pour cette année académique
             $courses = DB::table('course_program_details')
                 ->where('promotion_id', $promotion->id)
                 ->join('courses', 'course_program_details.course_id', '=', 'courses.id')
-                ->select('courses.id', 'courses.title')
+                ->select('courses.id', 'courses.title', 'credits')
                 ->distinct()
                 ->get();
 
-            // Récupérer les notes pour ces cours
             $coursesWithNotes = [];
             foreach ($courses as $course) {
+                // Vérifier si ce cours a déjà été traité
+                $courseKey = $course->id . '-' . $academicYear->id;
+
+                if (isset($processedCourses[$courseKey])) {
+                    continue; // Passer au cours suivant si déjà traité
+                }
+
+                $processedCourses[$courseKey] = true;
+
+                // Récupérer la note de l'étudiant pour ce cours
                 $note = Note::where('student_id', $student->id)
                     ->where('academic_year_id', $academicYear->id)
                     ->where('course_id', $course->id)
                     ->first();
 
                 $passed = $note && $note->cote >= 10;
-
-                if ($passed) {
-                    $passedCourses[] = $course->id;
-                } else {
-                    // Si le cours n'est pas validé et n'est pas dans l'année en cours
-                    if ($academicYear->id !== $currentAcademicYearId) {
-                        $complementaryCourses[] = [
-                            'id' => $course->id,
-                            'title' => $course->title,
-                            'note' => $note ? $note->cote : null,
-                            'passed' => false,
-                        ];
-                    }
-                }
-
-                $coursesWithNotes[] = [
+                $courseData = [
                     'id' => $course->id,
                     'title' => $course->title,
+                    'credits' => $course->credits,
                     'note' => $note ? $note->cote : null,
                     'passed' => $passed,
                 ];
-            }
 
-           
+                $coursesWithNotes[] = $courseData;
+
+                if ($passed) {
+                    $passedCourses[$course->id] = true;
+                }
+
+                // Ajouter aux cours complémentaires si non validé
+                if (!$passed && !isset($complementaryCourses[$course->id])) {
+                    $complementaryCourses[$course->id] = $courseData;
+                }
+            }
 
             $history[] = [
                 'academic_year_id' => $academicYear->id,
@@ -301,16 +365,12 @@ class ResultsController extends Controller
             ];
         }
 
-        // Filtrer les cours complémentaires pour supprimer ceux déjà validés
-        $complementaryCourses = array_filter($complementaryCourses, function($course) use ($passedCourses) {
-            return !in_array($course['id'], $passedCourses);
-        });
-
-         dd($coursesWithNotes, $complementaryCourses, $history);
+        // Convertir en tableau indexé
+        $complementaryCourses = array_values($complementaryCourses);
 
         return response()->json([
             'history' => $history,
-            'complementary_courses' => array_values($complementaryCourses)
+            'complementary_courses' => $complementaryCourses
         ]);
     }
 }
