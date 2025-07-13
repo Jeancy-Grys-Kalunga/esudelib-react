@@ -40,6 +40,7 @@ type Course = {
 type NoteData = {
     id: number;
     value: number | null;
+    is_submitted?: boolean;
 };
 
 type Student = {
@@ -50,6 +51,8 @@ type Student = {
     average: number;
     reserve: string;
     need: string;
+    decision: string;
+    mention: string;
 };
 
 type GridData = {
@@ -61,6 +64,8 @@ type GridData = {
         average: number;
         reserve: string;
         need: string;
+        decision: string;
+        mention: string;
         notes: Record<number, NoteData | null>;
     }>;
 };
@@ -189,6 +194,8 @@ const ResultsTable = ({
         average: number;
         reserve: string;
         need: string;
+        decision: string;
+        mention: string;
         notes: Record<number, NoteData | null>;
     }>;
     onChange: (studentId: number, courseId: number, field: string, value: any) => void;
@@ -212,13 +219,6 @@ const ResultsTable = ({
         }
     };
 
-    const getNoteColor = (cote: number | null) => {
-        if (cote === null) return 'bg-gray-100 text-gray-800';
-        if (cote < 10) return 'bg-red-100 text-red-800';
-        if (cote < 12) return 'bg-amber-100 text-amber-800';
-        return 'bg-green-100 text-green-800';
-    };
-
     // Effet pour scroller vers l'étudiant surligné
     useEffect(() => {
         if (highlightedStudentId && rowRefs.current[highlightedStudentId]) {
@@ -228,6 +228,33 @@ const ResultsTable = ({
             });
         }
     }, [highlightedStudentId]);
+
+    // Fonction pour obtenir la couleur de la décision
+    const getDecisionColor = (decision: string) => {
+        switch(decision) {
+            case 'A': return 'bg-purple-100 text-purple-800';
+            case 'B': return 'bg-blue-100 text-blue-800';
+            case 'C': return 'bg-green-100 text-green-800';
+            case 'D': return 'bg-teal-100 text-teal-800';
+            case 'E': return 'bg-amber-100 text-amber-800';
+            case 'F': return 'bg-orange-100 text-orange-800';
+            case 'G': return 'bg-red-100 text-red-800';
+            case 'AJ': return 'bg-red-200 text-red-900';
+            case 'DEF': return 'bg-gray-200 text-gray-900';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
+    // Fonction pour obtenir la couleur de la mention
+    const getMentionColor = (mention: string) => {
+        switch(mention) {
+            case 'Admis': return 'bg-green-100 text-green-800';
+            case 'Comp': return 'bg-yellow-100 text-yellow-800';
+            case 'AJ': return 'bg-red-100 text-red-800';
+            case 'DEF': return 'bg-gray-100 text-gray-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
 
     return (
         <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-lg">
@@ -287,6 +314,8 @@ const ResultsTable = ({
                         <TableHead className="min-w-[100px] px-4 py-3 text-center">Moyenne</TableHead>
                         <TableHead className="min-w-[100px] px-4 py-3 text-center">Réserve</TableHead>
                         <TableHead className="min-w-[100px] px-4 py-3 text-center">Besoin</TableHead>
+                        <TableHead className="min-w-[100px] px-4 py-3 text-center">Décision</TableHead>
+                        <TableHead className="min-w-[100px] px-4 py-3 text-center">Mention</TableHead>
                         {showActions && <TableHead className="sticky right-0 min-w-[100px] bg-white px-4 py-3 text-center">Actions</TableHead>}
                     </TableRow>
                 </TableHeader>
@@ -331,6 +360,16 @@ const ResultsTable = ({
                             <TableCell className="border-b px-4 py-3 text-center">
                                 <Badge variant="outline" className="bg-blue-50 px-3 py-1 text-blue-800">
                                     {student.need}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="border-b px-4 py-3 text-center">
+                                <Badge variant="outline" className={`${getDecisionColor(student.decision)} px-3 py-1 font-medium`}>
+                                    {student.decision}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="border-b px-4 py-3 text-center">
+                                <Badge variant="outline" className={`${getMentionColor(student.mention)} px-3 py-1 font-medium`}>
+                                    {student.mention}
                                 </Badge>
                             </TableCell>
                             {showActions && (
@@ -801,6 +840,33 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
         setSearchQuery('');
     };
 
+    // Fonction pour obtenir la couleur de la décision (pour la vue individuelle)
+    const getDecisionColor = (decision: string) => {
+        switch(decision) {
+            case 'A': return 'bg-purple-100 text-purple-800';
+            case 'B': return 'bg-blue-100 text-blue-800';
+            case 'C': return 'bg-green-100 text-green-800';
+            case 'D': return 'bg-teal-100 text-teal-800';
+            case 'E': return 'bg-amber-100 text-amber-800';
+            case 'F': return 'bg-orange-100 text-orange-800';
+            case 'G': return 'bg-red-100 text-red-800';
+            case 'AJ': return 'bg-red-200 text-red-900';
+            case 'DEF': return 'bg-gray-200 text-gray-900';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
+    // Fonction pour obtenir la couleur de la mention (pour la vue individuelle)
+    const getMentionColor = (mention: string) => {
+        switch(mention) {
+            case 'Admis': return 'bg-green-100 text-green-800';
+            case 'Comp': return 'bg-yellow-100 text-yellow-800';
+            case 'AJ': return 'bg-red-100 text-red-800';
+            case 'DEF': return 'bg-gray-100 text-gray-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
     return (
         <AppLayout>
             <div className="container mx-auto px-4 py-8">
@@ -928,7 +994,7 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                                                 </Badge>
                                             </div>
                                         </div>
-                                        <div className="mt-3">
+                                        <div className="mt-3 flex flex-wrap gap-2">
                                             <Button
                                                 variant="outline"
                                                 onClick={() => openAcademicHistoryModal(student.id)}
@@ -937,6 +1003,12 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                                                 <GraduationCap className="h-4 w-4" />
                                                 Voir le parcours académique
                                             </Button>
+                                            <Badge variant="outline" className={`${getDecisionColor(student.decision)} px-3 py-1 font-medium`}>
+                                                Décision: {student.decision}
+                                            </Badge>
+                                            <Badge variant="outline" className={`${getMentionColor(student.mention)} px-3 py-1 font-medium`}>
+                                                Mention: {student.mention}
+                                            </Badge>
                                         </div>
                                     </div>
 
@@ -954,6 +1026,8 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                                                 average: student.average,
                                                 reserve: student.reserve,
                                                 need: student.need,
+                                                decision: student.decision,
+                                                mention: student.mention,
                                                 notes: student.notes.reduce(
                                                     (acc, note) => {
                                                         acc[note.course_id] = {

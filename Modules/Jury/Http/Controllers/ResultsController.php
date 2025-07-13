@@ -23,13 +23,6 @@ class ResultsController extends Controller
 {
     public function index(Request $request)
     {
-
-    //    $student_Id = Student::where('id', 3)->first();
-
-    //     $history = $this->getStudentAcademicHistory($student_Id);
- 
-    //     dd($history);
-
         $context = $request->session()->get('jury_context');
         $academicYear = AcademicYear::find($context['academic_year_id']);
         $promotion = Promotion::find($context['promotion_id']);
@@ -73,19 +66,26 @@ class ResultsController extends Controller
             $totalCredits = 0;
             $reserve = 0;
             $need = 0;
+            $hasMissingNote = false;
+            $hasFailedNote = false;
+            $allPassed = true;
 
             foreach ($student->notes as $note) {
                 $credits = $coursesWithCredits[$note->course_id] ?? 0;
 
-                if ($note->cote !== null) {
+                if ($note->cote === null) {
+                    $hasMissingNote = true;
+                } else {
                     $sommeNotesPonderees += $note->cote * $credits;
                     $totalCredits += $credits;
-                }
 
-                if ($note->cote > 10) {
-                    $reserve += ($note->cote - 10);
-                } elseif ($note->cote < 10 && $note->cote !== null) {
-                    $need += (10 - $note->cote);
+                    if ($note->cote > 10) {
+                        $reserve += ($note->cote - 10);
+                    } elseif ($note->cote < 10) {
+                        $need += (10 - $note->cote);
+                        $hasFailedNote = true;
+                        $allPassed = false;
+                    }
                 }
             }
 
@@ -96,6 +96,30 @@ class ResultsController extends Controller
             $student->reserve = round($reserve, 2);
             $student->need = round($need, 2);
 
+            // Calcul de la décision
+            if ($hasMissingNote) {
+                $student->decision = 'DEF';
+            } elseif ($hasFailedNote) {
+                $student->decision = 'AJ';
+            } else {
+                if ($student->average >= 18) $student->decision = 'A';
+                elseif ($student->average >= 16) $student->decision = 'B';
+                elseif ($student->average >= 14) $student->decision = 'C';
+                elseif ($student->average >= 12) $student->decision = 'D';
+                elseif ($student->average >= 10) $student->decision = 'E';
+                elseif ($student->average >= 8) $student->decision = 'F';
+                else $student->decision = 'G';
+            }
+
+            // Calcul de la mention
+            if ($student->decision === 'DEF') {
+                $student->mention = 'DEF';
+            } elseif (in_array($student->decision, ['F', 'G', 'AJ'])) {
+                $student->mention = 'AJ';
+            } else {
+                $student->mention = $allPassed ? 'Admis' : 'Comp';
+            }
+
             $gridStudent = [
                 'id' => $student->id,
                 'name' => $student->name,
@@ -103,6 +127,8 @@ class ResultsController extends Controller
                 'average' => $student->average,
                 'reserve' => $student->reserve,
                 'need' => $student->need,
+                'decision' => $student->decision,
+                'mention' => $student->mention,
                 'notes' => []
             ];
 
