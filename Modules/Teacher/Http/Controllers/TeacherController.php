@@ -296,11 +296,13 @@ class TeacherController extends Controller
         }
 
         $institutionId = auth()->user()->teacher->institutions()->first()->id;
+        $courseProgramDetail = $course->courseProgramDetails()->first();
+        $promotion = $courseProgramDetail ? $courseProgramDetail->promotion : null;
 
         return Inertia::render('teacher/submitGrades', [
             'course' => $course->only('id', 'title'),
             'academicYears' => AcademicYear::all(['id', 'title']),
-            'promotions' => Promotion::all(['id', 'title']),
+            'promotions' => $promotion ? ['id' => $promotion->id, 'title' => $promotion->title] : null,
             'examSessions' => ExamSession::where('institution_id', $institutionId)
                 ->get(['id', 'title', 'status', 'acceptance_rate']),
         ]);

@@ -14,12 +14,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/publish-results', [ResultsController::class, 'publishResults'])->name('jury.publish');
         Route::post('/add-points', [ResultsController::class, 'addPoints'])->name('jury.add-points');
         Route::post('/update-note', [ResultsController::class, 'updateNote'])->name('jury.update-note');
-        
-        // Correction : Ajout du préfixe "jury" à la route
+
         Route::get('/students/{student}/academic-history', [ResultsController::class, 'getStudentAcademicHistory'])
             ->name('students.academic-history');
 
-            Route::get('/orientation-predictions', [OrientationPredictionController::class, 'showPredictionInterface']);
-Route::get('/students/{student}/predict-orientation', [OrientationPredictionController::class, 'predictOrientation']);
+        Route::get('/orientation-predictions', [OrientationPredictionController::class, 'showPredictionInterface']);
+        Route::get('/students/{student}/predict-orientation', [OrientationPredictionController::class, 'predictOrientation']);
     });
+    Route::post('/jury/save-grades', [ResultsController::class, 'saveGrades'])
+        ->name('jury.save-grades');
+
+    Route::get('/jury/export-results', [ResultsController::class, 'exportResults'])
+        ->name('jury.export-results');
 });
