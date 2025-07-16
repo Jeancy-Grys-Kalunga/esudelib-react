@@ -71,7 +71,9 @@ class ResultsController extends Controller
             $allPassed = true;
 
             foreach ($student->notes as $note) {
+
                 $credits = $coursesWithCredits[$note->course_id] ?? 0;
+
 
                 if ($note->cote === null) {
                     $hasMissingNote = true;
@@ -102,12 +104,12 @@ class ResultsController extends Controller
             } elseif ($hasFailedNote) {
                 $student->decision = 'AJ';
             } else {
-                if ($student->average >= 18) $student->decision = 'A';
-                elseif ($student->average >= 16) $student->decision = 'B';
-                elseif ($student->average >= 14) $student->decision = 'C';
-                elseif ($student->average >= 12) $student->decision = 'D';
-                elseif ($student->average >= 10) $student->decision = 'E';
-                elseif ($student->average >= 8) $student->decision = 'F';
+                if ($student->average   >= 18) $student->decision = 'A';
+                elseif ($student->average  < 18 && $student->average >= 16) $student->decision = 'B';
+                elseif ($student->average  < 16 && $student->average >= 14) $student->decision = 'C';
+                elseif ($student->average < 14 && $student->average >= 12) $student->decision = 'D';
+                elseif ($student->average < 12 && $student->average >= 10) $student->decision = 'E';
+                elseif ($student->average < 10 && $student->average >= 8) $student->decision = 'F';
                 else $student->decision = 'G';
             }
 
@@ -145,26 +147,26 @@ class ResultsController extends Controller
             return $student;
         });
 
-       $teachingUnits = UnitsTeaching::where('promotion_id', $promotion->id)
-        ->with(['courses' => function($query) use ($promotion) {
-            $query->whereHas('courseProgramDetails', function($q) use ($promotion) {
-                $q->where('promotion_id', $promotion->id);
+        $teachingUnits = UnitsTeaching::where('promotion_id', $promotion->id)
+            ->with(['courses' => function ($query) use ($promotion) {
+                $query->whereHas('courseProgramDetails', function ($q) use ($promotion) {
+                    $q->where('promotion_id', $promotion->id);
+                });
+            }])
+            ->get()
+            ->map(function ($unit) {
+                // Transformez la relation pivot en structure directe
+                $unit->courses = $unit->courses->map(function ($course) {
+                    return [
+                        'id' => $course->id,
+                        'title' => $course->title,
+                        'credit' => $course->pivot->credits ?? 0, // Accès au crédit via pivot
+                        'orientation' => $course->orientation
+                    ];
+                });
+
+                return $unit;
             });
-        }])
-        ->get()
-        ->map(function ($unit) {
-            // Transformez la relation pivot en structure directe
-            $unit->courses = $unit->courses->map(function ($course) {
-                return [
-                    'id' => $course->id,
-                    'title' => $course->title,
-                    'credit' => $course->pivot->credits ?? 0, // Accès au crédit via pivot
-                    'orientation' => $course->orientation
-                ];
-            });
-            
-            return $unit;
-        });
 
 
 
