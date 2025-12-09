@@ -71,4 +71,9 @@ class Student extends Model implements HasMedia
     {
         return $this->hasMany(CourseProgramDetail::class);
     }
+
+    public function masterPrediction()
+    {
+        return $this->hasOne(\Modules\Jury\Entities\MasterPrediction::class);
+    }
 }

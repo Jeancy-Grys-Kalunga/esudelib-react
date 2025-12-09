@@ -18,14 +18,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/students/{student}/academic-history', [ResultsController::class, 'getStudentAcademicHistory'])
             ->name('students.academic-history');
 
-        Route::get('/orientation-predictions', [OrientationPredictionController::class, 'showPredictionInterface']);
-        Route::get('/students/{student}/predict-orientation', [OrientationPredictionController::class, 'predictOrientation']);
+        // Routes de prédiction d'orientation Master
+        Route::get('/orientation-predictions', [OrientationPredictionController::class, 'showPredictionInterface'])
+            ->name('jury.orientation-predictions');
+        Route::get('/students/{student}/predict-orientation', [OrientationPredictionController::class, 'predictOrientation'])
+            ->name('jury.predict-orientation');
+        Route::get('/students/{student}/get-prediction', [OrientationPredictionController::class, 'getPrediction'])
+            ->name('jury.get-prediction');
+        Route::post('/predict-batch', [OrientationPredictionController::class, 'predictBatch'])
+            ->name('jury.predict-batch');
+        Route::post('/train-model', [OrientationPredictionController::class, 'trainModel'])
+            ->name('jury.train-model');
     });
     Route::post('/jury/save-grades', [ResultsController::class, 'saveGrades'])
         ->name('jury.save-grades');
 
     Route::get('/jury/export-results', [ResultsController::class, 'exportResults'])
         ->name('jury.export-results');
-    
+
     Route::post('/jury/apply-equalization', [ResultsController::class, 'applyEqualization'])->name('jury.apply_equalization');
 });

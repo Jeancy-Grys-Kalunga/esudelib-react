@@ -1,0 +1,73 @@
+{
+  "model_config": {
+    "name": "Master Prediction Model",
+    "version": "1.0.0",
+    "algorithm": "GradientBoostingClassifier",
+    "created_at": "2025-12-09",
+    "description": "Modèle de prédiction des filières de Master basé sur les performances académiques et le parcours des étudiants"
+  },
+  "hyperparameters": {
+    "n_estimators": 200,
+    "learning_rate": 0.1,
+    "max_depth": 5,
+    "random_state": 42,
+    "verbose": 0
+  },
+  "features": {
+    "count": 16,
+    "list": [
+      "age",
+      "provenance_encoded",
+      "intention_score",
+      "optional_courses_count",
+      "internships_count",
+      "average_grade",
+      "informatique_grade",
+      "mathematiques_grade",
+      "physique_grade",
+      "chimie_grade",
+      "sciences_humaines_grade",
+      "langues_grade",
+      "gestion_grade",
+      "droit_grade",
+      "grades_variance",
+      "coherence_score"
+    ]
+  },
+  "target_classes": [
+    "Informatique",
+    "Génie Civil",
+    "Électromécanique",
+    "Gestion",
+    "Droit",
+    "Économie",
+    "Médecine",
+    "Sciences Politiques"
+  ],
+  "performance": {
+    "target_accuracy": 0.85,
+    "min_confidence": 0.6,
+    "high_confidence_threshold": 0.75
+  },
+  "dataset": {
+    "size": 20000,
+    "test_split": 0.2,
+    "validation_split": 0.1,
+    "synthetic_ratio": 0.8
+  },
+  "preprocessing": {
+    "scaler": "StandardScaler",
+    "label_encoder": "LabelEncoder",
+    "missing_value_strategy": "mean"
+  },
+  "paths": {
+    "model_file": "master_prediction_model.pkl",
+    "scaler_file": "scaler.pkl",
+    "encoder_file": "encoder.pkl"
+  },
+  "metadata": {
+    "author": "Équipe esudelib",
+    "license": "Propriétaire",
+    "contact": "dev@esudelib.com"
+  }
+}
