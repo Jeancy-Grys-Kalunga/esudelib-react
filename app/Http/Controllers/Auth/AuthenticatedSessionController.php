@@ -54,29 +54,46 @@ class AuthenticatedSessionController extends Controller
         ]);
 
         $credentials = $request->only('email', 'password');
+
+        // Récupérer l'utilisateur par email
         $user = User::where('email', $credentials['email'])->first();
 
+        // Vérifier si l'utilisateur existe
         if (!$user) {
             return back()->with([
                 'flash' => [
                     'type' => 'error',
                     'message' => 'Identifiants incorrects'
                 ]
-            ])->withInput();
+            ])->withInput($request->except('password'));
         }
 
-        if (!Auth::validate(['email' => $credentials['email'], 'password' => $credentials['password'], 'is_active' => 1])) {
+        // Vérifier si le compte est actif
+        if (!$user->is_active) {
             return back()->with([
                 'flash' => [
                     'type' => 'error',
-                    'message' => 'Identifiants incorrects ou compte inactif'
+                    'message' => 'Votre compte est inactif. Veuillez contacter l\'administrateur.'
                 ]
-            ])->withInput();
+            ])->withInput($request->except('password'));
         }
+
+        // Vérifier le mot de passe
+        if (!Auth::attempt($credentials, $request->boolean('remember'))) {
+            return back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => 'Mot de passe incorrect'
+                ]
+            ])->withInput($request->except('password'));
+        }
+
+        // Déconnecter immédiatement pour gérer la logique métier
+        Auth::logout();
 
         // Super Admin: Pas de vérification d'institution
         if ($user->hasRole('Super Admin')) {
-            Auth::login($user, $request->remember);
+            Auth::login($user, $request->boolean('remember'));
             $request->session()->regenerate();
             return redirect()->intended(route('dashboard'))->with([
                 'flash' => [
@@ -87,7 +104,7 @@ class AuthenticatedSessionController extends Controller
         }
 
         // Jury: Vérification des champs spécifiques
-        if ($request->is_jury) {
+        if ($request->boolean('is_jury')) {
             return $this->handleJuryLogin($request, $user);
         }
 
@@ -127,7 +144,7 @@ class AuthenticatedSessionController extends Controller
             ])->withInput();
         }
 
-        Auth::login($user, $request->remember);
+        Auth::login($user, $request->boolean('remember'));
         $request->session()->put('jury_context', [
             'institution_id' => $request->institution_id,
             'academic_year_id' => $request->academic_year_id,
@@ -166,7 +183,7 @@ class AuthenticatedSessionController extends Controller
             ])->withInput();
         }
 
-        Auth::login($user, $request->remember);
+        Auth::login($user, $request->boolean('remember'));
         $request->session()->regenerate();
         return redirect()->intended(route('dashboard'))->with([
             'flash' => [

@@ -9,7 +9,7 @@ class MasterTrainingDataset extends Model
 {
     use HasFactory;
 
-    protected $table = 'master_training_dataset';
+    protected $table = 'master_training_datasets';
 
     protected $fillable = [
         'age',

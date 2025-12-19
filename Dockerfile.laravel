@@ -1,0 +1,118 @@
+# ========================================
+# Dockerfile pour Laravel Backend
+# PHP 8.2 FPM avec extensions requises
+# ========================================
+
+FROM php:8.2-fpm-alpine
+
+LABEL maintainer="esudelib-team"
+LABEL description="Laravel Backend pour Système de Prédiction Master"
+
+# Arguments de build
+ARG UID=1000
+ARG GID=1000
+ARG USER=www-data
+
+# Variables d'environnement
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_HOME=/tmp/composer
+
+# Installation des dépendances système
+RUN apk add --no-cache \
+    bash \
+    curl \
+    git \
+    unzip \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    icu-dev \
+    oniguruma-dev \
+    postgresql-dev \
+    mysql-client \
+    supervisor \
+    nodejs \
+    npm
+
+# Installation des extensions PHP
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo \
+        pdo_mysql \
+        pdo_pgsql \
+        mysqli \
+        zip \
+        gd \
+        intl \
+        mbstring \
+        bcmath \
+        opcache \
+        pcntl \
+        exif
+
+# Installation de Redis extension
+RUN apk add --no-cache --virtual .build-deps $PHPIZE_DEPS \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del .build-deps
+
+# Installation de Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Configuration PHP pour production
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+
+# Configuration PHP personnalisée
+COPY docker/php/custom.ini $PHP_INI_DIR/conf.d/custom.ini
+
+# Configuration PHP-FPM
+COPY docker/php/www.conf /usr/local/etc/php-fpm.d/www.conf
+
+# Configuration Supervisor
+COPY docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Créer le répertoire de travail
+WORKDIR /var/www/html
+
+# Copier les fichiers de dépendances
+COPY composer.json composer.lock ./
+
+# Installer les dépendances PHP (sans dev en production)
+RUN composer install \
+    --no-dev \
+    --no-scripts \
+    --no-autoloader \
+    --prefer-dist \
+    --optimize-autoloader
+
+# Copier le code source
+COPY . .
+
+# Générer l'autoloader optimisé
+RUN composer dump-autoload --optimize --classmap-authoritative
+
+# Définir les permissions
+RUN chown -R ${USER}:${USER} /var/www/html \
+    && chmod -R 755 /var/www/html/storage \
+    && chmod -R 755 /var/www/html/bootstrap/cache
+
+# Créer les répertoires nécessaires
+RUN mkdir -p storage/framework/{sessions,views,cache} \
+    && mkdir -p storage/logs \
+    && mkdir -p storage/ml \
+    && chown -R ${USER}:${USER} storage
+
+# Exposer le port PHP-FPM
+EXPOSE 9000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD php-fpm-healthcheck || exit 1
+
+# Script de healthcheck
+COPY docker/php/php-fpm-healthcheck /usr/local/bin/php-fpm-healthcheck
+RUN chmod +x /usr/local/bin/php-fpm-healthcheck
+
+# Utiliser supervisor pour gérer les processus
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

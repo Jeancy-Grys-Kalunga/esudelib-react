@@ -1,6 +1,6 @@
+import { Page } from '@inertiajs/core';
 import { type LucideIcon } from 'lucide-react';
 import type { Config } from 'ziggy-js';
-import { Page, PageProps } from '@inertiajs/core';
 // Types existants inchangés
 export interface Auth {
     user: User;
@@ -34,20 +34,27 @@ export interface User {
 // Nouveaux types pour la navigation
 export type NavItem = {
     title: string;
-    href: string;
-    icon: LucideIcon;
+    href?: string;
+    icon?: LucideIcon;
     isActive?: boolean;
     color?: string;
-    permission?: string;
+    permission?: string | string[];
+    isTitle?: boolean;
+    items?: NavItem[];
+    activeRoutes?: string[];
+    disabled?: boolean;
+    external?: boolean;
+    label?: string;
+    description?: string;
 };
 
 export interface NavGroup {
-  groupTitle: string;
-  icon?: LucideIcon;
-  color?: string;
-  permission?: string | string[];
-  isActive?: boolean;
-  items: NavItem[];
+    groupTitle: string;
+    icon?: LucideIcon;
+    color?: string;
+    permission?: string | string[];
+    isActive?: boolean;
+    items: NavItem[];
 }
 
 export type GroupedNavItem = {
@@ -59,43 +66,42 @@ export type GroupedNavItem = {
     isActive?: boolean;
 };
 
-
 declare module '@inertiajs/react' {
-  export interface PageProps extends Page<PageProps> {
-    auth: {
-      user: {
-        id: number;
-        name: string;
-        email: string;
-        permissions: string[];
-        roles: {
-          name: string;
-          permissions: string[];
-        }[];
-      };
-    };
-    flash: {
-      type: 'success' | 'error' | 'warning' | 'info';
-      message: string;
-    };
-  }
+    export interface PageProps extends Page<PageProps> {
+        auth: {
+            user: {
+                id: number;
+                name: string;
+                email: string;
+                permissions: string[];
+                roles: {
+                    name: string;
+                    permissions: string[];
+                }[];
+            };
+        };
+        flash: {
+            type: 'success' | 'error' | 'warning' | 'info';
+            message: string;
+        };
+    }
 }
 
 export type PageProps = {
-  auth: {
-    user: {
-      id: number;
-      name: string;
-      email: string;
-      permissions: string[];
-      roles: {
-        name: string;
-        permissions: string[];
-      }[];
+    auth: {
+        user: {
+            id: number;
+            name: string;
+            email: string;
+            permissions: string[];
+            roles: {
+                name: string;
+                permissions: string[];
+            }[];
+        };
     };
-  };
-  flash: {
-    type: 'success' | 'error' | 'warning' | 'info';
-    message: string;
-  };
+    flash: {
+        type: 'success' | 'error' | 'warning' | 'info';
+        message: string;
+    };
 };

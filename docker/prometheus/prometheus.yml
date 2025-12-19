@@ -1,0 +1,56 @@
+# ========================================
+# Configuration Prometheus
+# ========================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'esudelib-production'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Docker containers
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['docker-host:9323']
+
+  # Laravel application
+  - job_name: 'laravel'
+    static_configs:
+      - targets: ['laravel:9000']
+    metrics_path: '/metrics'
+
+  # MySQL
+  - job_name: 'mysql'
+    static_configs:
+      - targets: ['mysql:3306']
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+
+  # Nginx
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+    metrics_path: '/metrics'
+
+  # Node exporter (if installed)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']

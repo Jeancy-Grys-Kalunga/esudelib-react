@@ -1,30 +1,29 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { Head, router } from '@inertiajs/react';
-import { 
-    BookOpen, 
-    BarChart, 
-    GraduationCap,
-    BrainCircuit,
-    ArrowRight,
-    Sparkles,
-    TrendingUp,
-    Award,
-    Target,
-    Zap,
-    Download,
-    RefreshCw,
-    Users
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { toast } from 'react-toastify';
+import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
+import {
+    ArrowRight,
+    Award,
+    BookOpen,
+    BrainCircuit,
+    Download,
+    GraduationCap,
+    RefreshCw,
+    Sparkles,
+    Target,
+    TrendingUp,
+    Users,
+    Zap,
+} from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'react-toastify';
 
 // Type definitions
 interface AcademicYear {
@@ -111,15 +110,15 @@ export default function OrientationPrediction({ academicYear, promotion, student
     const [isBatchPredicting, setIsBatchPredicting] = useState(false);
 
     const predictOrientation = async (studentId: number) => {
-        setLoading(prev => ({ ...prev, [studentId]: true }));
+        setLoading((prev) => ({ ...prev, [studentId]: true }));
         setActiveStudent(studentId);
-        
+
         try {
             const response = await axios.get(`/jury/students/${studentId}/predict-orientation`);
             if (response.data.success) {
-                setPredictions(prev => ({
+                setPredictions((prev) => ({
                     ...prev,
-                    [studentId]: response.data.data
+                    [studentId]: response.data.data,
                 }));
                 toast.success('Prédiction générée avec succès!');
             }
@@ -127,7 +126,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
             toast.error('Erreur lors de la prédiction');
             console.error('Prediction error:', error);
         } finally {
-            setLoading(prev => ({ ...prev, [studentId]: false }));
+            setLoading((prev) => ({ ...prev, [studentId]: false }));
         }
     };
 
@@ -139,7 +138,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                 toast.success(`Modèle entraîné avec succès! Précision: ${(response.data.data.accuracy * 100).toFixed(2)}%`);
             }
         } catch (error) {
-            toast.error('Erreur lors de l\'entraînement du modèle');
+            toast.error("Erreur lors de l'entraînement du modèle");
             console.error('Training error:', error);
         } finally {
             setIsTraining(false);
@@ -168,17 +167,17 @@ export default function OrientationPrediction({ academicYear, promotion, student
 
     const getOrientationColor = (orientation: string) => {
         const colors: Record<string, string> = {
-            'Informatique': 'bg-blue-100 text-blue-800 border-blue-300',
+            Informatique: 'bg-blue-100 text-blue-800 border-blue-300',
             'Génie Civil': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-            'Électromécanique': 'bg-orange-100 text-orange-800 border-orange-300',
-            'Médecine': 'bg-red-100 text-red-800 border-red-300',
-            'Droit': 'bg-purple-100 text-purple-800 border-purple-300',
-            'Économie': 'bg-green-100 text-green-800 border-green-300',
-            'Gestion': 'bg-teal-100 text-teal-800 border-teal-300',
+            Électromécanique: 'bg-orange-100 text-orange-800 border-orange-300',
+            Médecine: 'bg-red-100 text-red-800 border-red-300',
+            Droit: 'bg-purple-100 text-purple-800 border-purple-300',
+            Économie: 'bg-green-100 text-green-800 border-green-300',
+            Gestion: 'bg-teal-100 text-teal-800 border-teal-300',
             'Sciences Politiques': 'bg-indigo-100 text-indigo-800 border-indigo-300',
-            'default': 'bg-gray-100 text-gray-800 border-gray-300'
+            default: 'bg-gray-100 text-gray-800 border-gray-300',
         };
-        
+
         return colors[orientation] || colors['default'];
     };
 
@@ -220,12 +219,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                         </div>
 
                         <div className="flex gap-2">
-                            <Button 
-                                onClick={trainModel}
-                                disabled={isTraining}
-                                variant="outline"
-                                className="flex items-center gap-2"
-                            >
+                            <Button onClick={trainModel} disabled={isTraining} variant="outline" className="flex items-center gap-2">
                                 {isTraining ? (
                                     <>
                                         <RefreshCw className="h-4 w-4 animate-spin" />
@@ -238,7 +232,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                     </>
                                 )}
                             </Button>
-                            <Button 
+                            <Button
                                 onClick={predictBatch}
                                 disabled={isBatchPredicting}
                                 className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600"
@@ -311,9 +305,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                             <BookOpen className="h-5 w-5 text-indigo-600" />
                             Liste des étudiants
                         </CardTitle>
-                        <CardDescription>
-                            Cliquez sur "Analyser" pour générer une prédiction personnalisée pour chaque étudiant
-                        </CardDescription>
+                        <CardDescription>Cliquez sur "Analyser" pour générer une prédiction personnalisée pour chaque étudiant</CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
@@ -328,7 +320,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {students.data.map(student => (
+                                    {students.data.map((student) => (
                                         <TableRow key={student.id} className="hover:bg-gray-50 dark:hover:bg-gray-900">
                                             <TableCell className="font-medium">
                                                 <div className="flex items-center gap-3">
@@ -343,7 +335,9 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 <Badge variant="secondary" className="bg-indigo-100 text-indigo-800">
-                                                    {student.average?.toFixed(2) || 'N/A'}
+                                                    {student.average !== undefined && student.average !== null && typeof student.average === 'number'
+                                                        ? student.average.toFixed(2)
+                                                        : 'N/A'}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-center">
@@ -358,11 +352,10 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                             <TableCell className="text-center">
                                                 {student.master_prediction ? (
                                                     <div className="flex items-center justify-center gap-2">
-                                                        <Progress 
-                                                            value={student.master_prediction.confidence_score} 
-                                                            className="h-2 w-20"
-                                                        />
-                                                        <span className={`text-sm font-semibold ${getConfidenceColor(student.master_prediction.confidence_score)}`}>
+                                                        <Progress value={student.master_prediction.confidence_score} className="h-2 w-20" />
+                                                        <span
+                                                            className={`text-sm font-semibold ${getConfidenceColor(student.master_prediction.confidence_score)}`}
+                                                        >
                                                             {student.master_prediction.confidence_score.toFixed(1)}%
                                                         </span>
                                                     </div>
@@ -371,7 +364,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-center">
-                                                <Button 
+                                                <Button
                                                     onClick={() => predictOrientation(student.id)}
                                                     disabled={loading[student.id]}
                                                     size="sm"
@@ -406,9 +399,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                 <Target className="h-6 w-6 text-indigo-600" />
                                 Analyse Détaillée - {predictions[activeStudent].student.name}
                             </CardTitle>
-                            <CardDescription>
-                                Résultats générés par notre système d'intelligence artificielle avancé
-                            </CardDescription>
+                            <CardDescription>Résultats générés par notre système d'intelligence artificielle avancé</CardDescription>
                         </CardHeader>
                         <CardContent className="p-6">
                             {/* Prédiction principale */}
@@ -416,15 +407,13 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <h3 className="mb-2 text-lg font-medium opacity-90">Filière Recommandée</h3>
-                                        <div className="text-4xl font-bold">
-                                            {predictions[activeStudent].prediction.predicted_master}
-                                        </div>
+                                        <div className="text-4xl font-bold">{predictions[activeStudent].prediction.predicted_master}</div>
                                     </div>
                                     <div className="text-right">
                                         <div className="mb-2 text-sm opacity-90">Score de Confiance</div>
                                         <div className="flex items-center gap-3">
-                                            <Progress 
-                                                value={predictions[activeStudent].prediction.confidence_score} 
+                                            <Progress
+                                                value={predictions[activeStudent].prediction.confidence_score}
                                                 className="h-3 w-32 bg-white/30"
                                             />
                                             <span className="text-3xl font-bold">
@@ -446,9 +435,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                         <Card key={program} className={`border-2 ${index === 0 ? 'border-indigo-500 shadow-lg' : 'border-gray-200'}`}>
                                             <CardHeader className="pb-3">
                                                 <div className="flex items-center justify-between">
-                                                    <Badge className={index === 0 ? 'bg-indigo-600' : 'bg-gray-500'}>
-                                                        #{index + 1}
-                                                    </Badge>
+                                                    <Badge className={index === 0 ? 'bg-indigo-600' : 'bg-gray-500'}>#{index + 1}</Badge>
                                                     <Award className={`h-5 w-5 ${index === 0 ? 'text-yellow-500' : 'text-gray-400'}`} />
                                                 </div>
                                             </CardHeader>
@@ -456,9 +443,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                                 <div className="mb-2 text-lg font-semibold">{program}</div>
                                                 <div className="flex items-center gap-2">
                                                     <Progress value={probability} className="h-2 flex-1" />
-                                                    <span className="text-sm font-medium text-indigo-600">
-                                                        {probability.toFixed(1)}%
-                                                    </span>
+                                                    <span className="text-sm font-medium text-indigo-600">{probability.toFixed(1)}%</span>
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -473,13 +458,11 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                         <BrainCircuit className="h-5 w-5 text-indigo-600" />
                                         Explication de l'Analyse
                                     </h3>
-                                    
+
                                     <div className="space-y-4">
                                         {/* Raison principale */}
                                         <div className="rounded-lg border-l-4 border-indigo-500 bg-indigo-50 p-4 dark:bg-indigo-950">
-                                            <h4 className="mb-2 font-semibold text-indigo-900 dark:text-indigo-100">
-                                                Analyse Principale
-                                            </h4>
+                                            <h4 className="mb-2 font-semibold text-indigo-900 dark:text-indigo-100">Analyse Principale</h4>
                                             <p className="text-indigo-800 dark:text-indigo-200">
                                                 {predictions[activeStudent].prediction.explanation.main_reason}
                                             </p>
@@ -488,15 +471,17 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                         {/* Facteurs de support */}
                                         {predictions[activeStudent].prediction.explanation.supporting_factors.length > 0 && (
                                             <div className="rounded-lg border border-gray-200 bg-white p-4 dark:bg-gray-900">
-                                                <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
-                                                    Facteurs Déterminants
-                                                </h4>
+                                                <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">Facteurs Déterminants</h4>
                                                 <ul className="space-y-2">
                                                     {predictions[activeStudent].prediction.explanation.supporting_factors.map((factor, index) => (
                                                         <li key={index} className="flex items-start gap-2">
                                                             <div className="mt-1 rounded-full bg-green-500 p-1">
                                                                 <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                                    <path
+                                                                        fillRule="evenodd"
+                                                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                        clipRule="evenodd"
+                                                                    />
                                                                 </svg>
                                                             </div>
                                                             <span className="text-gray-700 dark:text-gray-300">{factor}</span>
@@ -511,9 +496,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                             <div className="flex items-start gap-3">
                                                 <ArrowRight className="mt-1 h-5 w-5 text-green-600" />
                                                 <div>
-                                                    <h4 className="mb-2 font-semibold text-green-900 dark:text-green-100">
-                                                        Notre Recommandation
-                                                    </h4>
+                                                    <h4 className="mb-2 font-semibold text-green-900 dark:text-green-100">Notre Recommandation</h4>
                                                     <p className="text-green-800 dark:text-green-200">
                                                         {predictions[activeStudent].prediction.explanation.recommendation}
                                                     </p>
@@ -524,12 +507,13 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                         {/* Options alternatives */}
                                         {predictions[activeStudent].prediction.explanation.alternative_options.length > 0 && (
                                             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900">
-                                                <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
-                                                    Options Alternatives
-                                                </h4>
+                                                <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">Options Alternatives</h4>
                                                 <div className="space-y-2">
                                                     {predictions[activeStudent].prediction.explanation.alternative_options.map((option, index) => (
-                                                        <div key={index} className="flex items-center justify-between rounded-md bg-white p-3 dark:bg-gray-800">
+                                                        <div
+                                                            key={index}
+                                                            className="flex items-center justify-between rounded-md bg-white p-3 dark:bg-gray-800"
+                                                        >
                                                             <span className="font-medium">{option.program}</span>
                                                             <div className="flex items-center gap-2">
                                                                 <Progress value={option.probability} className="h-2 w-24" />
@@ -549,7 +533,8 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                 <div className="text-sm text-gray-500">
                                     <span className="font-medium">Modèle:</span> Gradient Boosting Classifier
                                     <span className="mx-2">•</span>
-                                    <span className="font-medium">Date:</span> {new Date(predictions[activeStudent].prediction.predicted_at).toLocaleString('fr-FR')}
+                                    <span className="font-medium">Date:</span>{' '}
+                                    {new Date(predictions[activeStudent].prediction.predicted_at).toLocaleString('fr-FR')}
                                 </div>
                                 <Button variant="outline" size="sm" className="flex items-center gap-2">
                                     <Download className="h-4 w-4" />
@@ -571,7 +556,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                 <Skeleton className="h-32 w-full rounded-xl" />
                             </div>
                             <div className="grid grid-cols-3 gap-4">
-                                {[1, 2, 3].map(i => (
+                                {[1, 2, 3].map((i) => (
                                     <Skeleton key={i} className="h-32 rounded-lg" />
                                 ))}
                             </div>

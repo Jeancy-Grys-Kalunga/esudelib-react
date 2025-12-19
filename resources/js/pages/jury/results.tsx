@@ -25,7 +25,6 @@ import {
     GraduationCap,
     Layers,
     Loader2,
-    Pencil,
     PlusCircle,
     Save,
     Scale,
@@ -346,7 +345,6 @@ const ResultsTable = ({
                         <TableHead className="min-w-[100px] px-4 py-3 text-center">Besoin</TableHead>
                         <TableHead className="min-w-[100px] px-4 py-3 text-center">Décision</TableHead>
                         <TableHead className="min-w-[100px] px-4 py-3 text-center">Mention</TableHead>
-                  
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -404,7 +402,6 @@ const ResultsTable = ({
                                     {student.mention}
                                 </Badge>
                             </TableCell>
-          
                         </TableRow>
                     ))}
                 </TableBody>
@@ -948,7 +945,7 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
             <div className="container mx-auto px-4 py-8">
                 <Head title="Gestion des résultats" />
 
-                <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+                <div className="mb-8 flex flex-col items-start justify-between gap-4">
                     <div>
                         <h1 className="flex items-center gap-2 text-3xl font-bold text-gray-900">
                             <BarChart className="h-8 w-8 text-indigo-600" />
@@ -965,8 +962,8 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-2">
+                    <div className="flex w-full flex-col gap-3 md:w-auto">
+                        <div className="flex flex-wrap items-center gap-2">
                             {(changes.length > 0 || massChanges.length > 0) && (
                                 <Badge variant="destructive" className="px-3 py-1">
                                     {changes.length + massChanges.length} modifications non sauvegardées
@@ -979,28 +976,30 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                             )}
                         </div>
 
-                        <Button
-                            onClick={saveChanges}
-                            disabled={isSaving || (changes.length === 0 && massChanges.length === 0)}
-                            className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"
-                        >
-                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                            {isSaving ? 'Sauvegarde...' : 'Sauvegarder'}
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <Button
+                                onClick={saveChanges}
+                                disabled={isSaving || (changes.length === 0 && massChanges.length === 0)}
+                                className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700"
+                            >
+                                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                {isSaving ? 'Sauvegarde...' : 'Sauvegarder'}
+                            </Button>
 
-                        <Button variant="secondary" className="flex items-center gap-2" onClick={exportToExcel} disabled={isExporting}>
-                            {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                            Exporter Excel
-                        </Button>
+                            <Button variant="secondary" className="flex items-center gap-2" onClick={exportToExcel} disabled={isExporting}>
+                                {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                                Exporter Excel
+                            </Button>
 
-                        <Button 
-                            variant="outline" 
-                            className="flex items-center gap-2 border-indigo-500 text-indigo-600 hover:bg-indigo-50" 
-                            onClick={() => window.location.href = route('jury.orientation-predictions')}
-                        >
-                            <BrainCircuit className="h-4 w-4" />
-                            Analyse Prédictive Master
-                        </Button>
+                            <Button
+                                variant="outline"
+                                className="flex items-center gap-2 border-indigo-500 text-indigo-600 hover:bg-indigo-50"
+                                onClick={() => (window.location.href = route('jury.orientation-predictions'))}
+                            >
+                                <BrainCircuit className="h-4 w-4" />
+                                Analyse Prédictive Master
+                            </Button>
+                        </div>
                     </div>
                 </div>
 

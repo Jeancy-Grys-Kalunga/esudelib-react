@@ -106,24 +106,30 @@ class GenerateMasterDataset extends Command
 
                 if (!empty($student->date_of_birth)) {
                     try {
-                        // Vérifier si c'est une date valide
-                        if (is_string($student->date_of_birth) && strlen($student->date_of_birth) > 4) {
+                        if (is_numeric($student->date_of_birth)) {
+                            // Handle Excel serial date
+                            $birthDate = \Carbon\Carbon::createFromTimestamp(($student->date_of_birth - 25569) * 86400);
+                            $calculatedAge = $birthDate->age;
+                        } elseif (is_string($student->date_of_birth) && strlen($student->date_of_birth) > 4) {
                             $birthDate = \Carbon\Carbon::parse($student->date_of_birth);
                             $calculatedAge = $birthDate->age;
+                        } else {
+                            $calculatedAge = 22;
+                        }
 
-                            // Vérifier que l'âge est réaliste (entre 18 et 50 ans)
-                            if ($calculatedAge >= 18 && $calculatedAge <= 50) {
-                                $age = $calculatedAge;
-                            }
+                        // Vérifier que l'âge est réaliste (entre 18 et 50 ans)
+                        if (isset($calculatedAge) && $calculatedAge >= 18 && $calculatedAge <= 50) {
+                            $age = $calculatedAge;
                         }
                     } catch (\Exception $e) {
                         // En cas d'erreur, utiliser un âge aléatoire réaliste
                         $age = rand(20, 28);
                     }
                 } else {
-                    // Si pas de date de naissance, générer un âge aléatoire
+                    // En cas d'erreur, utiliser un âge aléatoire réaliste
                     $age = rand(20, 28);
                 }
+
 
                 // Extraire la provenance (utiliser une logique basée sur les données disponibles)
                 $provenance = $this->extractProvenance($student);

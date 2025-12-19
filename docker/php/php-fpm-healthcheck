@@ -1,0 +1,14 @@
+#!/bin/bash
+# ========================================
+# Script de healthcheck pour PHP-FPM
+# ========================================
+
+SCRIPT_NAME="/status"
+SCRIPT_FILENAME="/status"
+REQUEST_METHOD="GET"
+
+export SCRIPT_NAME
+export SCRIPT_FILENAME
+export REQUEST_METHOD
+
+cgi-fcgi -bind -connect 127.0.0.1:9000 || exit 1

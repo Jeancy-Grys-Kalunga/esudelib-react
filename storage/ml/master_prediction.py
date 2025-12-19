@@ -316,8 +316,20 @@ class MasterPredictionService:
         self.master_programs = model_data['master_programs']
 
 
+def load_data(input_arg):
+    """Charge les données depuis une chaîne JSON ou un fichier"""
+    if os.path.isfile(input_arg):
+        with open(input_arg, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return json.loads(input_arg)
+
 def main():
     """Point d'entrée pour l'utilisation en ligne de commande"""
+    # Fixer l'encodage de la sortie standard pour éviter les erreurs de caractères
+    if sys.platform == 'win32':
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
     if len(sys.argv) < 2:
         print(json.dumps({'error': 'Usage: python master_prediction.py <action> <data>'}))
         sys.exit(1)
@@ -328,13 +340,13 @@ def main():
     try:
         if action == 'train':
             # Entraînement du modèle
-            training_data = json.loads(sys.argv[2])
+            training_data = load_data(sys.argv[2])
             result = service.train_model(training_data)
             print(json.dumps(result))
             
         elif action == 'predict':
             # Prédiction pour un étudiant
-            student_data = json.loads(sys.argv[2])
+            student_data = load_data(sys.argv[2])
             result = service.predict(student_data)
             print(json.dumps(result))
             

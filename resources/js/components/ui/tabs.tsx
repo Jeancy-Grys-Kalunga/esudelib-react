@@ -16,7 +16,20 @@ const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
       >
         {React.Children.map(children, (child) => {
           if (React.isValidElement(child)) {
-            return React.cloneElement(child, { value, onValueChange } as any);
+            const childProps = child.props as { value?: string };
+            const childType = child.type as any;
+            
+            // Heuristic: If child has a value prop, it's likely TabsContent (identifying itself).
+            if (childProps.value !== undefined) {
+               return React.cloneElement(child, { 
+                   active: childProps.value === value 
+               } as { active: boolean });
+            }
+            
+            // Only pass onValueChange to TabsList
+            if (childType.displayName === 'TabsList') {
+                return React.cloneElement(child, { value, onValueChange } as { value: string; onValueChange: (value: string) => void });
+            }
           }
           return child;
         })}
@@ -27,8 +40,8 @@ const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
 Tabs.displayName = 'Tabs';
 
 interface TabsListProps extends React.HTMLAttributes<HTMLDivElement> {
-  value: string;
-  onValueChange: (value: string) => void;
+  value?: string;
+  onValueChange?: (value: string) => void;
 }
 
 const TabsList = React.forwardRef<HTMLDivElement, TabsListProps>(
@@ -49,9 +62,9 @@ const TabsList = React.forwardRef<HTMLDivElement, TabsListProps>(
               onValueChange, 
             
               active: 
-            //@ts-ignore
+            //@ts-expect-error: value property check on generic child props
               child.props.value === value 
-            } as any);
+            } as { onValueChange?: (value: string) => void; active: boolean });
           }
           return child;
         })}
@@ -98,6 +111,8 @@ const TabsContent = React.forwardRef<HTMLDivElement, TabsContentProps>(
   ({ className, value, active, ...props }, ref) => (
     <div
       ref={ref}
+      data-state={active ? 'active' : 'inactive'}
+      data-value={value}
       className={cn(
         'mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         active ? 'block' : 'hidden',

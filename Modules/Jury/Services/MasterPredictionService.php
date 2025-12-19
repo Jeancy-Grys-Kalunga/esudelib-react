@@ -27,43 +27,125 @@ class MasterPredictionService
     public function trainModel()
     {
         try {
-            // Récupérer le dataset
-            $dataset = MasterTrainingDataset::all()->map(function ($record) {
-                return [
-                    'age' => $record->age,
-                    'provenance' => $record->provenance,
-                    'intention_expressed' => $record->intention_expressed,
-                    'optional_courses' => $record->optional_courses,
-                    'internships' => $record->internships,
-                    'average_grade' => $record->average_grade,
-                    'grades_by_subject' => $record->grades_by_subject,
-                    'actual_master' => $record->actual_master,
-                ];
-            })->toArray();
+            // Augmenter le temps d'exécution maximum à 10 minutes pour l'entraînement
+            set_time_limit(600);
+            ini_set('memory_limit', '1024M');
 
-            if (empty($dataset)) {
-                throw new Exception("Le dataset est vide. Veuillez générer le dataset d'abord.");
+            Log::info('Début de l\'entraînement du modèle ML');
+
+            // Vérifier que le script Python existe
+            if (!file_exists($this->scriptPath)) {
+                throw new Exception("Script Python non trouvé: {$this->scriptPath}");
             }
 
+            // Vérifier que Python est accessible
+            $pythonVersion = shell_exec("{$this->pythonPath} --version 2>&1");
+            Log::info("Version Python: {$pythonVersion}");
+
+            // Récupérer le dataset directement depuis la base de données
+            Log::info('Récupération du dataset depuis la base de données...');
+
+            $dataset = DB::table('master_training_datasets')
+                ->select([
+                    'age',
+                    'provenance',
+                    'intention_expressed',
+                    'optional_courses',
+                    'internships',
+                    'average_grade',
+                    'grades_by_subject',
+                    'actual_master'
+                ])
+                ->get()
+                ->map(function ($record) {
+                    // Décoder les champs JSON si nécessaire
+                    return [
+                        'age' => $record->age,
+                        'provenance' => $record->provenance,
+                        'intention_expressed' => $record->intention_expressed,
+                        'optional_courses' => json_decode($record->optional_courses, true) ?? [],
+                        'internships' => json_decode($record->internships, true) ?? [],
+                        'average_grade' => (float) $record->average_grade,
+                        'grades_by_subject' => json_decode($record->grades_by_subject, true) ?? [],
+                        'actual_master' => $record->actual_master,
+                    ];
+                })->toArray();
+
+            if (empty($dataset)) {
+                throw new Exception("Le dataset est vide. Veuillez générer le dataset d'abord avec: php artisan master:generate-dataset");
+            }
+
+            Log::info("Dataset récupéré: " . count($dataset) . " enregistrements");
+
+            // Sauvegarder le dataset dans un fichier temporaire
+            $tempFile = storage_path('ml/temp_training_data.json');
+
+            // Créer le répertoire si nécessaire
+            $mlDir = dirname($tempFile);
+            if (!file_exists($mlDir)) {
+                mkdir($mlDir, 0755, true);
+                Log::info("Répertoire ML créé: {$mlDir}");
+            }
+
+            // Vérifier les permissions d'écriture
+            if (!is_writable($mlDir)) {
+                throw new Exception("Le répertoire {$mlDir} n'est pas accessible en écriture. Vérifiez les permissions.");
+            }
+
+            // Sauvegarder avec encodage UTF-8
+            $jsonData = json_encode($dataset, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+            if ($jsonData === false) {
+                throw new Exception("Erreur lors de l'encodage JSON: " . json_last_error_msg());
+            }
+
+            file_put_contents($tempFile, $jsonData);
+            Log::info("Dataset sauvegardé dans: {$tempFile} (" . filesize($tempFile) . " bytes)");
+
             // Appeler le script Python pour l'entraînement
-            $datasetJson = json_encode($dataset);
             $command = sprintf(
                 '%s %s train %s 2>&1',
                 escapeshellcmd($this->pythonPath),
                 escapeshellarg($this->scriptPath),
-                escapeshellarg($datasetJson)
+                escapeshellarg($tempFile)
             );
 
+            Log::info("Commande Python: {$command}");
+            Log::info("Lancement de l'entraînement...");
+
             $output = shell_exec($command);
+
+            Log::info("Sortie Python brute: " . substr($output, 0, 500));
+
+            // Supprimer le fichier temporaire
+            if (file_exists($tempFile)) {
+                unlink($tempFile);
+                Log::info("Fichier temporaire supprimé");
+            }
+
+            // Parser la sortie JSON
             $result = json_decode($output, true);
 
+            if ($result === null && json_last_error() !== JSON_ERROR_NONE) {
+                $error = "Erreur de parsing JSON: " . json_last_error_msg() . "\nSortie Python: " . $output;
+                Log::error($error);
+                throw new Exception($error);
+            }
+
             if (isset($result['error'])) {
+                Log::error("Erreur Python: " . $result['error']);
                 throw new Exception($result['error']);
             }
+
+            if (!isset($result['accuracy'])) {
+                throw new Exception("Réponse invalide du script Python. Sortie: " . $output);
+            }
+
+            Log::info("Modèle entraîné avec succès. Précision: " . ($result['accuracy'] * 100) . "%");
 
             return $result;
         } catch (Exception $e) {
             Log::error('Erreur lors de l\'entraînement du modèle: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
             throw $e;
         }
     }
@@ -133,7 +215,19 @@ class MasterPredictionService
     private function prepareStudentData(Student $student)
     {
         // Calculer l'âge
-        $birthDate = \Carbon\Carbon::parse($student->date_of_birth);
+        if (is_numeric($student->date_of_birth)) {
+            // Supposons un format Excel serial date (jours depuis 30/12/1899)
+            // 25569 est le nombre de jours entre 01/01/1970 et 30/12/1899
+            $birthDate = \Carbon\Carbon::createFromTimestamp(($student->date_of_birth - 25569) * 86400);
+        } else {
+            try {
+                $birthDate = \Carbon\Carbon::parse($student->date_of_birth);
+            } catch (\Exception $e) {
+                // Fallback si la date est invalide, on met une date par défaut pour éviter le crash
+                Log::warning("Date de naissance invalide pour l'étudiant {$student->id}: {$student->date_of_birth}. Utilisation de la date actuelle.");
+                $birthDate = now()->subYears(20); // Supposons 20 ans
+            }
+        }
         $age = $birthDate->age;
 
         // Récupérer les notes

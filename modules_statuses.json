@@ -11,5 +11,6 @@
     "Upload": true,
     "User": true,
     "Currency": true,
-    "Calendar": true
+    "Calendar": true,
+    "UmlViewer": true
 }

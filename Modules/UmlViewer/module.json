@@ -1,0 +1,9 @@
+{
+    "name": "UmlViewer",
+    "alias": "umlviewer",
+    "description": "Module de visualisation UML pour analyser et afficher les diagrammes de l'application",
+    "keywords": ["uml", "diagram", "visualization", "plantuml", "database", "architecture"],
+    "priority": 100,
+    "providers": ["Modules\\UmlViewer\\Providers\\UmlViewerServiceProvider"],
+    "files": []
+}

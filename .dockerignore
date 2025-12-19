@@ -1,0 +1,119 @@
+# ========================================
+# .dockerignore
+# Fichiers à exclure lors du build Docker
+# ========================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+.github
+
+# Documentation
+*.md
+!README.md
+docs/
+CHANGELOG*.md
+GUIDE*.md
+UML*.md
+DOCKER*.md
+FIX*.md
+INSTALLATION*.md
+QUICKSTART*.md
+RECAP*.md
+RESUME*.md
+INDEX*.md
+PRESENTATION*.md
+DEPENDENCIES*.md
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+.npm
+.yarn
+
+# Laravel
+/vendor
+/storage/*.key
+/storage/logs/*.log
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/debugbar
+.env
+.env.backup
+.env.production
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+auth.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+storage/ml/venv/
+storage/ml/__pycache__/
+storage/ml/*.pkl
+storage/ml/temp_*.json
+storage/ml/test_*.py
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Tests
+tests/
+phpunit.xml
+.phpunit.cache
+
+# Build artifacts
+public/hot
+public/storage
+public/build
+public/mix-manifest.json
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.cache
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Large files
+*.mp4
+*.avi
+*.mov
+*.zip
+*.tar
+*.gz
+*.rar
