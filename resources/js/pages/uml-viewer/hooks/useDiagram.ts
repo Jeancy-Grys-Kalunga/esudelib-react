@@ -43,6 +43,8 @@ export function useDiagram(): UseDiagramReturn {
     const exportDiagram = useCallback(
         async (type: string, format: 'png' | 'svg' | 'puml', plantUML: string) => {
             try {
+                console.log(`Exporting diagram: type=${type}, format=${format}, plantUML length=${plantUML.length}`);
+
                 const response = await axios.post(
                     '/uml-viewer/export',
                     {
@@ -56,10 +58,22 @@ export function useDiagram(): UseDiagramReturn {
                     },
                 );
 
+                console.log('Export response received:', response.status, response.headers['content-type']);
+
+                // Check if we got an error JSON instead of a blob
+                if (response.headers['content-type']?.includes('application/json')) {
+                    const text = await response.data.text();
+                    const error = JSON.parse(text);
+                    throw new Error(error.message || "Erreur lors de l'export");
+                }
+
                 // Create a generic download link
                 const blob = new Blob([response.data], {
                     type: format === 'svg' ? 'image/svg+xml' : format === 'png' ? 'image/png' : 'text/plain',
                 });
+
+                console.log('Blob created:', blob.size, 'bytes');
+
                 const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
@@ -68,10 +82,15 @@ export function useDiagram(): UseDiagramReturn {
                 link.click();
                 document.body.removeChild(link);
                 window.URL.revokeObjectURL(url);
+
+                console.log('Download triggered successfully');
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Erreur lors de l'export";
                 console.error('Error exporting diagram:', err);
                 setError(errorMessage);
+
+                // Show user-friendly error
+                alert(`Erreur lors du téléchargement: ${errorMessage}`);
             }
         },
         [setError],

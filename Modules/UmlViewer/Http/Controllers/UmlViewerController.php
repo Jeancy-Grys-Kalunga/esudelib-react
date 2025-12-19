@@ -122,6 +122,8 @@ class UmlViewerController extends Controller
 
         $filename = "diagram_{$type}_" . now()->format('Y-m-d_His') . ".{$format}";
 
+        \Illuminate\Support\Facades\Log::info("Export diagram request: type={$type}, format={$format}, plantUML length=" . strlen($plantUML));
+
         if ($format === 'puml') {
             return response($plantUML)
                 ->header('Content-Type', 'text/plain')
@@ -130,21 +132,41 @@ class UmlViewerController extends Controller
 
         // Pour PNG et SVG, on doit POSTer le contenu pour éviter les limites de taille d'URL
         try {
-            $response = \Illuminate\Support\Facades\Http::timeout(60)
+            \Illuminate\Support\Facades\Log::info("Sending request to PlantUML server...");
+
+            $response = \Illuminate\Support\Facades\Http::timeout(120) // Augmenter le timeout à 120s
                 ->withBody($plantUML, 'text/plain')
                 ->post("https://www.plantuml.com/plantuml/{$format}");
 
+            \Illuminate\Support\Facades\Log::info("PlantUML response: status=" . $response->status() . ", size=" . strlen($response->body()));
+
             if ($response->successful()) {
-                return response($response->body())
+                $imageContent = $response->body();
+
+                // Vérifier que nous avons bien reçu une image
+                if (empty($imageContent)) {
+                    \Illuminate\Support\Facades\Log::error("PlantUML returned empty content");
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Le serveur PlantUML a retourné un contenu vide",
+                    ], 500);
+                }
+
+                return response($imageContent)
                     ->header('Content-Type', $format === 'svg' ? 'image/svg+xml' : 'image/png')
-                    ->header('Content-Disposition', "attachment; filename=\"{$filename}\"");
+                    ->header('Content-Disposition', "attachment; filename=\"{$filename}\"")
+                    ->header('Content-Length', strlen($imageContent));
             }
+
+            \Illuminate\Support\Facades\Log::error("PlantUML request failed: " . $response->status() . " - " . $response->body());
 
             return response()->json([
                 'success' => false,
                 'message' => "Erreur lors de la génération de l'image (Status: " . $response->status() . ")",
             ], 500);
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("PlantUML export exception: " . $e->getMessage());
+
             return response()->json([
                 'success' => false,
                 'message' => "Erreur de connexion au service PlantUML: " . $e->getMessage(),
