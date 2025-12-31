@@ -1,0 +1,6 @@
+import{r as o,j as e}from"./app-9KV4z1KZ.js";import{B as i}from"./button-BRldV__h.js";import{C as c,b as n,c as l,a as d}from"./card-C-KMvcRL.js";import{C as m}from"./check-ByKeWvPU.js";import{c as x}from"./index-D0wc6_NU.js";import"./utils-jAU0Cazi.js";/**
+ * @license lucide-react v0.475.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const p=[["rect",{width:"14",height:"14",x:"8",y:"8",rx:"2",ry:"2",key:"17jyea"}],["path",{d:"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2",key:"zix9uf"}]],h=x("Copy",p);function N({code:s}){const[r,t]=o.useState(!1),a=async()=>{await navigator.clipboard.writeText(s),t(!0),setTimeout(()=>t(!1),2e3)};return e.jsxs(c,{children:[e.jsxs(n,{className:"flex flex-row items-center justify-between space-y-0 pb-4",children:[e.jsx(l,{className:"text-base font-medium",children:"Code PlantUML"}),e.jsx(i,{variant:"outline",size:"sm",onClick:a,children:r?e.jsxs(e.Fragment,{children:[e.jsx(m,{className:"mr-2 h-4 w-4"}),"Copié !"]}):e.jsxs(e.Fragment,{children:[e.jsx(h,{className:"mr-2 h-4 w-4"}),"Copier"]})})]}),e.jsx(d,{children:e.jsx("div",{className:"relative",children:e.jsx("pre",{className:"max-h-[400px] overflow-auto rounded-lg bg-slate-950 p-4 text-sm text-slate-50",children:e.jsx("code",{children:s})})})})]})}export{N as CodeViewer};
