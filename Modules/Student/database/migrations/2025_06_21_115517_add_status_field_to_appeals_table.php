@@ -14,9 +14,8 @@ return new class extends Migration
         Schema::table('appeals', function (Blueprint $table) {
             $table->enum('status', ['pending', 'accepted', 'rejected'])
                 ->default('pending')
-                ->after('appeal_date')
+                ->after('justification')
                 ->comment('Status of the appeal: pending, accepted, or rejected');
-            
         });
     }
 
@@ -27,7 +26,6 @@ return new class extends Migration
     {
         Schema::table('appeals', function (Blueprint $table) {
             $table->dropColumn('status');
-            
         });
     }
 };
