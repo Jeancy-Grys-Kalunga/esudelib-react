@@ -80,14 +80,17 @@ class DatabaseAnalyzer
 
         $tableName = $matches[1];
 
-        // Extraire les colonnes
-        $columns = $this->extractColumns($content);
+        // Extraire uniquement le contenu de la PREMIÈRE table Schema::create()
+        $tableContent = $this->extractFirstSchemaCreate($content, $tableName);
+
+        // Extraire les colonnes uniquement de cette table
+        $columns = $this->extractColumns($tableContent);
 
         // Extraire les indexes
-        $indexes = $this->extractIndexes($content);
+        $indexes = $this->extractIndexes($tableContent);
 
         // Extraire les clés étrangères
-        $foreignKeys = $this->extractForeignKeys($content);
+        $foreignKeys = $this->extractForeignKeys($tableContent);
 
         $this->tables[] = [
             'name' => $tableName,
@@ -97,6 +100,46 @@ class DatabaseAnalyzer
             'foreignKeys' => $foreignKeys,
             'primaryKey' => 'id', // Par défaut
         ];
+    }
+
+    /**
+     * Extraire le contenu du premier Schema::create() pour une table donnée
+     */
+    private function extractFirstSchemaCreate(string $content, string $tableName): string
+    {
+        // Trouver la position de Schema::create('table_name'
+        $startPattern = "Schema::create('$tableName'";
+        $startPos = strpos($content, $startPattern);
+
+        if ($startPos === false) {
+            return $content;
+        }
+
+        // Trouver l'accolade ouvrante après Schema::create
+        $openBracePos = strpos($content, '{', $startPos);
+        if ($openBracePos === false) {
+            return $content;
+        }
+
+        // Compter les accolades pour trouver la fermeture correspondante
+        $braceCount = 0;
+        $len = strlen($content);
+        $closeBracePos = $openBracePos;
+
+        for ($i = $openBracePos; $i < $len; $i++) {
+            if ($content[$i] === '{') {
+                $braceCount++;
+            } elseif ($content[$i] === '}') {
+                $braceCount--;
+                if ($braceCount === 0) {
+                    $closeBracePos = $i;
+                    break;
+                }
+            }
+        }
+
+        // Extraire le contenu entre les accolades
+        return substr($content, $startPos, $closeBracePos - $startPos + 1);
     }
 
     /**
