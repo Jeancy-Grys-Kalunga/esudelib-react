@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 interface UseDiagramReturn {
     diagram: string | null;
     imageUrl: string | null;
+    sql: string | null;
     loading: boolean;
     error: string | null;
     generateDiagram: (type: string, options?: Record<string, unknown>) => Promise<void>;
@@ -13,12 +14,17 @@ interface UseDiagramReturn {
 export function useDiagram(): UseDiagramReturn {
     const [diagram, setDiagram] = useState<string | null>(null);
     const [imageUrl, setImageUrl] = useState<string | null>(null);
+    const [sql, setSql] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const generateDiagram = useCallback(async (type: string, options: Record<string, unknown> = {}) => {
         setLoading(true);
         setError(null);
+        // Reset previous data
+        setDiagram(null);
+        setImageUrl(null);
+        setSql(null);
 
         try {
             const response = await axios.post('/uml-viewer/generate', {
@@ -27,8 +33,13 @@ export function useDiagram(): UseDiagramReturn {
             });
 
             if (response.data.success) {
-                setDiagram(response.data.plantUML);
-                setImageUrl(response.data.imageUrl || null);
+                // Check if it's a SQL response
+                if (response.data.isSql) {
+                    setSql(response.data.sql);
+                } else {
+                    setDiagram(response.data.plantUML);
+                    setImageUrl(response.data.imageUrl || null);
+                }
             } else {
                 setError('Erreur lors de la génération du diagramme');
             }
@@ -99,6 +110,7 @@ export function useDiagram(): UseDiagramReturn {
     return {
         diagram,
         imageUrl,
+        sql,
         loading,
         error,
         generateDiagram,
