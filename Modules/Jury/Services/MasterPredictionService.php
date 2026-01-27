@@ -101,14 +101,19 @@ class MasterPredictionService
             file_put_contents($tempFile, $jsonData);
             Log::info("Dataset sauvegardé dans: {$tempFile} (" . filesize($tempFile) . " bytes)");
 
-            // Appeler le script Python pour l'entraînement
+            $pythonCmd = $this->pythonPath;
+            // Sur Windows, si le chemin vers Python contient des espaces ou si c'est juste 'python', on doit faire attention
+            // Utilisons escapeshellarg pour le script et le fichier temp, mais pour python, escapeshellcmd devrait aller si c'est juste 'python'
+            // Mais si c'est un chemin absolu, il faut des guillemets.
+
             $command = sprintf(
-                '%s %s train %s 2>&1',
-                escapeshellcmd($this->pythonPath),
-                escapeshellarg($this->scriptPath),
-                escapeshellarg($tempFile)
+                '%s "%s" "%s" 2>&1',
+                $pythonCmd, // On suppose que python est dans le PATH ou correctement configuré
+                $this->scriptPath,
+                $tempFile
             );
 
+            Log::info("Commande Python (RAW): " . $command);
             Log::info("Commande Python: {$command}");
             Log::info("Lancement de l'entraînement...");
 
@@ -161,11 +166,14 @@ class MasterPredictionService
 
             // Appeler le script Python pour la prédiction
             $studentDataJson = json_encode($studentData);
+
+            $pythonCmd = $this->pythonPath;
+
             $command = sprintf(
-                '%s %s predict %s 2>&1',
-                escapeshellcmd($this->pythonPath),
-                escapeshellarg($this->scriptPath),
-                escapeshellarg($studentDataJson)
+                '%s "%s" predict %s 2>&1',
+                $pythonCmd,
+                $this->scriptPath,
+                escapeshellarg($studentDataJson) // JSON argument needs standard escaping
             );
 
             $output = shell_exec($command);

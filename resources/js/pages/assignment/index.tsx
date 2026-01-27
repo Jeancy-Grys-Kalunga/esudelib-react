@@ -1,16 +1,18 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Download, Edit, GraduationCap, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Download, Edit, GraduationCap, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils';
 import { Label } from '@radix-ui/react-label';
 
 type Course = {
@@ -22,6 +24,10 @@ type Course = {
         tp: number;
         credits: number;
     };
+    promotions?: {
+        id: number;
+        name: string;
+    }[];
 };
 
 type AcademicYear = {
@@ -93,6 +99,59 @@ type PageProps = {
     };
 };
 
+const CourseSelector = ({
+    courses,
+    value,
+    onChange,
+    error,
+}: {
+    courses: Course[];
+    value: string;
+    onChange: (value: string) => void;
+    error?: string | null;
+}) => {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <div className="flex flex-col gap-1">
+            <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                className={cn('w-full justify-between font-normal', !value && 'text-muted-foreground')}
+                onClick={() => setOpen(true)}
+                type="button"
+            >
+                {value ? courses.find((course) => course.id.toString() === value)?.name : 'Sélectionnez un cours'}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+            <CommandDialog open={open} onOpenChange={setOpen}>
+                <DialogTitle className="sr-only">Rechercher un cours</DialogTitle>
+                <CommandInput placeholder="Rechercher un cours..." />
+                <CommandList>
+                    <CommandEmpty>Aucun cours trouvé.</CommandEmpty>
+                    <CommandGroup>
+                        {courses.map((course) => (
+                            <CommandItem
+                                key={course.id}
+                                value={course.name}
+                                onSelect={() => {
+                                    onChange(course.id.toString());
+                                    setOpen(false);
+                                }}
+                            >
+                                <Check className={cn('mr-2 h-4 w-4', value === course.id.toString() ? 'opacity-100' : 'opacity-0')} />
+                                {course.name}
+                            </CommandItem>
+                        ))}
+                    </CommandGroup>
+                </CommandList>
+            </CommandDialog>
+            {error && <p className="text-xs text-red-500">{error}</p>}
+        </div>
+    );
+};
+
 export default function AssignmentManager({
     assignments: allAssignments,
     teachers,
@@ -136,7 +195,7 @@ export default function AssignmentManager({
                     (assignment.collaborator && assignment.collaborator.toLowerCase().includes(term)) ||
                     assignment.course.toLowerCase().includes(term) ||
                     assignment.promotion.toLowerCase().includes(term) ||
-                    assignment.semester.toLowerCase().includes(term)
+                    assignment.semester.toLowerCase().includes(term),
             );
         }
 
@@ -234,6 +293,17 @@ export default function AssignmentManager({
     const handleAssignmentChange = (index: number, field: keyof AssignmentFormData, value: string) => {
         const newAssignments = [...bulkAssignments];
         newAssignments[index] = { ...newAssignments[index], [field]: value };
+
+        // Si on change le cours, on tente de pré-sélectionner la promotion
+        if (field === 'course_id') {
+            const selectedCourse = courses.find((c) => c.id.toString() === value);
+            if (selectedCourse && selectedCourse.promotions && selectedCourse.promotions.length === 1) {
+                newAssignments[index].promotion_id = selectedCourse.promotions[0].id.toString();
+            } else {
+                newAssignments[index].promotion_id = '';
+            }
+        }
+
         setBulkAssignments(newAssignments);
     };
 
@@ -307,9 +377,7 @@ export default function AssignmentManager({
     // Fonction pour filtrer les collaborateurs (exclure le titulaire)
     const getFilteredCollaborators = (index: number) => {
         const currentHolderId = bulkAssignments[index]?.holder_id;
-        return teachers.filter(teacher => 
-            teacher.id.toString() !== currentHolderId
-        );
+        return teachers.filter((teacher) => teacher.id.toString() !== currentHolderId);
     };
 
     // Fonction pour exporter les données
@@ -325,7 +393,7 @@ export default function AssignmentManager({
     const handleImportSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!importFile) {
-            toast.error("Veuillez sélectionner un fichier");
+            toast.error('Veuillez sélectionner un fichier');
             return;
         }
 
@@ -339,7 +407,7 @@ export default function AssignmentManager({
                 setIsImportModalOpen(false);
                 setIsImporting(false);
                 setImportFile(null);
-                toast.success("Importation réussie !");
+                toast.success('Importation réussie !');
             },
             onError: (errors) => {
                 setIsImporting(false);
@@ -601,6 +669,7 @@ export default function AssignmentManager({
                                         <TableHeader className="bg-gray-100">
                                             <TableRow>
                                                 <TableHead className="w-[180px]">Cours *</TableHead>
+                                                <TableHead className="w-[150px]">Promotion *</TableHead>
                                                 <TableHead className="w-[150px]">Année académique *</TableHead>
                                                 <TableHead className="w-[180px]">Titulaire *</TableHead>
                                                 <TableHead className="w-[180px]">Collaborateur</TableHead>
@@ -612,23 +681,40 @@ export default function AssignmentManager({
                                             {bulkAssignments.map((assignment, index) => (
                                                 <TableRow key={index}>
                                                     <TableCell>
-                                                        <Select
+                                                        <CourseSelector
+                                                            courses={courses}
                                                             value={assignment.course_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'course_id', value)}
+                                                            onChange={(value) => handleAssignmentChange(index, 'course_id', value)}
+                                                            error={getFieldError(index, 'course_id')}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Select
+                                                            value={assignment.promotion_id}
+                                                            onValueChange={(value) => handleAssignmentChange(index, 'promotion_id', value)}
+                                                            disabled={!assignment.course_id}
                                                         >
                                                             <SelectTrigger>
-                                                                <SelectValue placeholder="Sélectionnez un cours" />
+                                                                <SelectValue
+                                                                    placeholder={
+                                                                        assignment.course_id
+                                                                            ? 'Sélectionnez une promotion'
+                                                                            : "Sélectionnez d'abord un cours"
+                                                                    }
+                                                                />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {courses.map((course) => (
-                                                                    <SelectItem key={course.id} value={course.id.toString()}>
-                                                                        {course.name}
-                                                                    </SelectItem>
-                                                                ))}
+                                                                {courses
+                                                                    .find((c) => c.id.toString() === assignment.course_id)
+                                                                    ?.promotions?.map((promo) => (
+                                                                        <SelectItem key={promo.id} value={promo.id.toString()}>
+                                                                            {promo.name}
+                                                                        </SelectItem>
+                                                                    ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        {getFieldError(index, 'course_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'course_id')}</p>
+                                                        {getFieldError(index, 'promotion_id') && (
+                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'promotion_id')}</p>
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
@@ -723,12 +809,7 @@ export default function AssignmentManager({
 
                             <DialogFooter className="mt-4">
                                 <div className="flex w-full justify-between">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={closeModal}
-                                        disabled={isSubmitting}
-                                    >
+                                    <Button type="button" variant="outline" onClick={closeModal} disabled={isSubmitting}>
                                         Annuler
                                     </Button>
                                     <Button
@@ -817,21 +898,19 @@ export default function AssignmentManager({
                                 <Upload className="h-5 w-5" />
                                 Importer des attributions
                             </DialogTitle>
-                            <DialogDescription>
-                                Téléversez un fichier Excel contenant la liste des attributions
-                            </DialogDescription>
+                            <DialogDescription>Téléversez un fichier Excel contenant la liste des attributions</DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleImportSubmit} className="space-y-4">
                             <div className="space-y-2">
                                 <Label>Fichier Excel *</Label>
-                                <div 
-                                    className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer bg-gray-50"
+                                <div
+                                    className="cursor-pointer rounded-lg border-2 border-dashed bg-gray-50 p-6 text-center"
                                     onClick={() => document.getElementById('import-file')?.click()}
                                 >
-                                    <input 
+                                    <input
                                         id="import-file"
-                                        type="file" 
-                                        className="hidden" 
+                                        type="file"
+                                        className="hidden"
                                         accept=".xlsx,.xls,.csv"
                                         onChange={(e) => {
                                             if (e.target.files?.[0]) {
@@ -853,7 +932,7 @@ export default function AssignmentManager({
                                     )}
                                 </div>
                             </div>
-                            
+
                             <DialogFooter>
                                 <Button type="button" variant="outline" onClick={() => setIsImportModalOpen(false)}>
                                     Annuler
