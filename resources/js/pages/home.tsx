@@ -1,16 +1,6 @@
+import { Head, Link, usePage } from '@inertiajs/react';
 import React, { useEffect, useState } from 'react';
-import { Head, Link, usePage }  from '@inertiajs/react';
-import { Inertia } from '@inertiajs/inertia';
 import GuestLayout from '../layouts/GuestLayout';
-
-
-
-interface Errors {
-    name?: string;
-    email?: string;
-    password?: string;
-    password_confirmation?: string;
-}
 
 interface HomePageProps {
     [key: string]: unknown;
@@ -20,7 +10,6 @@ interface HomePageProps {
             email: string;
         } | null;
     };
-    errors: Errors;
     canLogin: boolean;
     canRegister: boolean;
 }
@@ -30,8 +19,10 @@ type NextPageWithLayout = React.FC & {
 };
 
 const Home: NextPageWithLayout = () => {
-    const { auth, errors } = usePage<HomePageProps>().props;
+    const { auth } = usePage<HomePageProps>().props;
     const [scrollY, setScrollY] = useState(0);
+    const [heroImageLoaded, setHeroImageLoaded] = useState(false);
+    const [ctaImageLoaded, setCtaImageLoaded] = useState(false);
 
     useEffect(() => {
         const handleScroll = () => setScrollY(window.scrollY);
@@ -39,174 +30,237 @@ const Home: NextPageWithLayout = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const formData = new FormData(e.currentTarget);
-        Inertia.post(route('register.submit'), {
-            name: formData.get('name'),
-            email: formData.get('email'),
-            password: formData.get('password'),
-            password_confirmation: formData.get('password_confirmation'),
-        });
-    };
-
     return (
         <>
             <Head title="Accueil - Esudelib" />
-            
+
             {/* Hero Section - Enhanced with glassmorphism and modern gradients */}
-            <section className="relative min-h-screen flex items-center bg-gradient-to-br from-indigo-900 via-purple-900 to-blue-900 text-white overflow-hidden animate-gradient">
+            <section className="animate-gradient relative flex min-h-screen items-center overflow-hidden bg-gradient-to-br from-blue-900 via-blue-800 to-sky-700 text-white">
                 {/* Animated background elements */}
                 <div className="absolute inset-0">
-                    <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-500/20 via-transparent to-transparent animate-shimmer"></div>
-                    <div className="absolute bottom-0 right-0 w-full h-full bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-blue-500/20 via-transparent to-transparent"></div>
-                    
+                    <div className="animate-shimmer absolute top-0 left-0 h-full w-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-400/20 via-transparent to-transparent"></div>
+                    <div className="absolute right-0 bottom-0 h-full w-full bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-sky-500/20 via-transparent to-transparent"></div>
+
                     {/* Floating orbs with parallax effect */}
-                    <div 
-                        className="absolute top-20 left-10 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animate-glow-pulse"
+                    <div
+                        className="animate-blob animate-glow-pulse absolute top-20 left-10 h-72 w-72 rounded-full bg-blue-400 opacity-20 mix-blend-multiply blur-3xl filter"
                         style={{ transform: `translateY(${scrollY * 0.3}px)` }}
                     ></div>
-                    <div 
-                        className="absolute top-40 right-20 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"
+                    <div
+                        className="animate-blob animation-delay-2000 absolute top-40 right-20 h-96 w-96 rounded-full bg-sky-500 opacity-20 mix-blend-multiply blur-3xl filter"
                         style={{ transform: `translateY(${scrollY * 0.2}px)` }}
                     ></div>
-                    <div 
-                        className="absolute -bottom-20 left-1/2 w-80 h-80 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000 animate-glow-pulse"
+                    <div
+                        className="animate-blob animation-delay-4000 animate-glow-pulse absolute -bottom-20 left-1/2 h-80 w-80 rounded-full bg-blue-600 opacity-20 mix-blend-multiply blur-3xl filter"
                         style={{ transform: `translateY(${scrollY * 0.4}px)` }}
                     ></div>
-                    
+
                     {/* Floating particles */}
-                    <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-white rounded-full animate-float animation-delay-500 opacity-60"></div>
-                    <div className="absolute top-1/3 right-1/3 w-3 h-3 bg-yellow-300 rounded-full animate-float animation-delay-1000 opacity-40"></div>
-                    <div className="absolute bottom-1/4 left-1/3 w-2 h-2 bg-purple-300 rounded-full animate-float animation-delay-200 opacity-50"></div>
+                    <div className="animate-float animation-delay-500 absolute top-1/4 left-1/4 h-2 w-2 rounded-full bg-white opacity-60"></div>
+                    <div className="animate-float animation-delay-1000 absolute top-1/3 right-1/3 h-3 w-3 rounded-full bg-sky-300 opacity-40"></div>
+                    <div className="animate-float animation-delay-200 absolute bottom-1/4 left-1/3 h-2 w-2 rounded-full bg-blue-300 opacity-50"></div>
                 </div>
-                
+
                 {/* Grid pattern overlay */}
                 <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30"></div>
-                
-                <div className="container mx-auto px-4 relative z-10">
-                    <div className="max-w-4xl mx-auto text-center">
+
+                <div className="relative z-10 container mx-auto px-4">
+                    <div className="mx-auto max-w-4xl text-center">
                         {/* Badge */}
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-8 animate-fade-in-down hover-glow glass-effect">
+                        <div className="animate-fade-in-down hover-glow glass-effect mb-8 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 backdrop-blur-md">
                             <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 animate-scale-pulse"></span>
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="animate-scale-pulse relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
                             </span>
                             <span className="text-sm font-medium">Plateforme de nouvelle génération</span>
                         </div>
-                        
-                        <h1 className="text-5xl md:text-7xl font-extrabold mb-6 leading-tight animate-fade-in-up">
+
+                        <h1 className="animate-fade-in-up mb-6 text-5xl leading-tight font-extrabold md:text-7xl">
                             Gestion de Délibération
-                            <span className="block mt-2 bg-gradient-to-r from-yellow-300 via-amber-300 to-orange-300 bg-clip-text text-transparent animate-shimmer">
+                            <span className="animate-shimmer mt-2 block bg-gradient-to-r from-sky-300 via-blue-300 to-cyan-300 bg-clip-text text-transparent">
                                 Réinventée
                             </span>
                         </h1>
-                        
-                        <p className="text-xl md:text-2xl mb-10 text-gray-200 max-w-3xl mx-auto leading-relaxed animate-fade-in">
-                            Une expérience moderne et intuitive pour simplifier vos processus de délibération. 
-                            Gagnez du temps, réduisez les erreurs et offrez une transparence totale.
+
+                        <p className="animate-fade-in mx-auto mb-10 max-w-3xl text-xl leading-relaxed text-gray-200 md:text-2xl">
+                            Une expérience moderne et intuitive pour simplifier vos processus de délibération. Gagnez du temps, réduisez les erreurs
+                            et offrez une transparence totale.
                         </p>
-                        
-                        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-fade-in-up animation-delay-300">
+
+                        <div className="animate-fade-in-up animation-delay-300 flex flex-col items-center justify-center gap-4 sm:flex-row">
                             {auth.user ? (
-                                <Link 
-                                    href={route('dashboard')} 
-                                    className="group relative px-8 py-4 bg-gradient-to-r from-yellow-400 to-amber-500 text-gray-900 font-bold rounded-xl transition-all duration-300 hover:shadow-2xl hover:shadow-yellow-500/50 hover:scale-105 overflow-hidden hover-lift animate-glow-pulse"
+                                <Link
+                                    href={route('dashboard')}
+                                    className="group hover-lift animate-glow-pulse relative overflow-hidden rounded-xl bg-white px-8 py-4 font-bold text-blue-600 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-white/50"
                                 >
                                     <span className="relative z-10 flex items-center gap-2">
                                         Tableau de bord
-                                        <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg
+                                            className="h-5 w-5 transition-transform group-hover:translate-x-1"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
                                         </svg>
                                     </span>
-                                    <div className="absolute inset-0 bg-gradient-to-r from-yellow-300 to-amber-400 opacity-0 group-hover:opacity-100 transition-opacity animate-shimmer"></div>
+                                    <div className="animate-shimmer absolute inset-0 bg-gradient-to-r from-blue-50 to-sky-50 opacity-0 transition-opacity group-hover:opacity-100"></div>
                                 </Link>
                             ) : (
                                 <>
-                                    <Link 
-                                        href={route('register')} 
-                                        className="group relative px-8 py-4 bg-gradient-to-r from-yellow-400 to-amber-500 text-gray-900 font-bold rounded-xl transition-all duration-300 hover:shadow-2xl hover:shadow-yellow-500/50 hover:scale-105 overflow-hidden hover-lift animate-glow-pulse"
+                                    <Link
+                                        href={route('register')}
+                                        className="group hover-lift animate-glow-pulse relative overflow-hidden rounded-xl bg-white px-8 py-4 font-bold text-blue-600 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-white/50"
                                     >
                                         <span className="relative z-10 flex items-center gap-2">
                                             Commencez gratuitement
-                                            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                                            <svg
+                                                className="h-5 w-5 transition-transform group-hover:translate-x-1"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth="2"
+                                                    d="M13 7l5 5m0 0l-5 5m5-5H6"
+                                                ></path>
                                             </svg>
                                         </span>
-                                        <div className="absolute inset-0 bg-gradient-to-r from-yellow-300 to-amber-400 opacity-0 group-hover:opacity-100 transition-opacity animate-shimmer"></div>
+                                        <div className="animate-shimmer absolute inset-0 bg-gradient-to-r from-blue-50 to-sky-50 opacity-0 transition-opacity group-hover:opacity-100"></div>
                                     </Link>
-                                    <Link 
-                                        href={route('login')} 
-                                        className="group px-8 py-4 bg-white/10 backdrop-blur-md border-2 border-white/30 text-white font-bold rounded-xl transition-all duration-300 hover:bg-white/20 hover:border-white/50 hover:scale-105 glass-effect hover-glow"
+                                    <Link
+                                        href={route('login')}
+                                        className="group glass-effect hover-glow rounded-xl border-2 border-white/30 bg-white/10 px-8 py-4 font-bold text-white backdrop-blur-md transition-all duration-300 hover:scale-105 hover:border-white/50 hover:bg-white/20"
                                     >
                                         <span className="flex items-center gap-2">
                                             Se connecter
-                                            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+                                            <svg
+                                                className="h-5 w-5 transition-transform group-hover:translate-x-1"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth="2"
+                                                    d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                                                ></path>
                                             </svg>
                                         </span>
                                     </Link>
                                 </>
                             )}
                         </div>
-                        
+
                         {/* Trust indicators */}
                         <div className="mt-16 flex flex-wrap justify-center gap-8 text-sm text-gray-300">
                             <div className="flex items-center gap-2">
-                                <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
+                                <svg className="h-5 w-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clipRule="evenodd"
+                                    ></path>
                                 </svg>
                                 <span>Sécurisé et confidentiel</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
+                                <svg className="h-5 w-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clipRule="evenodd"
+                                    ></path>
                                 </svg>
                                 <span>Support 24/7</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
+                                <svg className="h-5 w-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clipRule="evenodd"
+                                    ></path>
                                 </svg>
                                 <span>Mises à jour régulières</span>
                             </div>
                         </div>
                     </div>
+
+                    {/* Hero Illustration - Image locale */}
+                    <div className="animate-fade-in animation-delay-500 mt-16 px-4">
+                        <div className="relative mx-auto max-w-6xl">
+                            <div className="absolute -inset-4 rounded-3xl bg-gradient-to-r from-blue-400 to-sky-400 opacity-20 blur-3xl"></div>
+                            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm">
+                                <div className={`transition-opacity duration-500 ${heroImageLoaded ? 'opacity-100' : 'opacity-0'}`}>
+                                    {/* Image locale depuis public/images/ */}
+                                    <img
+                                        src="/images/hero-dashboard.png"
+                                        alt="Dashboard moderne Esudelib - Interface premium"
+                                        className="h-auto w-full rounded-2xl shadow-2xl"
+                                        loading="eager"
+                                        onLoad={() => setHeroImageLoaded(true)}
+                                        onError={(e) => {
+                                            console.error('Erreur chargement hero image:', e);
+                                            // Fallback si l'image locale n'existe pas
+                                            (e.target as HTMLImageElement).src =
+                                                'https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&auto=format&fit=crop&w=1600&q=80';
+                                        }}
+                                    />
+                                </div>
+                                {!heroImageLoaded && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="h-64 w-64 animate-pulse rounded-2xl bg-gradient-to-r from-blue-400/20 to-sky-400/20"></div>
+                                    </div>
+                                )}
+                                {/* Overlay gradient for better text readability */}
+                                <div className="absolute inset-0 rounded-2xl bg-gradient-to-t from-blue-900/30 via-transparent to-transparent"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                
+
                 {/* Scroll indicator */}
-                <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
-                    <svg className="w-6 h-6 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 transform animate-bounce">
+                    <svg className="h-6 w-6 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
                     </svg>
                 </div>
             </section>
 
             {/* Features Section - Enhanced with modern cards */}
-            <section className="py-24 bg-gradient-to-b from-gray-50 to-white relative overflow-hidden">
+            <section className="relative overflow-hidden bg-gradient-to-b from-gray-50 to-white py-24">
                 {/* Decorative elements */}
-                <div className="absolute top-0 left-0 w-64 h-64 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 -translate-x-1/2 -translate-y-1/2 animate-blob"></div>
-                <div className="absolute bottom-0 right-0 w-64 h-64 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 translate-x-1/2 translate-y-1/2 animate-blob animation-delay-2000"></div>
-                <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-indigo-100 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-rotate"></div>
-                
-                <div className="container mx-auto px-4 relative z-10">
-                    <div className="text-center mb-20 animate-fade-in-up">
-                        <span className="inline-block px-4 py-2 rounded-full bg-indigo-100 text-indigo-700 font-semibold text-sm mb-4 hover-lift transition-smooth">
+                <div className="animate-blob absolute top-0 left-0 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-200 opacity-20 mix-blend-multiply blur-3xl filter"></div>
+                <div className="animate-blob animation-delay-2000 absolute right-0 bottom-0 h-64 w-64 translate-x-1/2 translate-y-1/2 rounded-full bg-sky-200 opacity-20 mix-blend-multiply blur-3xl filter"></div>
+                <div className="animate-rotate absolute top-1/2 left-1/2 h-96 w-96 rounded-full bg-blue-100 opacity-10 mix-blend-multiply blur-3xl filter"></div>
+
+                <div className="relative z-10 container mx-auto px-4">
+                    <div className="animate-fade-in-up mb-20 text-center">
+                        <span className="hover-lift transition-smooth mb-4 inline-block rounded-full bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-700">
                             Fonctionnalités
                         </span>
-                        <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6 animate-slide-in-left">
+                        <h2 className="animate-slide-in-left mb-6 text-4xl font-extrabold text-gray-900 md:text-5xl">
                             Tout ce dont vous avez besoin
                         </h2>
-                        <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
+                        <p className="mx-auto max-w-3xl text-xl leading-relaxed text-gray-600">
                             Une suite complète d'outils conçus pour transformer votre processus de délibération
                         </p>
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        <FeatureCard 
+
+                    <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+                        <FeatureCard
                             icon={
-                                <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                <svg className="h-10 w-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                    ></path>
                                 </svg>
                             }
                             title="Gestion centralisée"
@@ -214,10 +268,10 @@ const Home: NextPageWithLayout = () => {
                             iconBg="bg-gradient-to-br from-blue-50 to-blue-100"
                             accentColor="blue"
                         />
-                        
-                        <FeatureCard 
+
+                        <FeatureCard
                             icon={
-                                <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="h-10 w-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
                                 </svg>
                             }
@@ -226,11 +280,16 @@ const Home: NextPageWithLayout = () => {
                             iconBg="bg-gradient-to-br from-emerald-50 to-emerald-100"
                             accentColor="emerald"
                         />
-                        
-                        <FeatureCard 
+
+                        <FeatureCard
                             icon={
-                                <svg className="w-10 h-10 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                <svg className="h-10 w-10 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                                    ></path>
                                 </svg>
                             }
                             title="Sécurité renforcée"
@@ -238,10 +297,10 @@ const Home: NextPageWithLayout = () => {
                             iconBg="bg-gradient-to-br from-purple-50 to-purple-100"
                             accentColor="purple"
                         />
-                        
-                        <FeatureCard 
+
+                        <FeatureCard
                             icon={
-                                <svg className="w-10 h-10 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="h-10 w-10 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                                 </svg>
                             }
@@ -250,11 +309,16 @@ const Home: NextPageWithLayout = () => {
                             iconBg="bg-gradient-to-br from-amber-50 to-amber-100"
                             accentColor="amber"
                         />
-                        
-                        <FeatureCard 
+
+                        <FeatureCard
                             icon={
-                                <svg className="w-10 h-10 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                <svg className="h-10 w-10 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                                    ></path>
                                 </svg>
                             }
                             title="Collaboration fluide"
@@ -262,40 +326,41 @@ const Home: NextPageWithLayout = () => {
                             iconBg="bg-gradient-to-br from-rose-50 to-rose-100"
                             accentColor="rose"
                         />
-                        
-                        <FeatureCard 
+
+                        <FeatureCard
                             icon={
-                                <svg className="w-10 h-10 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                <svg className="h-10 w-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                                    ></path>
                                 </svg>
                             }
                             title="Analytics avancés"
                             description="Tableaux de bord interactifs et statistiques détaillées pour suivre vos performances."
-                            iconBg="bg-gradient-to-br from-indigo-50 to-indigo-100"
-                            accentColor="indigo"
+                            iconBg="bg-gradient-to-br from-blue-50 to-blue-100"
+                            accentColor="blue"
                         />
                     </div>
                 </div>
             </section>
 
             {/* Stats Section - Enhanced with animations */}
-            <section className="py-24 bg-gradient-to-br from-indigo-600 via-purple-600 to-blue-600 text-white relative overflow-hidden">
+            <section className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-sky-600 py-24 text-white">
                 {/* Animated background */}
                 <div className="absolute inset-0 opacity-10">
                     <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjEiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')]"></div>
                 </div>
-                
-                <div className="container mx-auto px-4 relative z-10">
-                    <div className="text-center mb-16">
-                        <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                            Des chiffres qui parlent d'eux-mêmes
-                        </h2>
-                        <p className="text-xl text-white/80">
-                            La confiance de milliers d'utilisateurs à travers le pays
-                        </p>
+
+                <div className="relative z-10 container mx-auto px-4">
+                    <div className="mb-16 text-center">
+                        <h2 className="mb-4 text-3xl font-bold md:text-4xl">Des chiffres qui parlent d'eux-mêmes</h2>
+                        <p className="text-xl text-white/80">La confiance de milliers d'utilisateurs à travers le pays</p>
                     </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+
+                    <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
                         <StatItem value="30,000+" label="Étudiants actifs" />
                         <StatItem value="11,000+" label="Diplômes délivrés" />
                         <StatItem value="39+" label="Enseignants" />
@@ -304,139 +369,157 @@ const Home: NextPageWithLayout = () => {
                 </div>
             </section>
 
-            {/* Registration Section - Enhanced with glassmorphism */}
-            <section className="py-24 bg-gradient-to-b from-white to-gray-50">
-                <div className="container mx-auto px-4">
-                    <div className="flex flex-col lg:flex-row items-center gap-12">
-                        <div className="lg:w-1/2">
-                            <span className="inline-block px-4 py-2 rounded-full bg-indigo-100 text-indigo-700 font-semibold text-sm mb-6">
-                                Commencez dès aujourd'hui
-                            </span>
-                            <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6 leading-tight">
-                                Prêt à transformer vos délibérations?
-                            </h2>
-                            <p className="text-xl text-gray-600 mb-10 leading-relaxed">
-                                Rejoignez des milliers d'établissements qui ont déjà fait le choix de la modernité. 
-                                Inscription gratuite, sans engagement.
-                            </p>
-                            
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-                                <FeatureList 
-                                    title="Pour les enseignants"
-                                    items={[
-                                        "Saisie simplifiée des notes",
-                                        "Calculs automatiques",
-                                        "Tableaux de bord personnalisés",
-                                        "Export en un clic"
-                                    ]}
-                                />
-                                
-                                <FeatureList 
-                                    title="Pour les étudiants"
-                                    items={[
-                                        "Accès instantané aux résultats",
-                                        "Historique complet",
-                                        "Notifications en temps réel",
-                                        "Interface mobile"
-                                    ]}
-                                />
+            {/* CTA Section - Modern and Attractive */}
+            <section className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-sky-600 py-32">
+                {/* Animated background elements */}
+                <div className="absolute inset-0">
+                    <div className="animate-shimmer absolute top-0 left-0 h-full w-full bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-blue-400/30 via-transparent to-transparent"></div>
+                    <div className="absolute right-0 bottom-0 h-full w-full bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-sky-500/30 via-transparent to-transparent"></div>
+
+                    {/* Floating orbs */}
+                    <div className="animate-blob absolute top-20 left-10 h-64 w-64 rounded-full bg-blue-400 opacity-20 mix-blend-multiply blur-3xl filter"></div>
+                    <div className="animate-blob animation-delay-2000 absolute right-10 bottom-20 h-80 w-80 rounded-full bg-sky-400 opacity-20 mix-blend-multiply blur-3xl filter"></div>
+                    <div className="animate-blob animation-delay-4000 absolute top-1/2 left-1/2 h-72 w-72 rounded-full bg-blue-500 opacity-20 mix-blend-multiply blur-3xl filter"></div>
+                </div>
+
+                {/* Grid pattern overlay */}
+                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30"></div>
+
+                <div className="relative z-10 container mx-auto px-4">
+                    <div className="mx-auto max-w-5xl">
+                        {/* Content */}
+                        <div className="mb-12 text-center">
+                            {/* Badge */}
+                            <div className="animate-fade-in-down mb-8 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2 backdrop-blur-md">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                                </span>
+                                <span className="text-sm font-medium text-white">Rejoignez-nous dès aujourd'hui</span>
                             </div>
-                            
-                            {/* Trust badges */}
-                            <div className="flex flex-wrap gap-6 items-center">
-                                <div className="flex items-center gap-2 text-gray-600">
-                                    <svg className="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
-                                    </svg>
-                                    <span className="font-medium">Sans carte bancaire</span>
+
+                            <h2 className="animate-fade-in-up mb-6 text-4xl leading-tight font-extrabold text-white md:text-6xl">
+                                Prêt à transformer vos
+                                <span className="mt-2 block bg-gradient-to-r from-sky-200 via-blue-200 to-cyan-200 bg-clip-text text-transparent">
+                                    délibérations ?
+                                </span>
+                            </h2>
+
+                            <p className="animate-fade-in mx-auto mb-12 max-w-3xl text-xl leading-relaxed text-white/90 md:text-2xl">
+                                Rejoignez des milliers d'établissements qui ont déjà fait le choix de la modernité. Inscription gratuite, sans
+                                engagement.
+                            </p>
+
+                            {/* CTA Buttons */}
+                            <div className="animate-fade-in-up animation-delay-300 mb-16 flex flex-col items-center justify-center gap-6 sm:flex-row">
+                                <Link
+                                    href={route('register')}
+                                    className="group hover-lift relative overflow-hidden rounded-xl bg-white px-10 py-5 font-bold text-blue-600 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-white/30"
+                                >
+                                    <span className="relative z-10 flex items-center gap-2 text-lg">
+                                        Créer un compte gratuit
+                                        <svg
+                                            className="h-5 w-5 transition-transform group-hover:translate-x-1"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                                        </svg>
+                                    </span>
+                                    <div className="absolute inset-0 bg-gradient-to-r from-yellow-50 to-amber-50 opacity-0 transition-opacity group-hover:opacity-100"></div>
+                                </Link>
+
+                                <Link
+                                    href={route('login')}
+                                    className="group glass-effect rounded-xl border-2 border-white/30 bg-white/10 px-10 py-5 font-bold text-white backdrop-blur-md transition-all duration-300 hover:scale-105 hover:border-white/50 hover:bg-white/20"
+                                >
+                                    <span className="flex items-center gap-2 text-lg">
+                                        Se connecter
+                                        <svg
+                                            className="h-5 w-5 transition-transform group-hover:translate-x-1"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2"
+                                                d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+                                            ></path>
+                                        </svg>
+                                    </span>
+                                </Link>
+                            </div>
+
+                            {/* Features Grid */}
+                            <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-3">
+                                <div className="rounded-2xl border border-white/20 bg-white/10 p-6 backdrop-blur-md transition-all duration-300 hover:scale-105 hover:bg-white/15">
+                                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-400/20">
+                                        <svg className="h-6 w-6 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                    </div>
+                                    <h3 className="mb-2 font-bold text-white">Sans carte bancaire</h3>
+                                    <p className="text-sm text-white/80">Inscription 100% gratuite</p>
                                 </div>
-                                <div className="flex items-center gap-2 text-gray-600">
-                                    <svg className="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
-                                    </svg>
-                                    <span className="font-medium">Configuration en 5 min</span>
+
+                                <div className="rounded-2xl border border-white/20 bg-white/10 p-6 backdrop-blur-md transition-all duration-300 hover:scale-105 hover:bg-white/15">
+                                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-400/20">
+                                        <svg className="h-6 w-6 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                        </svg>
+                                    </div>
+                                    <h3 className="mb-2 font-bold text-white">Configuration rapide</h3>
+                                    <p className="text-sm text-white/80">Prêt en 5 minutes</p>
+                                </div>
+
+                                <div className="rounded-2xl border border-white/20 bg-white/10 p-6 backdrop-blur-md transition-all duration-300 hover:scale-105 hover:bg-white/15">
+                                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-sky-400/20">
+                                        <svg className="h-6 w-6 text-sky-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2"
+                                                d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"
+                                            ></path>
+                                        </svg>
+                                    </div>
+                                    <h3 className="mb-2 font-bold text-white">Support 24/7</h3>
+                                    <p className="text-sm text-white/80">Assistance continue</p>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div className="lg:w-1/2 w-full">
-                            <div className="relative">
-                                {/* Decorative gradient */}
-                                <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-2xl blur-2xl opacity-20"></div>
-                                
-                                <div className="relative bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
-                                    <div className="p-8 md:p-10">
-                                        <h3 className="text-3xl font-bold text-center mb-2 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                                            Inscrivez-vous gratuitement
-                                        </h3>
-                                        <p className="text-center text-gray-600 mb-8">Créez votre compte en moins d'une minute</p>
-                                        
-                                        <form onSubmit={handleSubmit} className="space-y-5">
-                                            <FormInput 
-                                                id="name"
-                                                name="name"
-                                                type="text"
-                                                label="Nom complet"
-                                                error={errors.name}
-                                                required
-                                            />
-                                            
-                                            <FormInput 
-                                                id="email"
-                                                name="email"
-                                                type="email"
-                                                label="Adresse email"
-                                                error={errors.email}
-                                                required
-                                            />
-                                            
-                                            <FormInput 
-                                                id="password"
-                                                name="password"
-                                                type="password"
-                                                label="Mot de passe"
-                                                error={errors.password}
-                                                required
-                                            />
-                                            
-                                            <FormInput 
-                                                id="password_confirmation"
-                                                name="password_confirmation"
-                                                type="password"
-                                                label="Confirmez le mot de passe"
-                                                error={errors.password_confirmation}
-                                                required
-                                            />
-                                            
-                                            <button 
-                                                type="submit" 
-                                                className="group w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/50 hover:scale-[1.02] flex items-center justify-center gap-2"
-                                            >
-                                                <span>Créer mon compte</span>
-                                                <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
-                                                </svg>
-                                            </button>
-                                            
-                                            <div className="relative">
-                                                <div className="absolute inset-0 flex items-center">
-                                                    <div className="w-full border-t border-gray-200"></div>
-                                                </div>
-                                                <div className="relative flex justify-center text-sm">
-                                                    <span className="px-4 bg-white text-gray-500">ou</span>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="text-center">
-                                                <p className="text-gray-600">
-                                                    Vous avez déjà un compte?{' '}
-                                                    <Link href={route('login')} className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline transition-colors">
-                                                        Connectez-vous
-                                                    </Link>
-                                                </p>
-                                            </div>
-                                        </form>
+
+                        {/* CTA Premium Image - Image locale corrigée */}
+                        <div className="animate-fade-in animation-delay-600 mt-16 px-4">
+                            <div className="relative mx-auto max-w-6xl">
+                                <div className="absolute -inset-4 rounded-3xl bg-gradient-to-r from-sky-300 to-blue-300 opacity-20 blur-3xl"></div>
+                                <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm">
+                                    <div className={`transition-opacity duration-500 ${ctaImageLoaded ? 'opacity-100' : 'opacity-0'}`}>
+                                        {/* Image locale depuis public/images/ */}
+                                        <img
+                                            src="/images/cta-success.jpg"
+                                            alt="Succès académique avec Esudelib - Étudiants diplômés"
+                                            className="h-auto w-full rounded-2xl shadow-2xl"
+                                            loading="lazy"
+                                            onLoad={() => setCtaImageLoaded(true)}
+                                            onError={(e) => {
+                                                console.error('Erreur chargement CTA image:', e);
+                                                // Fallback si l'image locale n'existe pas
+                                                (e.target as HTMLImageElement).src =
+                                                    'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?ixlib=rb-4.0.3&auto=format&fit=crop&w=1600&q=80';
+                                            }}
+                                        />
                                     </div>
+                                    {!ctaImageLoaded && (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="h-64 w-64 animate-pulse rounded-2xl bg-gradient-to-r from-blue-400/20 to-sky-400/20"></div>
+                                        </div>
+                                    )}
+                                    {/* Overlay gradient for premium effect */}
+                                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-t from-blue-900/40 via-transparent to-transparent"></div>
                                 </div>
                             </div>
                         </div>
@@ -444,57 +527,60 @@ const Home: NextPageWithLayout = () => {
                 </div>
             </section>
 
-            {/* News Section - Enhanced with modern cards */}
-            <section className="py-24 bg-gray-50">
+            {/* News Section - Enhanced with modern cards using online images */}
+            <section className="bg-gray-50 py-24">
                 <div className="container mx-auto px-4">
-                    <div className="text-center mb-20">
-                        <span className="inline-block px-4 py-2 rounded-full bg-indigo-100 text-indigo-700 font-semibold text-sm mb-4">
+                    <div className="mb-20 text-center">
+                        <span className="mb-4 inline-block rounded-full bg-indigo-100 px-4 py-2 text-sm font-semibold text-indigo-700">
                             Blog & Actualités
                         </span>
-                        <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-6">
-                            Restez informé
-                        </h2>
-                        <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+                        <h2 className="mb-6 text-4xl font-extrabold text-gray-900 md:text-5xl">Restez informé</h2>
+                        <p className="mx-auto max-w-3xl text-xl text-gray-600">
                             Découvrez les dernières nouveautés, conseils et mises à jour de notre plateforme
                         </p>
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-                        <NewsCard 
-                            image="/images/news/education-1.jpg"
+
+                    <div className="mb-12 grid grid-cols-1 gap-8 md:grid-cols-3">
+                        <NewsCard
+                            image="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
                             date="2 Décembre 2023"
                             author="Admin"
                             title="Nouveautés de la plateforme"
                             description="Découvrez les dernières fonctionnalités ajoutées à notre plateforme de gestion de délibération."
                             color="blue"
                         />
-                        
-                        <NewsCard 
-                            image="/images/news/education-2.jpg"
+
+                        <NewsCard
+                            image="https://images.unsplash.com/photo-1523580494863-6f3031224c94?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
                             date="15 Novembre 2023"
                             author="Admin"
                             title="Formation des enseignants"
                             description="Programme de formation pour aider les enseignants à maîtriser notre plateforme."
-                            color="emerald"
+                            color="blue"
                         />
-                        
-                        <NewsCard 
-                            image="/images/news/education-3.jpg"
+
+                        <NewsCard
+                            image="https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
                             date="28 Octobre 2023"
                             author="Admin"
                             title="Amélioration de la sécurité"
                             description="Nous avons renforcé les mesures de sécurité pour protéger vos données."
-                            color="purple"
+                            color="blue"
                         />
                     </div>
-                    
+
                     <div className="text-center">
-                        <Link 
-                            href="#" 
-                            className="group inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:shadow-indigo-500/50 transition-all duration-300 hover:scale-105"
+                        <Link
+                            href="#"
+                            className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-sky-600 px-8 py-4 font-bold text-white shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-blue-500/50"
                         >
                             <span>Voir toutes les actualités</span>
-                            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg
+                                className="h-5 w-5 transition-transform group-hover:translate-x-1"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
                             </svg>
                         </Link>
@@ -514,7 +600,13 @@ interface FeatureCardProps {
     accentColor?: 'blue' | 'emerald' | 'purple' | 'amber' | 'rose' | 'indigo';
 }
 
-const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, description, iconBg = 'bg-gradient-to-br from-blue-50 to-blue-100', accentColor = 'blue' }) => {
+const FeatureCard: React.FC<FeatureCardProps> = ({
+    icon,
+    title,
+    description,
+    iconBg = 'bg-gradient-to-br from-blue-50 to-blue-100',
+    accentColor = 'blue',
+}) => {
     const accentColors = {
         blue: 'group-hover:shadow-blue-500/20',
         emerald: 'group-hover:shadow-emerald-500/20',
@@ -525,20 +617,27 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, description, ico
     };
 
     return (
-        <div className={`group relative bg-white p-8 rounded-2xl shadow-md hover:shadow-2xl ${accentColors[accentColor]} transition-all duration-500 hover:-translate-y-2 border border-gray-100 overflow-hidden`}>
+        <div
+            className={`group relative rounded-2xl bg-white p-8 shadow-md hover:shadow-2xl ${accentColors[accentColor]} overflow-hidden border border-gray-100 transition-all duration-500 hover:-translate-y-2`}
+        >
             {/* Decorative gradient on hover */}
-            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-gray-50 opacity-0 transition-opacity duration-500 group-hover:opacity-100"></div>
+
             <div className="relative z-10">
-                <div className={`w-16 h-16 ${iconBg} rounded-2xl flex items-center justify-center mb-6 transform group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-lg`}>
+                <div
+                    className={`h-16 w-16 ${iconBg} mb-6 flex transform items-center justify-center rounded-2xl shadow-lg transition-all duration-500 group-hover:scale-110 group-hover:rotate-3`}
+                >
                     {icon}
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-gray-900 group-hover:text-gray-800 transition-colors">{title}</h3>
-                <p className="text-gray-600 leading-relaxed">{description}</p>
+                <h3 className="mb-3 text-xl font-bold text-gray-900 transition-colors group-hover:text-gray-800">{title}</h3>
+                <p className="leading-relaxed text-gray-600">{description}</p>
             </div>
-            
+
             {/* Animated border */}
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-current to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ color: `var(--color-${accentColor}-500)` }}></div>
+            <div
+                className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-transparent via-current to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                style={{ color: `var(--color-${accentColor}-500)` }}
+            ></div>
         </div>
     );
 };
@@ -551,68 +650,11 @@ interface StatItemProps {
 
 const StatItem: React.FC<StatItemProps> = ({ value, label }) => {
     return (
-        <div className="group p-8 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
-            <div className="text-4xl md:text-5xl font-extrabold mb-2 bg-gradient-to-br from-white to-white/80 bg-clip-text text-transparent group-hover:scale-110 transition-transform duration-300">
+        <div className="group rounded-2xl border border-white/20 bg-white/10 p-8 backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:bg-white/20">
+            <div className="mb-2 bg-gradient-to-br from-white to-white/80 bg-clip-text text-4xl font-extrabold text-transparent transition-transform duration-300 group-hover:scale-110 md:text-5xl">
                 {value}
             </div>
-            <div className="text-lg text-white/90 font-medium">{label}</div>
-        </div>
-    );
-};
-
-// Component for Feature List - Enhanced with modern design
-interface FeatureListProps {
-    title: string;
-    items: string[];
-}
-
-const FeatureList: React.FC<FeatureListProps> = ({ title, items }) => {
-    return (
-        <div className="bg-gradient-to-br from-gray-50 to-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300">
-            <h3 className="text-lg font-bold mb-4 text-gray-900">{title}</h3>
-            <ul className="space-y-3">
-                {items.map((item, index) => (
-                    <li key={index} className="flex items-start group">
-                        <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center mr-3 mt-0.5 group-hover:bg-emerald-200 transition-colors">
-                            <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path>
-                            </svg>
-                        </div>
-                        <span className="text-gray-700 group-hover:text-gray-900 transition-colors">{item}</span>
-                    </li>
-                ))}
-            </ul>
-        </div>
-    );
-};
-
-// Component for Form Input - Enhanced with modern styling
-interface FormInputProps {
-    id: string;
-    name: string;
-    type: string;
-    label: string;
-    error?: string;
-    required?: boolean;
-}
-
-const FormInput: React.FC<FormInputProps> = ({ id, name, type, label, error, required = false }) => {
-    return (
-        <div>
-            <label htmlFor={id} className="block text-sm font-semibold text-gray-700 mb-2">{label}</label>
-            <input 
-                type={type} 
-                id={id} 
-                name={name} 
-                className={`w-full px-4 py-3 border ${error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-indigo-500 focus:border-indigo-500'} rounded-xl focus:ring-2 focus:outline-none transition-all duration-300 bg-gray-50 hover:bg-white`}
-                required={required}
-            />
-            {error && <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"></path>
-                </svg>
-                {error}
-            </p>}
+            <div className="text-lg font-medium text-white/90">{label}</div>
         </div>
     );
 };
@@ -632,61 +674,76 @@ const NewsCard: React.FC<NewsCardProps> = ({ image, date, author, title, descrip
         blue: {
             bg: 'bg-gradient-to-br from-blue-500 to-blue-600',
             badge: 'bg-blue-100 text-blue-700',
-            link: 'text-blue-600 hover:text-blue-700'
+            link: 'text-blue-600 hover:text-blue-700',
         },
         emerald: {
             bg: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
             badge: 'bg-emerald-100 text-emerald-700',
-            link: 'text-emerald-600 hover:text-emerald-700'
+            link: 'text-emerald-600 hover:text-emerald-700',
         },
         purple: {
             bg: 'bg-gradient-to-br from-purple-500 to-purple-600',
             badge: 'bg-purple-100 text-purple-700',
-            link: 'text-purple-600 hover:text-purple-700'
+            link: 'text-purple-600 hover:text-purple-700',
         },
     };
 
     return (
-        <div className="group bg-white rounded-2xl shadow-md overflow-hidden hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-gray-100">
+        <div className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl">
             <div className={`relative h-56 ${colorClasses[color].bg} overflow-hidden`}>
-                <img 
-                    src={image} 
+                <img
+                    src={image}
                     alt={title}
-                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700"
+                    className="h-full w-full object-cover opacity-80 transition-all duration-700 group-hover:scale-110 group-hover:opacity-100"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
-                
+
                 {/* Category badge */}
-                <div className={`absolute top-4 left-4 px-3 py-1 rounded-full ${colorClasses[color].badge} text-xs font-semibold backdrop-blur-sm`}>
+                <div className={`absolute top-4 left-4 rounded-full px-3 py-1 ${colorClasses[color].badge} text-xs font-semibold backdrop-blur-sm`}>
                     Actualité
                 </div>
             </div>
-            
+
             <div className="p-6">
-                <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+                <div className="mb-4 flex items-center gap-4 text-sm text-gray-500">
                     <div className="flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                            ></path>
                         </svg>
                         <span>{date}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                            ></path>
                         </svg>
                         <span>{author}</span>
                     </div>
                 </div>
-                
-                <h3 className="text-xl font-bold mb-3 text-gray-900 group-hover:text-gray-700 transition-colors line-clamp-2">{title}</h3>
-                <p className="text-gray-600 mb-4 line-clamp-3 leading-relaxed">{description}</p>
-                
-                <Link 
-                    href="#" 
-                    className={`inline-flex items-center gap-2 ${colorClasses[color].link} font-semibold transition-all duration-300 group/link`}
+
+                <h3 className="mb-3 line-clamp-2 text-xl font-bold text-gray-900 transition-colors group-hover:text-gray-700">{title}</h3>
+                <p className="mb-4 line-clamp-3 leading-relaxed text-gray-600">{description}</p>
+
+                <Link
+                    href="#"
+                    className={`inline-flex items-center gap-2 ${colorClasses[color].link} group/link font-semibold transition-all duration-300`}
                 >
                     <span>Lire la suite</span>
-                    <svg className="w-4 h-4 group-hover/link:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg
+                        className="h-4 w-4 transition-transform group-hover/link:translate-x-1"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
                     </svg>
                 </Link>

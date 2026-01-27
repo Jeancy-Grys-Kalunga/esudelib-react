@@ -1,10 +1,11 @@
 <?php
 
 namespace Modules\Student\Entities;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Spatie\MediaLibrary\HasMedia;
-use Spatie\MediaLibrary\InteractsWithMedia; 
+use Spatie\MediaLibrary\InteractsWithMedia;
 
 class AppealDocument extends Model implements HasMedia
 {
@@ -17,7 +18,13 @@ class AppealDocument extends Model implements HasMedia
 
     protected $with = ['media'];
 
-    public function appeal() {
+    public function appeal()
+    {
         return $this->belongsTo(Appeal::class, 'appeal_id', 'id');
+    }
+
+    public function item()
+    {
+        return $this->belongsTo(AppealItem::class, 'appeal_item_id', 'id');
     }
 }

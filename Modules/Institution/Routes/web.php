@@ -24,10 +24,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('academics', AcademicYearController::class)->names('academics');
 
     Route::resource('promotions', PromotionController::class)->names('promotions');
+    Route::post('promotions/import', [PromotionController::class, 'import'])->name('promotions.import');
 
     Route::resource('units-teachings', UnitsTeachingController::class)->names('units-teachings');
 
     Route::resource('courses', CourseController::class)->names('courses');
+    Route::post('courses/import', [CourseController::class, 'import'])->name('courses.import');
     Route::get('courses-mass-create', [CourseController::class, 'mass_create'])->name('courses.mass-create');
     Route::post('courses-mass-create', [CourseController::class, 'massStore'])->name('courses.mass-store');
 
@@ -47,9 +49,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('assignmentsbulk', [AssignmentController::class, 'bulkStore'])->name('assignments.bulk');
     Route::post('/assignments/bulk', [AssignmentController::class, 'storeBulk'])->name('assignments.store.bulk');
 
-    Route::resource('exam-sessions',ExamSessionController::class)->except(['create', 'edit', 'show']);
+    Route::resource('exam-sessions', ExamSessionController::class)->except(['create', 'edit', 'show']);
 
     // Routes pour les programmes
+    Route::post('programs/import', [ProgramController::class, 'import'])->name('programs.import');
     Route::resource('programs', ProgramController::class)->names('programs');
 
     // Routes supplémentaires pour la gestion des détails des programmes

@@ -1,5 +1,5 @@
-import { Head, router, useForm } from '@inertiajs/react';
-import { Edit, Loader2, Plus, Search, Trash2, Users, X } from 'lucide-react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { Download, Edit, Loader2, Plus, Search, Trash2, Upload, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -44,6 +44,7 @@ type PageProps = {
         edit: boolean;
         delete: boolean;
         access: boolean;
+        import?: boolean;
     };
     filters?: {
         search?: string;
@@ -56,13 +57,28 @@ type PageProps = {
 
 export default function PromotionIndex({ promotions: allPromotions, institutions, faculties, can, flash, filters }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [currentPromotion, setCurrentPromotion] = useState<Promotion | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(null);
     const [searchTerm, setSearchTerm] = useState(filters?.search || '');
     const [filteredPromotions, setFilteredPromotions] = useState<Promotion[]>(allPromotions);
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage] = useState(10);
+    const [itemsPerPage, setItemsPerPage] = useState(50);
+    const [file, setFile] = useState<File | null>(null);
+    const [isImporting, setIsImporting] = useState(false);
+    const [selectedInstitutionId, setSelectedInstitutionId] = useState('');
+
+    // Déterminer si l'utilisateur est Super Admin en utilisant les props globales auth
+    const { props } = usePage<{ auth: { user: any } }>();
+    const isSuperAdmin = props.auth?.user?.roles?.some((role: any) => role.name === 'Super Admin') || false;
+
+    // Pré-remplir l'institution pour les non Super Admin
+    useEffect(() => {
+        if (!isSuperAdmin && props.auth?.user?.institutions && props.auth.user.institutions.length > 0) {
+            setSelectedInstitutionId(props.auth.user.institutions[0].id.toString());
+        }
+    }, [isSuperAdmin, props.auth]);
 
     const { data, setData, post, put, errors, processing, reset } = useForm({
         title: '',
@@ -186,6 +202,66 @@ export default function PromotionIndex({ promotions: allPromotions, institutions
         setCurrentPage(1);
     };
 
+    const handleItemsPerPageChange = (value: string) => {
+        setItemsPerPage(Number(value));
+        setCurrentPage(1);
+    };
+
+    const openImportModal = () => {
+        if (!can.import) {
+            toast.error("Vous n'avez pas la permission d'importer");
+            return;
+        }
+        setIsImportModalOpen(true);
+    };
+
+    const closeImportModal = () => {
+        setIsImportModalOpen(false);
+        setFile(null);
+        if (isSuperAdmin) {
+            setSelectedInstitutionId('');
+        }
+    };
+
+    const handleImportSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!file) {
+            toast.error('Veuillez sélectionner un fichier');
+            return;
+        }
+
+        if (!selectedInstitutionId) {
+            toast.error('Veuillez sélectionner une institution');
+            return;
+        }
+
+        setIsImporting(true);
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('institution_id', selectedInstitutionId);
+
+        router.post(route('promotions.import'), formData, {
+            forceFormData: true,
+            onSuccess: () => {
+                closeImportModal();
+                setIsImporting(false);
+                setFile(null);
+            },
+            onError: (errors) => {
+                setIsImporting(false);
+                console.error('Import errors:', errors);
+                if (errors.file) {
+                    toast.error(errors.file);
+                }
+                if (errors.institution_id) {
+                    toast.error(errors.institution_id);
+                }
+            },
+        });
+    };
+
     if (!can.access) {
         return (
             <AppLayout>
@@ -212,6 +288,12 @@ export default function PromotionIndex({ promotions: allPromotions, institutions
                             <Button onClick={() => openModal()} className="gap-2 shadow-sm">
                                 <Plus size={16} />
                                 Nouvelle Promotion
+                            </Button>
+                        )}
+                        {can.import && (
+                            <Button onClick={openImportModal} variant="outline" className="gap-2 shadow-sm">
+                                <Upload size={16} />
+                                Importer Excel
                             </Button>
                         )}
                         <Button variant="outline" onClick={resetFilters} className="gap-2 shadow-sm">
@@ -250,10 +332,26 @@ export default function PromotionIndex({ promotions: allPromotions, institutions
 
                 <Card className="shadow-sm">
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <CardTitle>Liste des Promotions</CardTitle>
                                 <CardDescription>{filteredPromotions.length} promotions correspondant aux critères</CardDescription>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="items-per-page" className="text-muted-foreground text-sm font-normal whitespace-nowrap">
+                                    Afficher:
+                                </Label>
+                                <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                                    <SelectTrigger id="items-per-page" className="w-[120px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="50">50 par page</SelectItem>
+                                        <SelectItem value="100">100 par page</SelectItem>
+                                        <SelectItem value="500">500 par page</SelectItem>
+                                        <SelectItem value="1000">1000 par page</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                     </CardHeader>
@@ -373,7 +471,9 @@ export default function PromotionIndex({ promotions: allPromotions, institutions
                                 {currentPromotion ? 'Modifier Promotion' : 'Nouvelle Promotion'}
                             </DialogTitle>
                             <DialogDescription>
-                                {currentPromotion ? 'Modifiez les informations de la promotion' : 'Remplissez les informations pour créer une nouvelle promotion'}
+                                {currentPromotion
+                                    ? 'Modifiez les informations de la promotion'
+                                    : 'Remplissez les informations pour créer une nouvelle promotion'}
                             </DialogDescription>
                         </DialogHeader>
 
@@ -382,27 +482,14 @@ export default function PromotionIndex({ promotions: allPromotions, institutions
                                 {/* Colonne Gauche */}
                                 <div className="space-y-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="title">
-                                            Nom de la promotion *
-                                        </Label>
-                                        <Input 
-                                            id="title" 
-                                            value={data.title} 
-                                            onChange={(e) => setData('title', e.target.value)} 
-                                            required 
-                                        />
+                                        <Label htmlFor="title">Nom de la promotion *</Label>
+                                        <Input id="title" value={data.title} onChange={(e) => setData('title', e.target.value)} required />
                                         {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label>
-                                            Institution *
-                                        </Label>
-                                        <Select 
-                                            value={data.institution_id} 
-                                            onValueChange={(value) => setData('institution_id', value)} 
-                                            required
-                                        >
+                                        <Label>Institution *</Label>
+                                        <Select value={data.institution_id} onValueChange={(value) => setData('institution_id', value)} required>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Sélectionnez une institution">
                                                     {institutions.find((i) => i.id.toString() === data.institution_id)?.name ||
@@ -424,18 +511,11 @@ export default function PromotionIndex({ promotions: allPromotions, institutions
                                 {/* Colonne Droite */}
                                 <div className="space-y-4">
                                     <div className="space-y-2">
-                                        <Label>
-                                            Faculté *
-                                        </Label>
-                                        <Select
-                                            value={data.faculty_id}
-                                            onValueChange={(value) => setData('faculty_id', value)}
-                                            required
-                                        >
+                                        <Label>Faculté *</Label>
+                                        <Select value={data.faculty_id} onValueChange={(value) => setData('faculty_id', value)} required>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Sélectionnez une faculté">
-                                                    {faculties.find((f) => f.id.toString() === data.faculty_id)?.title ||
-                                                        'Sélectionnez une faculté'}
+                                                    {faculties.find((f) => f.id.toString() === data.faculty_id)?.title || 'Sélectionnez une faculté'}
                                                 </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
@@ -494,6 +574,98 @@ export default function PromotionIndex({ promotions: allPromotions, institutions
                                 Supprimer
                             </Button>
                         </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal Importation Excel */}
+                <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+                    <DialogContent className="sm:max-w-[600px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-xl">
+                                <Upload className="h-5 w-5" />
+                                Importer des promotions
+                            </DialogTitle>
+                            <DialogDescription>Téléversez un fichier Excel contenant la liste des promotions</DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleImportSubmit} className="space-y-4">
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label>Institution *</Label>
+                                    <Select value={selectedInstitutionId} onValueChange={setSelectedInstitutionId} disabled={!isSuperAdmin} required>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Sélectionnez une institution">
+                                                {institutions.find((i) => i.id.toString() === selectedInstitutionId)?.name ||
+                                                    'Sélectionnez une institution'}
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {institutions.map((institution) => (
+                                                <SelectItem key={institution.id} value={institution.id.toString()}>
+                                                    {institution.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {!isSuperAdmin && (
+                                        <p className="text-muted-foreground text-xs">
+                                            L'institution est automatiquement sélectionnée selon votre compte
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Fichier Excel *</Label>
+                                    <div
+                                        className="cursor-pointer rounded-lg border-2 border-dashed bg-gray-50 p-6 text-center dark:bg-gray-800"
+                                        onClick={() => document.getElementById('file-upload-promotion')?.click()}
+                                    >
+                                        <input
+                                            id="file-upload-promotion"
+                                            type="file"
+                                            className="hidden"
+                                            accept=".xlsx,.xls,.csv"
+                                            onChange={(e) => {
+                                                if (e.target.files?.[0]) {
+                                                    setFile(e.target.files[0]);
+                                                }
+                                            }}
+                                        />
+                                        {file ? (
+                                            <p className="font-medium">{file.name}</p>
+                                        ) : (
+                                            <>
+                                                <Download className="mx-auto h-8 w-8 text-gray-400" />
+                                                <p className="mt-2 font-medium">Glissez votre fichier ici</p>
+                                                <p className="text-sm text-gray-500">Formats supportés: XLSX, XLS, CSV</p>
+                                                <Button type="button" variant="outline" className="mt-2">
+                                                    Sélectionner un fichier
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className="rounded-md bg-blue-50 p-3 dark:bg-blue-950">
+                                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Format attendu :</p>
+                                        <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                            Le fichier doit contenir une colonne "Intitulé Promotion" avec le format :{' '}
+                                            <strong>BAC1 INFORMATIQUE</strong>, <strong>BAC2 MÉDECINE</strong>, etc.
+                                        </p>
+                                        <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                            Les facultés seront créées automatiquement si elles n'existent pas.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={closeImportModal}>
+                                    Annuler
+                                </Button>
+                                <Button type="submit" disabled={isImporting || !file || !selectedInstitutionId} className="gap-2">
+                                    {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                    Importer
+                                </Button>
+                            </DialogFooter>
+                        </form>
                     </DialogContent>
                 </Dialog>
             </div>

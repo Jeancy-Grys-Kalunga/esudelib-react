@@ -8,18 +8,22 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Modules\UmlViewer\Services\DatabaseAnalyzer;
 use Modules\UmlViewer\Services\DiagramGenerators\ClassDiagramGenerator;
+use Modules\UmlViewer\Services\DiagramGenerators\LogicalDataModelGenerator;
 use Modules\UmlViewer\Services\DiagramGenerators\DeploymentDiagramGenerator;
 use Modules\UmlViewer\Services\DiagramGenerators\PackagingDiagramGenerator;
 use Modules\UmlViewer\Services\DiagramGenerators\ComponentDiagramGenerator;
+use Modules\UmlViewer\Services\DiagramGenerators\SqlGenerator;
 
 class UmlViewerController extends Controller
 {
     public function __construct(
         private DatabaseAnalyzer $analyzer,
         private ClassDiagramGenerator $classDiagramGenerator,
+        private LogicalDataModelGenerator $logicalDataModelGenerator,
         private DeploymentDiagramGenerator $deploymentDiagramGenerator,
         private PackagingDiagramGenerator $packagingDiagramGenerator,
-        private ComponentDiagramGenerator $componentDiagramGenerator
+        private ComponentDiagramGenerator $componentDiagramGenerator,
+        private SqlGenerator $sqlGenerator
     ) {}
 
     /**
@@ -40,21 +44,37 @@ class UmlViewerController extends Controller
         ]);
     }
 
+
     /**
      * Générer un diagramme spécifique
      */
     public function generateDiagram(Request $request)
     {
         $request->validate([
-            'type' => 'required|in:class,deployment,packaging,component',
+            'type' => 'required|in:class,logical,deployment,packaging,component,mysql,postgresql',
             'options' => 'array',
         ]);
 
         $type = $request->input('type');
         $options = $request->input('options', []);
 
+        // Pour les types SQL, retourner directement le code SQL
+        if (in_array($type, ['mysql', 'postgresql'])) {
+            $sql = $type === 'mysql'
+                ? $this->sqlGenerator->generateMySQL($options)
+                : $this->sqlGenerator->generatePostgreSQL($options);
+
+            return response()->json([
+                'success' => true,
+                'sql' => $sql,
+                'type' => $type,
+                'isSql' => true,
+            ]);
+        }
+
         $plantUML = match ($type) {
             'class' => $this->classDiagramGenerator->generate($options),
+            'logical' => $this->logicalDataModelGenerator->generate($options),
             'deployment' => $this->deploymentDiagramGenerator->generate($options),
             'packaging' => $this->packagingDiagramGenerator->generate($options),
             'component' => $this->componentDiagramGenerator->generate($options),
@@ -111,7 +131,7 @@ class UmlViewerController extends Controller
     public function exportDiagram(Request $request)
     {
         $request->validate([
-            'type' => 'required|in:class,deployment,packaging,component',
+            'type' => 'required|in:class,logical,deployment,packaging,component',
             'format' => 'required|in:png,svg,puml',
             'plantUML' => 'required|string',
         ]);

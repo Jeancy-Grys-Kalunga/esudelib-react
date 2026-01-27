@@ -10,13 +10,6 @@ class CourseCategory extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     */
-    protected $guarded = [];
-
-    use HasFactory;
-
     protected $fillable = [
         'name',
         'slug',

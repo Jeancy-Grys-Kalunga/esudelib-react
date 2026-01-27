@@ -21,17 +21,23 @@ class Appeal extends Model implements HasMedia
 
     protected $with = ['media'];
 
-    public function student() {
+    public function student()
+    {
         return $this->belongsTo(Student::class, 'student_id', 'id');
     }
 
-    public function course() {
+    public function course()
+    {
         return $this->belongsTo(Course::class, 'course_id', 'id');
     }
 
-    public function appealDocuments() {
+    public function appealDocuments()
+    {
         return $this->hasMany(AppealDocument::class, 'appeal_id', 'id');
     }
-    
 
+    public function items()
+    {
+        return $this->hasMany(AppealItem::class);
+    }
 }

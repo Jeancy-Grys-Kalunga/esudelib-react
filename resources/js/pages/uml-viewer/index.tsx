@@ -3,11 +3,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { Component, Database, Layers, Package } from 'lucide-react';
+import { Component, Database, FileCode2, Layers, Package, TableProperties } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CodeViewer } from './components/CodeViewer';
 import { DiagramToolbar } from './components/DiagramToolbar';
 import { DiagramViewer } from './components/DiagramViewer';
+import { SqlViewer } from './components/SqlViewer';
 import { StatisticsCard } from './components/StatisticsCard';
 import { TableExplorer } from './components/TableExplorer';
 import { useDiagram } from './hooks/useDiagram';
@@ -62,24 +63,49 @@ const diagramTypes = [
         name: 'Diagramme de Classes',
         description: 'Toutes les tables avec leurs relations',
         icon: Database,
+        isSql: false,
+    },
+    {
+        id: 'logical',
+        name: 'Modèle Logique de Données',
+        description: 'Structure technique des tables avec types SQL et contraintes',
+        icon: TableProperties,
+        isSql: false,
     },
     {
         id: 'deployment',
         name: 'Diagramme de Déploiement',
         description: 'Architecture Docker Swarm',
         icon: Layers,
+        isSql: false,
     },
     {
         id: 'packaging',
         name: 'Diagramme de Packaging',
         description: 'Organisation en couches et modules',
         icon: Package,
+        isSql: false,
     },
     {
         id: 'component',
         name: 'Diagramme de Composants',
         description: 'Composants techniques et interfaces',
         icon: Component,
+        isSql: false,
+    },
+    {
+        id: 'mysql',
+        name: 'SQL MySQL',
+        description: 'Script de création de base de données pour MySQL avec types natifs et contraintes',
+        icon: FileCode2,
+        isSql: true,
+    },
+    {
+        id: 'postgresql',
+        name: 'SQL PostgreSQL',
+        description: 'Script de création de base de données pour PostgreSQL avec types natifs et contraintes',
+        icon: FileCode2,
+        isSql: true,
     },
 ];
 
@@ -88,7 +114,7 @@ export default function UmlViewerIndex({ databaseSchema, statistics }: Props) {
     const [showCode, setShowCode] = useState(false);
     const [showTableExplorer, setShowTableExplorer] = useState(false);
 
-    const { diagram, imageUrl, loading, error, generateDiagram, exportDiagram } = useDiagram();
+    const { diagram, imageUrl, sql, loading, error, generateDiagram, exportDiagram } = useDiagram();
 
     // Générer le diagramme initial
     useEffect(() => {
@@ -100,6 +126,10 @@ export default function UmlViewerIndex({ databaseSchema, statistics }: Props) {
         if (!diagram) return;
         await exportDiagram(activeTab, format, diagram);
     };
+
+    // Vérifier si l'onglet actif est un type SQL
+    const currentType = diagramTypes.find((t) => t.id === activeTab);
+    const isSqlTab = currentType?.isSql ?? false;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -121,26 +151,31 @@ export default function UmlViewerIndex({ databaseSchema, statistics }: Props) {
                                 <CardTitle>Visualiseur de Diagrammes UML</CardTitle>
                                 <CardDescription>Explorez l'architecture de votre application</CardDescription>
                             </div>
-                            <DiagramToolbar
-                                onExport={handleExport}
-                                onToggleCode={() => setShowCode(!showCode)}
-                                onToggleExplorer={() => setShowTableExplorer(!showTableExplorer)}
-                                showCode={showCode}
-                                showExplorer={showTableExplorer}
-                                loading={loading}
-                            />
+                            {!isSqlTab && (
+                                <DiagramToolbar
+                                    onExport={handleExport}
+                                    onToggleCode={() => setShowCode(!showCode)}
+                                    onToggleExplorer={() => setShowTableExplorer(!showTableExplorer)}
+                                    showCode={showCode}
+                                    showExplorer={showTableExplorer}
+                                    loading={loading}
+                                />
+                            )}
                         </div>
                     </CardHeader>
 
                     <CardContent>
                         <Tabs value={activeTab} onValueChange={setActiveTab}>
-                            <TabsList className="grid w-full grid-cols-4">
+                            <TabsList className="grid w-full grid-cols-7">
                                 {diagramTypes.map((type) => {
                                     const Icon = type.icon;
                                     return (
-                                        <TabsTrigger key={type.id} value={type.id}>
-                                            <Icon className="mr-2 h-4 w-4" />
-                                            {type.name}
+                                        <TabsTrigger key={type.id} value={type.id} className="text-xs">
+                                            <Icon className="mr-1 h-3 w-3" />
+                                            <span className="hidden lg:inline">{type.name}</span>
+                                            <span className="lg:hidden">
+                                                {type.id === 'mysql' ? 'MySQL' : type.id === 'postgresql' ? 'PgSQL' : type.name.split(' ')[0]}
+                                            </span>
                                         </TabsTrigger>
                                     );
                                 })}
@@ -154,23 +189,31 @@ export default function UmlViewerIndex({ databaseSchema, statistics }: Props) {
                                             <p className="text-muted-foreground text-sm">{type.description}</p>
                                         </div>
 
-                                        {/* Layout avec explorateur optionnel */}
-                                        <div className="grid gap-4 lg:grid-cols-12">
-                                            {/* Explorateur de tables (optionnel) */}
-                                            {showTableExplorer && (
-                                                <div className="lg:col-span-3">
-                                                    <TableExplorer tables={databaseSchema.tables} modules={databaseSchema.modules} />
+                                        {/* Affichage conditionnel : SQL ou Diagramme */}
+                                        {type.isSql ? (
+                                            // Affichage SQL
+                                            <SqlViewer sql={sql} type={type.id as 'mysql' | 'postgresql'} loading={loading} error={error} />
+                                        ) : (
+                                            <>
+                                                {/* Layout avec explorateur optionnel */}
+                                                <div className="grid gap-4 lg:grid-cols-12">
+                                                    {/* Explorateur de tables (optionnel) */}
+                                                    {showTableExplorer && (
+                                                        <div className="lg:col-span-3">
+                                                            <TableExplorer tables={databaseSchema.tables} modules={databaseSchema.modules} />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Visualiseur de diagramme */}
+                                                    <div className={showTableExplorer ? 'lg:col-span-9' : 'lg:col-span-12'}>
+                                                        <DiagramViewer plantUML={diagram} imageUrl={imageUrl} loading={loading} error={error} />
+                                                    </div>
                                                 </div>
-                                            )}
 
-                                            {/* Visualiseur de diagramme */}
-                                            <div className={showTableExplorer ? 'lg:col-span-9' : 'lg:col-span-12'}>
-                                                <DiagramViewer plantUML={diagram} imageUrl={imageUrl} loading={loading} error={error} />
-                                            </div>
-                                        </div>
-
-                                        {/* Code PlantUML (optionnel) */}
-                                        {showCode && diagram && <CodeViewer code={diagram} />}
+                                                {/* Code PlantUML (optionnel) */}
+                                                {showCode && diagram && <CodeViewer code={diagram} />}
+                                            </>
+                                        )}
                                     </div>
                                 </TabsContent>
                             ))}

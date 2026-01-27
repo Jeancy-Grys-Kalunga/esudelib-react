@@ -13,12 +13,11 @@ class Semestre extends Model
     /**
      * The attributes that are mass assignable.
      */
-    protected $fillable = [];
-    
+    protected $fillable = ['title'];
+
 
     public function courseProgramDetails()
     {
         return $this->hasMany(CourseProgramDetail::class);
     }
-
 }
