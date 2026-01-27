@@ -19,7 +19,8 @@ class Assignment extends Model
         'course_id',
         'academic_year_id',
         'observation',
-        'institution_id'
+        'institution_id',
+        'promotion_id'
     ];
 
     /**
@@ -59,11 +60,11 @@ class Assignment extends Model
         return $this->belongsTo(Institution::class);
     }
 
-
-     public function getPromotionAttribute()
+    /**
+     * Relation avec la promotion
+     */
+    public function promotion()
     {
-        return $this->course->courseProgramDetails
-            ->where('promotion_id', $this->course->courseProgramDetails->first()->promotion_id)
-            ->first()->promotion ?? null;
+        return $this->belongsTo(Promotion::class);
     }
 }

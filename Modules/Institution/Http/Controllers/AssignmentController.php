@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Modules\Institution\Entities\Assignment;
 use Modules\Institution\Entities\Institution;
 use Modules\Institution\Http\Requests\BulkAssignmentRequest;
@@ -23,7 +24,6 @@ use Modules\Teacher\Entities\Teacher;
 use App\Services\InfoBipService;
 use App\Services\TwilioService;
 use App\Services\VonageService;
-use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\AssignmentsExport;
 use App\Imports\AssignmentsImport;
@@ -60,9 +60,11 @@ class AssignmentController extends Controller
         $query = Assignment::with([
             'holder',
             'collaborator',
-            'course',
+            'course.courseProgramDetails.semestre',
+            'course.courseProgramDetails.promotion',
             'academicYear',
-            'institution'
+            'institution',
+            'promotion'
         ]);
 
         if ($user->hasRole('Secrétaire Académique')) {
@@ -142,13 +144,28 @@ class AssignmentController extends Controller
         $institutions = $this->getUserInstitutions($user);
 
         // Formatage avec alias cohérents
-        $formattedCourses = Course::with('courseProgramDetails')->get(['id', 'title'])->map(function ($course) {
-            return [
-                'id' => $course->id,
-                'name' => $course->title,
-                'details' => $course->details
-            ];
-        });
+        $institutionId = $this->getUserInstitutionId();
+
+        $formattedCourses = Course::whereHas('courseProgramDetails.program', function ($query) use ($institutionId) {
+            $query->where('institution_id', $institutionId);
+        })
+            ->with('promotions')
+            ->get()
+            ->map(function ($course) {
+                return [
+                    'id' => $course->id,
+                    'name' => $course->title ?? $course->name,
+                    'details' => $course->details,
+                    'promotions' => $course->promotions->map(function ($promotion) {
+                        return [
+                            'id' => $promotion->id,
+                            'name' => $promotion->title
+                        ];
+                    })->values()
+                ];
+            });
+
+
 
         $formattedAcademicYears = AcademicYear::all(['id', 'title'])->map(function ($year) {
             return ['id' => $year->id, 'name' => $year->title];
@@ -177,6 +194,8 @@ class AssignmentController extends Controller
 
     public function store(BulkAssignmentRequest $request)
     {
+        \Log::info('Assignment Store Request Data:', $request->all());
+
         if (!auth()->user()->hasPermissionTo('edit_assignments')) {
             abort(403, 'Action non autorisée');
         }
@@ -185,8 +204,22 @@ class AssignmentController extends Controller
         // Récupérer les données validées
         $validated = $request->validated();
 
+        \Log::info('Assignment Store Validated Data:', $validated);
+
         // Vérifier si nous avons un tableau d'assignations
-        $assignmentsData = $validated['assignments'] ?? [$validated];
+        $assignmentsData = $validated['assignments'] ?? [];
+
+        // Si vide, on essaie de voir si c'est une requête à plat qui a passé la validation (ce qui ne devrait pas arriver avec BulkRequest mais par sécurité)
+        if (empty($assignmentsData) && !empty($validated)) {
+            // Si validated ne contient pas 'assignments' mais contient d'autres clés, c'est peut-être un payload plat
+            // Mais attention, $validated ne contient QUE ce qui est dans les règles. 
+            // Si les règles sont nested, $validated ne contiendra rien si pas nested.
+            // On fallback sur request only si nécessaire, mais c'est risqué.
+            // Pour l'instant, on suppose que le frontend envoie toujours 'assignments'.
+            if (isset($request->course_id)) {
+                $assignmentsData = [$request->all()];
+            }
+        }
 
         $results = ['created' => 0, 'updated' => 0];
 
@@ -196,7 +229,8 @@ class AssignmentController extends Controller
             $data['academic_year_id'] = (int)$data['academic_year_id'];
             $data['course_id'] = (int)$data['course_id'];
             $data['holder_id'] = (int)$data['holder_id'];
-            $data['promotion_id'] = (int)$data['promotion_id'];
+            // Protection contre la clé manquante
+            $data['promotion_id'] = isset($data['promotion_id']) ? (int)$data['promotion_id'] : null;
 
             // Gestion du collaborator_id
             $data['collaborator_id'] = ($data['collaborator_id'] && $data['collaborator_id'] !== 'none')

@@ -21,13 +21,10 @@ class Course extends Model
 
     public $preventsLazyLoading = true;
 
-    protected $with = ['institution', 'unitsTeaching', 'assignments', 'students', 'notes', 'appeals'];
+    protected $with = ['unitsTeaching', 'assignments', 'students', 'notes', 'appeals'];
 
 
-    public function institution()
-    {
-        return $this->belongsTo(Institution::class, 'institution_id', 'id');
-    }
+
 
     public function notes()
     {
@@ -66,5 +63,10 @@ class Course extends Model
         return $this->belongsToMany(Student::class)
             ->using(CourseProgramDetail::class)
             ->withPivot(['promotion_id', 'academic_year_id']);
+    }
+
+    public function promotions()
+    {
+        return $this->belongsToMany(Promotion::class, 'course_program_details', 'course_id', 'promotion_id');
     }
 }
