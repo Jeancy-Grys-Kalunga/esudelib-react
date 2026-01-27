@@ -24,6 +24,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('academics', AcademicYearController::class)->names('academics');
 
     Route::resource('promotions', PromotionController::class)->names('promotions');
+    Route::post('promotions/import', [PromotionController::class, 'import'])->name('promotions.import');
 
     Route::resource('units-teachings', UnitsTeachingController::class)->names('units-teachings');
 
