@@ -164,8 +164,8 @@ class CourseController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
-            \Log::error('Erreur lors de l\'importation des cours: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Erreur lors de l\'importation des cours: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
 
             return redirect()->route('courses.index')->with([
                 'flash' => [

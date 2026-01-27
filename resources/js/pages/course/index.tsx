@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 
@@ -48,7 +49,7 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
     const [searchTerm, setSearchTerm] = useState(filters?.search || '');
     const [filteredCourses, setFilteredCourses] = useState<Course[]>(allCourses);
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage] = useState(10);
+    const [itemsPerPage, setItemsPerPage] = useState(50);
 
     const { data, setData, post, put, errors, processing, reset } = useForm({
         title: '',
@@ -222,6 +223,11 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
         setCurrentPage(1);
     };
 
+    const handleItemsPerPageChange = (value: string) => {
+        setItemsPerPage(Number(value));
+        setCurrentPage(1);
+    };
+
     if (!can.access) {
         return (
             <AppLayout>
@@ -292,10 +298,26 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
 
                 <Card className="shadow-sm">
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <CardTitle>Liste des Cours</CardTitle>
                                 <CardDescription>{filteredCourses.length} cours correspondant aux critères</CardDescription>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="items-per-page" className="text-muted-foreground text-sm font-normal whitespace-nowrap">
+                                    Afficher:
+                                </Label>
+                                <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                                    <SelectTrigger id="items-per-page" className="w-[120px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="50">50 par page</SelectItem>
+                                        <SelectItem value="100">100 par page</SelectItem>
+                                        <SelectItem value="500">500 par page</SelectItem>
+                                        <SelectItem value="1000">1000 par page</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                     </CardHeader>
