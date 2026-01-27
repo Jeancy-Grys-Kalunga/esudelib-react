@@ -3,8 +3,11 @@
 namespace Modules\Institution\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Imports\CoursesImport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
 use Modules\Institution\Entities\Course;
 use Modules\Institution\Http\Requests\StoreCourseRequest;
 use Modules\Institution\Http\Requests\UpdateCourseRequest;
@@ -112,6 +115,65 @@ class CourseController extends Controller
                 'message' => 'Cours supprimé avec succès !',
             ],
         ]);
+    }
+
+    public function import(Request $request)
+    {
+        if (!auth()->user()->hasPermissionTo('create_courses')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls,csv|max:10240',
+        ]);
+
+        try {
+            $import = new CoursesImport();
+
+            Excel::import($import, $request->file('file'));
+
+            $imported = $import->getImported();
+            $skipped = $import->getSkipped();
+            $duplicates = $import->getDuplicates();
+
+            $message = "Importation terminée : {$imported} cours importés";
+
+            if ($skipped > 0) {
+                $message .= ", {$skipped} doublons ignorés";
+            }
+
+            return redirect()->route('courses.index')->with([
+                'flash' => [
+                    'type' => 'success',
+                    'message' => $message,
+                    'duplicates' => $duplicates,
+                ],
+            ]);
+        } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
+            $failures = $e->failures();
+            $errorMessages = [];
+
+            foreach ($failures as $failure) {
+                $errorMessages[] = "Ligne {$failure->row()}: " . implode(', ', $failure->errors());
+            }
+
+            return redirect()->route('courses.index')->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => 'Erreur de validation: ' . implode(' | ', $errorMessages),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Erreur lors de l\'importation des cours: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+
+            return redirect()->route('courses.index')->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => 'Erreur lors de l\'importation: ' . $e->getMessage(),
+                ],
+            ]);
+        }
     }
 
     private function getFlashMessages()

@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { BookOpen, Edit, Loader2, Plus, Search, Trash2, X } from 'lucide-react';
+import { BookOpen, Download, Edit, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -41,6 +41,7 @@ type PageProps = {
 
 export default function CourseIndex({ courses: allCourses, can, flash, filters }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [currentCourse, setCurrentCourse] = useState<Course | null>(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
@@ -54,6 +55,15 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
         orientation: '',
     });
 
+    const importForm = useForm<{
+        file: File | null;
+    }>({
+        file: null,
+    });
+
+    const [file, setFile] = useState<File | null>(null);
+    const [isImporting, setIsImporting] = useState(false);
+
     const handleSearch = useMemo(() => {
         return _.debounce((term: string) => {
             if (!term) {
@@ -62,9 +72,9 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                 return;
             }
             const results = allCourses.filter(
-                (course) => 
+                (course) =>
                     course.title.toLowerCase().includes(term.toLowerCase()) ||
-                    (course.orientation && course.orientation.toLowerCase().includes(term.toLowerCase()))
+                    (course.orientation && course.orientation.toLowerCase().includes(term.toLowerCase())),
             );
             setFilteredCourses(results);
             setCurrentPage(1);
@@ -162,6 +172,50 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
         });
     };
 
+    const openImportModal = () => {
+        if (!can.import) {
+            toast.error("Vous n'avez pas la permission d'importer");
+            return;
+        }
+        setIsImportModalOpen(true);
+    };
+
+    const closeImportModal = () => {
+        setIsImportModalOpen(false);
+        importForm.reset();
+        setFile(null);
+    };
+
+    const handleImportSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!file) {
+            toast.error('Veuillez sélectionner un fichier');
+            return;
+        }
+
+        setIsImporting(true);
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        router.post(route('courses.import'), formData, {
+            forceFormData: true,
+            onSuccess: () => {
+                closeImportModal();
+                setIsImporting(false);
+                setFile(null);
+            },
+            onError: (errors) => {
+                setIsImporting(false);
+                console.error('Import errors:', errors);
+                if (errors.file) {
+                    toast.error(errors.file);
+                }
+            },
+        });
+    };
+
     const resetFilters = () => {
         setSearchTerm('');
         setFilteredCourses(allCourses);
@@ -194,6 +248,12 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                             <Button onClick={() => openModal()} className="gap-2 shadow-sm">
                                 <Plus size={16} />
                                 Nouveau Cours
+                            </Button>
+                        )}
+                        {can.import && (
+                            <Button onClick={openImportModal} className="gap-2 shadow-sm">
+                                <Upload size={16} />
+                                Importer Excel
                             </Button>
                         )}
                         <Button variant="outline" onClick={resetFilters} className="gap-2 shadow-sm">
@@ -365,24 +425,13 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                                         <BookOpen className="h-4 w-4" />
                                         Titre du cours *
                                     </Label>
-                                    <Input 
-                                        id="title" 
-                                        value={data.title} 
-                                        onChange={(e) => setData('title', e.target.value)} 
-                                        required 
-                                    />
+                                    <Input id="title" value={data.title} onChange={(e) => setData('title', e.target.value)} required />
                                     {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
                                 </div>
-                                
+
                                 <div className="space-y-2">
-                                    <Label htmlFor="orientation">
-                                        Orientation (optionnel)
-                                    </Label>
-                                    <Input 
-                                        id="orientation"
-                                        value={data.orientation}
-                                        onChange={(e) => setData('orientation', e.target.value)}
-                                    />
+                                    <Label htmlFor="orientation">Orientation (optionnel)</Label>
+                                    <Input id="orientation" value={data.orientation} onChange={(e) => setData('orientation', e.target.value)} />
                                     {errors.orientation && <p className="text-sm text-red-500">{errors.orientation}</p>}
                                 </div>
                             </div>
@@ -430,6 +479,66 @@ export default function CourseIndex({ courses: allCourses, can, flash, filters }
                                 Supprimer
                             </Button>
                         </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal Importation Excel */}
+                <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+                    <DialogContent className="sm:max-w-[600px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-xl">
+                                <Upload className="h-5 w-5" />
+                                Importer des cours
+                            </DialogTitle>
+                            <DialogDescription>Téléversez un fichier Excel contenant la liste des cours</DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleImportSubmit} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>Fichier Excel *</Label>
+                                <div
+                                    className="cursor-pointer rounded-lg border-2 border-dashed bg-gray-50 p-6 text-center dark:bg-gray-800"
+                                    onClick={() => document.getElementById('file-upload')?.click()}
+                                >
+                                    <input
+                                        id="file-upload"
+                                        type="file"
+                                        className="hidden"
+                                        accept=".xlsx,.xls,.csv"
+                                        onChange={(e) => {
+                                            if (e.target.files?.[0]) {
+                                                setFile(e.target.files[0]);
+                                                importForm.setData('file', e.target.files[0]);
+                                            }
+                                        }}
+                                    />
+                                    {file ? (
+                                        <p className="font-medium">{file.name}</p>
+                                    ) : (
+                                        <>
+                                            <Download className="mx-auto h-8 w-8 text-gray-400" />
+                                            <p className="mt-2 font-medium">Glissez votre fichier ici</p>
+                                            <p className="text-sm text-gray-500">Formats supportés: XLSX, XLS, CSV</p>
+                                            <Button type="button" variant="outline" className="mt-2">
+                                                Sélectionner un fichier
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
+                                <p className="text-sm text-gray-500">
+                                    Le fichier doit contenir une colonne "Intitulé Cours" avec les noms des cours.
+                                </p>
+                            </div>
+
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={closeImportModal}>
+                                    Annuler
+                                </Button>
+                                <Button type="submit" disabled={isImporting || !file} className="gap-2">
+                                    {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                    Importer
+                                </Button>
+                            </DialogFooter>
+                        </form>
                     </DialogContent>
                 </Dialog>
             </div>
