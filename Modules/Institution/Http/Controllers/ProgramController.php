@@ -46,7 +46,7 @@ class ProgramController extends Controller
         );
 
         // Construction de la requête optimisée
-        $query = Program::withCount('courseDetails');
+        $query = Program::with('institution')->withCount('courseDetails');
 
         if ($user->hasRole('Secrétaire Académique')) {
             $institutionIds = $user->institutions()->pluck('id');
@@ -160,6 +160,9 @@ class ProgramController extends Controller
             abort(403);
         }
 
+        // Charger la relation institution pour éviter le lazy loading
+        $program->load('institution');
+
         return Inertia::render('program/details', [
             'program' => [
                 'id' => $program->id,
@@ -248,7 +251,7 @@ class ProgramController extends Controller
         }
 
         // Charger les détails avec la méthode optimisée
-        $program->load(['courseDetails' => function ($query) {
+        $program->load(['institution', 'courseDetails' => function ($query) {
             $query->with(['course', 'promotion', 'unitsTeaching', 'category', 'semestre']);
         }]);
 
