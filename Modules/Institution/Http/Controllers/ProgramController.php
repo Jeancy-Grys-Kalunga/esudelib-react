@@ -38,12 +38,15 @@ class ProgramController extends Controller
             'edit'   => 'edit_programs',
             'delete' => 'delete_programs',
             'access' => 'access_programs',
+            'import' => 'create_programs', // Ajout de la permission import
         ];
 
         $can = array_map(
             fn($permission) => in_array($permission, $permissions),
             $requiredPermissions
         );
+
+        $can['selectInstitution'] = $user->hasRole('Super Admin');
 
         // Construction de la requête optimisée
         $query = Program::with('institution')->withCount('courseDetails');
@@ -74,6 +77,47 @@ class ProgramController extends Controller
             'institutions' => $institutions,
             'flash' => $this->getFlashMessages(),
         ]);
+    }
+
+    public function import(Request $request)
+    {
+        if (!auth()->user()->hasPermissionTo('create_programs')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $request->validate([
+            'file' => 'required|file|mimes:xlsx,xls,csv|max:10240',
+            'institution_id' => 'required|exists:institutions,id',
+        ]);
+
+        try {
+            $import = new \App\Imports\ProgramsImport($request->institution_id);
+            \Maatwebsite\Excel\Facades\Excel::import($import, $request->file('file'));
+
+            $stats = $import->getStats();
+
+            $message = "Importation terminée : {$stats['imported']} détails ajoutés/mis à jour";
+            if ($stats['programs_created'] > 0) {
+                $message .= ", {$stats['programs_created']} programmes créés";
+            }
+            if ($stats['skipped'] > 0) {
+                $message .= ". {$stats['skipped']} lignes ignorées.";
+            }
+
+            return redirect()->back()->with([
+                'flash' => [
+                    'type' => 'success',
+                    'message' => $message,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return redirect()->back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => "Erreur lors de l'importation : " . $e->getMessage(),
+                ],
+            ]);
+        }
     }
 
     public function create()
@@ -196,8 +240,8 @@ class ProgramController extends Controller
                 'course_details' => 'required|array|min:1',
                 'course_details.*.course_id' => 'required|exists:courses,id',
                 'course_details.*.promotion_id' => 'required|exists:promotions,id',
-                'course_details.*.units_teaching_id' => 'required|exists:units_teachings,id',
-                'course_details.*.course_category_id' => 'required|exists:course_categories,id',
+                'course_details.*.units_teaching_id' => 'nullable|exists:units_teachings,id',
+                'course_details.*.course_category_id' => 'nullable|exists:course_categories,id',
                 'course_details.*.semestre_id' => 'required|exists:semestres,id', // Ajouté
                 'course_details.*.cm' => 'required|numeric|min:0',
                 'course_details.*.td' => 'required|numeric|min:0',
@@ -307,8 +351,8 @@ class ProgramController extends Controller
                 'course_details.*.id' => 'sometimes|exists:course_program_details,id',
                 'course_details.*.course_id' => 'required|exists:courses,id',
                 'course_details.*.promotion_id' => 'required|exists:promotions,id',
-                'course_details.*.units_teaching_id' => 'required|exists:units_teachings,id',
-                'course_details.*.course_category_id' => 'required|exists:course_categories,id',
+                'course_details.*.units_teaching_id' => 'nullable|exists:units_teachings,id',
+                'course_details.*.course_category_id' => 'nullable|exists:course_categories,id',
                 'course_details.*.semestre_id' => 'required|exists:semestres,id', // Ajouté
                 'course_details.*.cm' => 'required|numeric|min:0',
                 'course_details.*.td' => 'required|numeric|min:0',

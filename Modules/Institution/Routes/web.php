@@ -52,6 +52,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('exam-sessions', ExamSessionController::class)->except(['create', 'edit', 'show']);
 
     // Routes pour les programmes
+    Route::post('programs/import', [ProgramController::class, 'import'])->name('programs.import');
     Route::resource('programs', ProgramController::class)->names('programs');
 
     // Routes supplémentaires pour la gestion des détails des programmes

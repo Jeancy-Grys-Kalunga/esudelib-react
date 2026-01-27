@@ -1,5 +1,5 @@
-import { Head, router } from '@inertiajs/react';
-import { BookOpen, Edit, Loader2, Plus, Search, Trash2, X } from 'lucide-react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { BookOpen, Download, Edit, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 
@@ -36,6 +37,7 @@ type PageProps = {
         delete: boolean;
         access: boolean;
         selectInstitution: boolean;
+        import: boolean; // Ajout permission
     };
     flash?: {
         type: 'success' | 'error' | 'warning' | 'info';
@@ -45,6 +47,9 @@ type PageProps = {
 
 export default function ProgramIndex({ programs: allPrograms, institutions, defaultInstitution, can, flash }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false); // Modal import
+    const [file, setFile] = useState<File | null>(null); // Fichier upload
+    const [isImporting, setIsImporting] = useState(false); // Loading import
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [programToDelete, setProgramToDelete] = useState<Program | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -53,6 +58,20 @@ export default function ProgramIndex({ programs: allPrograms, institutions, defa
     const [itemsPerPage] = useState(10);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Pour gérer l'institution sélectionnée dans le modal d'import (similaire à create)
+    const [selectedImportInstitution, setSelectedImportInstitution] = useState<string>(defaultInstitution ? defaultInstitution.toString() : '');
+
+    // Déterminer si l'utilisateur est Super Admin en utilisant les props globales auth
+    const { props } = usePage<{ auth: { user: any } }>();
+    const isSuperAdmin = props.auth?.user?.roles?.some((role: any) => role.name === 'Super Admin') || false;
+
+    // Pré-remplir l'institution pour les non Super Admin lors de l'import
+    useEffect(() => {
+        if (!isSuperAdmin && props.auth?.user?.institutions && props.auth.user.institutions.length > 0) {
+            setSelectedImportInstitution(props.auth.user.institutions[0].id.toString());
+        }
+    }, [isSuperAdmin, props.auth]);
 
     useEffect(() => {
         if (flash && flash.message) {
@@ -104,6 +123,59 @@ export default function ProgramIndex({ programs: allPrograms, institutions, defa
 
     const closeModal = () => {
         setIsModalOpen(false);
+    };
+
+    const openImportModal = () => {
+        if (!can.import) {
+            // Utilisation de la nouvelle permission
+            toast.error("Vous n'avez pas la permission d'importer");
+            return;
+        }
+        setIsImportModalOpen(true);
+    };
+
+    const closeImportModal = () => {
+        setIsImportModalOpen(false);
+        setFile(null);
+        if (isSuperAdmin) {
+            setSelectedImportInstitution('');
+        }
+    };
+
+    const handleImportSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!file) {
+            toast.error('Veuillez sélectionner un fichier');
+            return;
+        }
+
+        if (!selectedImportInstitution) {
+            toast.error('Veuillez sélectionner une institution');
+            return;
+        }
+
+        setIsImporting(true);
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('institution_id', selectedImportInstitution);
+
+        router.post(route('programs.import'), formData, {
+            forceFormData: true,
+            onSuccess: () => {
+                closeImportModal();
+                setIsImporting(false);
+                setFile(null);
+            },
+            onError: (errors) => {
+                setIsImporting(false);
+                console.error('Import errors:', errors);
+                if (errors.file) {
+                    toast.error(errors.file);
+                }
+            },
+        });
     };
 
     const openDeleteModal = (program: Program) => {
@@ -161,6 +233,18 @@ export default function ProgramIndex({ programs: allPrograms, institutions, defa
                                 Nouveau Programme
                             </Button>
                         )}
+                        {can.import && (
+                            <Button variant="secondary" onClick={openImportModal} className="gap-2 shadow-sm">
+                                <Upload size={16} />
+                                Importer Excel
+                            </Button>
+                        )}
+                        <Button asChild variant="outline" className="gap-2 shadow-sm">
+                            <a href="/storage/templates/programs_import_template.csv" download>
+                                <Download size={16} />
+                                Modèle CSV
+                            </a>
+                        </Button>
                         <Button variant="outline" onClick={resetFilters} className="gap-2 shadow-sm">
                             <X size={16} />
                             Réinitialiser
@@ -401,6 +485,107 @@ export default function ProgramIndex({ programs: allPrograms, institutions, defa
                                         Créer et ajouter des cours
                                     </Button>
                                 </div>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal Importation */}
+                <Dialog open={isImportModalOpen} onOpenChange={closeImportModal}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Upload className="h-5 w-5" />
+                                Importer des Programmes
+                            </DialogTitle>
+                            <DialogDescription>
+                                Sélectionnez un fichier Excel ou CSV contenant les programmes à importer. Le fichier doit avoir les colonnes :
+                                Intitulé Cours, Promotion, CMI, TP, CREDIT, Unité, Catégorie.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleImportSubmit} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="import-institution">Institution *</Label>
+                                {can.selectInstitution ? (
+                                    <Select value={selectedImportInstitution} onValueChange={setSelectedImportInstitution} disabled={isImporting}>
+                                        <SelectTrigger id="import-institution">
+                                            <SelectValue placeholder="Sélectionnez une institution" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {institutions.map((institution) => (
+                                                <SelectItem key={institution.id} value={institution.id.toString()}>
+                                                    {institution.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <Input value={institutions.length > 0 ? institutions[0].name : ''} disabled />
+                                )}
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Fichier Excel/CSV *</Label>
+                                <div
+                                    className="cursor-pointer rounded-lg border-2 border-dashed bg-gray-50 p-6 text-center dark:bg-gray-800"
+                                    onClick={() => !isImporting && document.getElementById('file-upload-program')?.click()}
+                                >
+                                    <input
+                                        id="file-upload-program"
+                                        type="file"
+                                        className="hidden"
+                                        accept=".xlsx,.xls,.csv"
+                                        disabled={isImporting}
+                                        onChange={(e) => {
+                                            if (e.target.files?.[0]) {
+                                                setFile(e.target.files[0]);
+                                            }
+                                        }}
+                                    />
+                                    {file ? (
+                                        <div className="flex flex-col items-center gap-2">
+                                            <p className="font-medium">{file.name}</p>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-red-500 hover:text-red-700"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setFile(null);
+                                                }}
+                                            >
+                                                Retirer le fichier
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <Download className="mx-auto h-8 w-8 text-gray-400" />
+                                            <p className="mt-2 font-medium">Glissez votre fichier ici</p>
+                                            <p className="text-sm text-gray-500">Formats supportés: XLSX, XLS, CSV</p>
+                                            <Button type="button" variant="outline" className="mt-2" disabled={isImporting}>
+                                                Sélectionner un fichier
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
+                                <div className="mt-4 rounded-md bg-blue-50 p-3 dark:bg-blue-950">
+                                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Format attendu :</p>
+                                    <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                        Le fichier doit contenir les colonnes : <strong>Intitulé Cours, Promotion, TP, CREDIT</strong>.
+                                    </p>
+                                    <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                        Colonnes optionnelles : <strong>CMI, Unité, Catégorie</strong>.
+                                    </p>
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={closeImportModal} disabled={isImporting}>
+                                    Annuler
+                                </Button>
+                                <Button type="submit" disabled={isImporting} className="gap-2">
+                                    {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                    Importer
+                                </Button>
                             </DialogFooter>
                         </form>
                     </DialogContent>
