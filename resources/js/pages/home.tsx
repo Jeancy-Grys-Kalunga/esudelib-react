@@ -32,7 +32,7 @@ const Home: NextPageWithLayout = () => {
 
     return (
         <>
-            <Head title="Accueil - Esudelib" />
+            <Head title="Accueil - E-Cursus" />
 
             {/* Hero Section - Enhanced with glassmorphism and modern gradients */}
             <section className="animate-gradient relative flex min-h-screen items-center overflow-hidden bg-gradient-to-br from-blue-900 via-blue-800 to-sky-700 text-white">
@@ -76,15 +76,15 @@ const Home: NextPageWithLayout = () => {
                         </div>
 
                         <h1 className="animate-fade-in-up mb-6 text-5xl leading-tight font-extrabold md:text-7xl">
-                            Gestion de Délibération
+                            Suivie Cursus
                             <span className="animate-shimmer mt-2 block bg-gradient-to-r from-sky-300 via-blue-300 to-cyan-300 bg-clip-text text-transparent">
                                 Réinventée
                             </span>
                         </h1>
 
                         <p className="animate-fade-in mx-auto mb-10 max-w-3xl text-xl leading-relaxed text-gray-200 md:text-2xl">
-                            Une expérience moderne et intuitive pour simplifier vos processus de délibération. Gagnez du temps, réduisez les erreurs
-                            et offrez une transparence totale.
+                            Une expérience moderne et intuitive pour simplifier la délibération de masse, mobilité des étudiants vos processus de
+                            délibération. Gagnez du temps, réduisez les erreurs et offrez une transparence totale.
                         </p>
 
                         <div className="animate-fade-in-up animation-delay-300 flex flex-col items-center justify-center gap-4 sm:flex-row">
