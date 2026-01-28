@@ -116,6 +116,7 @@ class TeacherController extends Controller
         ]);
     }
 
+
     public function store(StoreTeacherRequest $request)
     {
         if (! auth()->user()->hasPermissionTo('create_teachers')) {
@@ -141,6 +142,38 @@ class TeacherController extends Controller
                 'message' => 'Enseignant enregistré avec succès !',
             ],
         ]);
+    }
+
+    public function import(Request $request)
+    {
+        if (! auth()->user()->hasPermissionTo('create_teachers')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls',
+            'institution_id' => 'required|exists:institutions,id',
+        ]);
+
+        try {
+            Excel::import(new \App\Imports\TeacherImport($request->institution_id), $request->file('file'));
+
+            $summary = session('import_summary') ?? '';
+
+            return redirect()->back()->with([
+                'flash' => [
+                    'type'    => 'success',
+                    'message' => 'Importation terminée. ' . $summary,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return redirect()->back()->with([
+                'flash' => [
+                    'type'    => 'error',
+                    'message' => 'Erreur lors de l\'importation : ' . $e->getMessage(),
+                ],
+            ]);
+        }
     }
 
 
@@ -405,7 +438,7 @@ class TeacherController extends Controller
         }
 
         $institutionId = auth()->user()->teacher->institutions()->first()->id;
-        
+
         // Récupérer la promotion associée au cours
         $courseProgramDetail = $course->courseProgramDetails()->first();
         $promotion = $courseProgramDetail ? $courseProgramDetail->promotion : null;
@@ -440,7 +473,7 @@ class TeacherController extends Controller
                 'errors' => $validator->errors()
             ], 422);
         }
-        
+
         // Récupérer la promotion du cours
         $courseProgramDetail = $course->courseProgramDetails()->first();
         if (!$courseProgramDetail) {
@@ -519,7 +552,7 @@ class TeacherController extends Controller
             return back()->with([
                 'flash' => [
                     'type' => 'error',
-                'message' => 'La session d\'examen est fermée. Vous ne pouvez pas soumettre de notes.'
+                    'message' => 'La session d\'examen est fermée. Vous ne pouvez pas soumettre de notes.'
                 ],
             ]);
         }

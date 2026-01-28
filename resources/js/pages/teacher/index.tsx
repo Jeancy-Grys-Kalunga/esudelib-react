@@ -64,14 +64,37 @@ type PageProps = {
 
 export default function TeacherIndex({ teachers: allTeachers, institutions, can, flash, filters }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
+
+    const {
+        data: importData,
+        setData: setImportData,
+        post: postImport,
+        processing: importProcessing,
+        reset: resetImport,
+        errors: importErrors,
+    } = useForm({
+        file: null as File | null,
+        institution_id: '',
+    });
+
+    const handleImportSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        postImport(route('teachers.import'), {
+            onSuccess: () => {
+                setIsImportModalOpen(false);
+                resetImport();
+            },
+        });
+    };
     const [files, setFiles] = useState<File[]>([]);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [teacherToDelete, setTeacherToDelete] = useState<Teacher | null>(null);
     const [searchTerm, setSearchTerm] = useState(filters?.search || '');
     const [filteredTeachers, setFilteredTeachers] = useState<Teacher[]>(allTeachers);
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage] = useState(10);
+    const [itemsPerPage, setItemsPerPage] = useState(50);
     const [uploadProgress, setUploadProgress] = useState(0);
 
     const { data, setData, post, put, errors, processing, reset } = useForm({
@@ -313,10 +336,34 @@ export default function TeacherIndex({ teachers: allTeachers, institutions, can,
                                 Nouvel Enseignant
                             </Button>
                         )}
+                        {can.import && (
+                            <Button onClick={() => setIsImportModalOpen(true)} variant="secondary" className="gap-2 shadow-sm">
+                                <Upload size={16} />
+                                Importer
+                            </Button>
+                        )}
                         <Button variant="outline" onClick={resetFilters} className="gap-2 shadow-sm">
                             <X size={16} />
                             Réinitialiser
                         </Button>
+                        <Select
+                            value={itemsPerPage.toString()}
+                            onValueChange={(value) => {
+                                setItemsPerPage(Number(value));
+                                setCurrentPage(1);
+                            }}
+                        >
+                            <SelectTrigger className="w-[180px] shadow-sm">
+                                <SelectValue placeholder="Lignes par page" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="10">10 lignes</SelectItem>
+                                <SelectItem value="50">50 lignes</SelectItem>
+                                <SelectItem value="100">100 lignes</SelectItem>
+                                <SelectItem value="500">500 lignes</SelectItem>
+                                <SelectItem value="1000">1000 lignes</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
 
@@ -556,8 +603,8 @@ export default function TeacherIndex({ teachers: allTeachers, institutions, can,
                                                     value: i.id.toString(),
                                                     label: i.name,
                                                 }))}
-                                                selected={data.institutions.map(String)} 
-                                                onChange={(selected) => setData('institutions', selected)} 
+                                                selected={data.institutions.map(String)}
+                                                onChange={(selected) => setData('institutions', selected)}
                                                 placeholder="Sélectionnez des institutions..."
                                             />
                                         </div>
@@ -735,6 +782,116 @@ export default function TeacherIndex({ teachers: allTeachers, institutions, can,
                                         )}
                                     </Button>
                                 </div>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog
+                    open={isImportModalOpen}
+                    onOpenChange={(open) => {
+                        setIsImportModalOpen(open);
+                        if (!open) {
+                            setFiles([]);
+                            resetImport();
+                        }
+                    }}
+                >
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Upload className="h-5 w-5" />
+                                Importer des enseignants
+                            </DialogTitle>
+                            <DialogDescription>
+                                Sélectionnez un fichier Excel (.xlsx, .xls) contenant la liste des enseignants à importer.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleImportSubmit} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="institution">Institution de rattachement</Label>
+                                <Select value={importData.institution_id} onValueChange={(value) => setImportData('institution_id', value)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Sélectionner une institution" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {institutions.map((institution) => (
+                                            <SelectItem key={institution.id} value={institution.id.toString()}>
+                                                {institution.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {importErrors.institution_id && <p className="text-sm text-red-500">{importErrors.institution_id}</p>}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="file">Fichier Excel</Label>
+                                <div
+                                    className="cursor-pointer rounded-lg border-2 border-dashed bg-gray-50 p-6 text-center dark:bg-gray-800"
+                                    onClick={() => !importProcessing && document.getElementById('file-upload-teacher')?.click()}
+                                >
+                                    <input
+                                        id="file-upload-teacher"
+                                        type="file"
+                                        className="hidden"
+                                        accept=".xlsx, .xls"
+                                        disabled={importProcessing}
+                                        onChange={(e) => setImportData('file', e.target.files ? e.target.files[0] : null)}
+                                    />
+                                    {importData.file ? (
+                                        <div className="flex flex-col items-center gap-2">
+                                            <p className="font-medium">{importData.file.name}</p>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-red-500 hover:text-red-700"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setImportData('file', null);
+                                                }}
+                                            >
+                                                Retirer le fichier
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-500">
+                                                <Upload className="h-6 w-6" />
+                                            </div>
+                                            <p className="font-medium">Cliquer pour sélectionner un fichier</p>
+                                            <p className="text-muted-foreground mt-1 text-xs">XLSX, XLS (max 10MB)</p>
+                                        </>
+                                    )}
+                                </div>
+                                {importErrors.file && <p className="text-sm text-red-500">{importErrors.file}</p>}
+
+                                <div className="mt-4 rounded-md bg-blue-50 p-3 dark:bg-blue-950">
+                                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Format attendu :</p>
+                                    <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                        Colonnes requises : <strong>nom_complet, matricule, date_naissance, sexe</strong>.
+                                    </p>
+                                    <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                                        Autres colonnes : <strong>grade, niveau_etude, specialite, telephone</strong>.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setIsImportModalOpen(false)}>
+                                    Annuler
+                                </Button>
+                                <Button type="submit" disabled={importProcessing}>
+                                    {importProcessing ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Importation...
+                                        </>
+                                    ) : (
+                                        'Importer'
+                                    )}
+                                </Button>
                             </DialogFooter>
                         </form>
                     </DialogContent>
