@@ -1,18 +1,20 @@
+import { Checkbox } from '@/components/ui/checkbox';
 import { Head, router, useForm } from '@inertiajs/react';
-import { BookOpen, Calendar, Download, Edit, Loader2, Plus, Search, Trash2, Upload, User, X } from 'lucide-react';
+import { BookOpen, Download, Edit, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
-import { Checkbox } from '@/components/ui/checkbox';
 
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CircularProgress } from '@/components/ui/circular-progress';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
+import axios from 'axios';
 
 type Inscription = {
     id: number;
@@ -62,15 +64,20 @@ type PageProps = {
 export default function InscriptionIndex({ inscriptions: allInscriptions, can, flash, institutions, academicYears, promotions }: PageProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isGeneralImportModalOpen, setIsGeneralImportModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [inscriptionToDelete, setInscriptionToDelete] = useState<Inscription | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredInscriptions, setFilteredInscriptions] = useState<Inscription[]>(allInscriptions);
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage] = useState(10);
+    const [itemsPerPage, setItemsPerPage] = useState(50);
+
     const [file, setFile] = useState<File | null>(null);
     const [isImporting, setIsImporting] = useState(false);
-    
+    const [importJobId, setImportJobId] = useState<string | null>(null);
+    const [importProgress, setImportProgress] = useState(0);
+    const [importStatus, setImportStatus] = useState<string>('');
+
     // États pour la recherche d'équivalence
     const [isTransferStudent, setIsTransferStudent] = useState(false);
     const [oldInstitutionId, setOldInstitutionId] = useState('');
@@ -105,19 +112,25 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
         promotion_id: '',
     });
 
+    const generalImportForm = useForm<{
+        file: File | null;
+    }>({
+        file: null,
+    });
+
     useEffect(() => {
         if (!searchTerm) {
             setFilteredInscriptions(allInscriptions);
             setCurrentPage(1);
             return;
         }
-        
+
         const results = allInscriptions.filter(
             (ins) =>
                 ins.student_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                ins.student_matricule.toLowerCase().includes(searchTerm.toLowerCase())
+                ins.student_matricule.toLowerCase().includes(searchTerm.toLowerCase()),
         );
-        
+
         setFilteredInscriptions(results);
         setCurrentPage(1);
     }, [searchTerm, allInscriptions]);
@@ -125,7 +138,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
     useEffect(() => {
         // Mettre à jour les anciennes institutions (exclure l'institution actuelle)
         if (data.institution_id && institutions.length > 0) {
-            const filtered = institutions.filter(inst => inst.id !== data.institution_id);
+            const filtered = institutions.filter((inst) => inst.id !== data.institution_id);
             setOldInstitutions(filtered);
         } else {
             setOldInstitutions([...institutions]);
@@ -135,9 +148,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
     useEffect(() => {
         // Mettre à jour les anciennes promotions basées sur l'institution sélectionnée
         if (oldInstitutionId && promotions.length > 0) {
-            const filtered = promotions.filter(promo => 
-                promo.institution_id === oldInstitutionId
-            );
+            const filtered = promotions.filter((promo) => promo.institution_id === oldInstitutionId);
             setOldPromotions(filtered);
         } else {
             setOldPromotions([]);
@@ -166,7 +177,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
     const openModal = () => {
         if (!can.create) {
-            toast.error("Permission refusée");
+            toast.error('Permission refusée');
             return;
         }
         setIsModalOpen(true);
@@ -174,10 +185,18 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
     const openImportModal = () => {
         if (!can.import) {
-            toast.error("Permission refusée");
+            toast.error('Permission refusée');
             return;
         }
         setIsImportModalOpen(true);
+    };
+
+    const openGeneralImportModal = () => {
+        if (!can.import) {
+            toast.error('Permission refusée');
+            return;
+        }
+        setIsGeneralImportModalOpen(true);
     };
 
     const closeModal = () => {
@@ -194,9 +213,15 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
         setFile(null);
     };
 
+    const closeGeneralImportModal = () => {
+        setIsGeneralImportModalOpen(false);
+        generalImportForm.reset();
+        setFile(null);
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         // Ajouter les données de transfert si nécessaire
         const formData = {
             ...data,
@@ -204,7 +229,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
             old_institution_id: isTransferStudent ? oldInstitutionId : '',
             old_promotion_id: isTransferStudent ? oldPromotionId : '',
         };
-        
+
         post(route('subscriptions.store'), {
             // @ts-ignore
             data: formData,
@@ -225,9 +250,51 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
         });
     };
 
+    const handleGeneralImportSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!file) return;
+
+        setIsImporting(true);
+        setImportProgress(0); // Progress not tracked in sync mode or indeterminate
+        setImportStatus('start');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            // Synchronous request (long timeout handled by server)
+            const response = await axios.post(route('subscriptions.import-general'), formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+                // Optional: Monitor upload progress if desired, but processing progress is server-side blocking
+            });
+
+            if (response.status === 200) {
+                toast.success('Importation terminée avec succès !');
+                closeGeneralImportModal();
+                router.reload(); // Reload data
+            }
+        } catch (error: any) {
+            console.error(error);
+            const msg = error.response?.data?.error || "Erreur lors de l'importation";
+            toast.error(msg);
+        } finally {
+            setIsImporting(false);
+            setImportStatus('');
+        }
+    };
+
+    // Polling effect removed since we are synchronous now
+    /*
+    useEffect(() => {
+        // ... (removed)
+    }, [importJobId, isImporting]);
+    */
+
     const openDeleteModal = (inscription: Inscription) => {
         if (!can.delete) {
-            toast.error("Permission refusée");
+            toast.error('Permission refusée');
             return;
         }
         setInscriptionToDelete(inscription);
@@ -280,10 +347,16 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                             </Button>
                         )}
                         {can.import && (
-                            <Button onClick={openImportModal} className="gap-2 shadow-sm">
-                                <Upload size={16} />
-                                Importer Excel
-                            </Button>
+                            <>
+                                <Button onClick={openImportModal} className="gap-2 shadow-sm">
+                                    <Upload size={16} />
+                                    Importer Excel
+                                </Button>
+                                <Button onClick={openGeneralImportModal} variant="secondary" className="gap-2 shadow-sm">
+                                    <Upload size={16} />
+                                    Importer Général
+                                </Button>
+                            </>
                         )}
                         <Button variant="outline" onClick={resetFilters} className="gap-2 shadow-sm">
                             <X size={16} />
@@ -297,24 +370,44 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                         <CardTitle>Recherche</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="relative">
-                            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                            <Input
-                                placeholder="Rechercher une inscription..."
-                                className="pl-10"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                            {searchTerm && (
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="absolute top-1/2 right-2 h-6 w-6 -translate-y-1/2"
-                                    onClick={() => setSearchTerm('')}
-                                >
-                                    <X className="h-4 w-4" />
-                                </Button>
-                            )}
+                        <div className="flex items-center gap-4">
+                            <div className="relative flex-1">
+                                <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                                <Input
+                                    placeholder="Rechercher une inscription..."
+                                    className="pl-10"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                                {searchTerm && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute top-1/2 right-2 h-6 w-6 -translate-y-1/2"
+                                        onClick={() => setSearchTerm('')}
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                )}
+                            </div>
+                            <Select
+                                value={itemsPerPage.toString()}
+                                onValueChange={(value) => {
+                                    setItemsPerPage(Number(value));
+                                    setCurrentPage(1);
+                                }}
+                            >
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue placeholder="Lignes par page" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="10">10 par page</SelectItem>
+                                    <SelectItem value="50">50 par page</SelectItem>
+                                    <SelectItem value="100">100 par page</SelectItem>
+                                    <SelectItem value="500">500 par page</SelectItem>
+                                    <SelectItem value="1000">1000 par page</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                     </CardContent>
                 </Card>
@@ -356,12 +449,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
                                                             {can.edit && (
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="icon"
-                                                                    onClick={openModal}
-                                                                    className="h-8 w-8"
-                                                                >
+                                                                <Button variant="outline" size="icon" onClick={openModal} className="h-8 w-8">
                                                                     <Edit className="h-3.5 w-3.5" />
                                                                 </Button>
                                                             )}
@@ -392,10 +480,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                         </PaginationItem>
                                         {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                                             <PaginationItem key={page}>
-                                                <PaginationLink
-                                                    onClick={() => setCurrentPage(page)}
-                                                    isActive={page === currentPage}
-                                                >
+                                                <PaginationLink onClick={() => setCurrentPage(page)} isActive={page === currentPage}>
                                                     {page}
                                                 </PaginationLink>
                                             </PaginationItem>
@@ -442,21 +527,13 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="name">Nom complet *</Label>
-                                    <Input 
-                                        id="name" 
-                                        value={data.name} 
-                                        onChange={(e) => setData('name', e.target.value)} 
-                                        required 
-                                    />
+                                    <Input id="name" value={data.name} onChange={(e) => setData('name', e.target.value)} required />
                                     {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
                                 </div>
 
                                 <div className="space-y-2">
                                     <Label>Genre *</Label>
-                                    <Select 
-                                        value={data.gendre} 
-                                        onValueChange={(value) => setData('gendre', value)}
-                                    >
+                                    <Select value={data.gendre} onValueChange={(value) => setData('gendre', value)}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Sélectionnez un genre" />
                                         </SelectTrigger>
@@ -469,27 +546,17 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
                                 <div className="space-y-2">
                                     <Label>Date de naissance</Label>
-                                    <Input 
-                                        type="date" 
-                                        value={data.date_of_birth} 
-                                        onChange={(e) => setData('date_of_birth', e.target.value)} 
-                                    />
+                                    <Input type="date" value={data.date_of_birth} onChange={(e) => setData('date_of_birth', e.target.value)} />
                                 </div>
 
                                 <div className="space-y-2">
                                     <Label>Téléphone</Label>
-                                    <Input 
-                                        value={data.phone} 
-                                        onChange={(e) => setData('phone', e.target.value)} 
-                                    />
+                                    <Input value={data.phone} onChange={(e) => setData('phone', e.target.value)} />
                                 </div>
 
                                 <div className="space-y-2">
                                     <Label>Institution *</Label>
-                                    <Select 
-                                        value={data.institution_id} 
-                                        onValueChange={(value) => setData('institution_id', value)}
-                                    >
+                                    <Select value={data.institution_id} onValueChange={(value) => setData('institution_id', value)}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Sélectionnez une institution" />
                                         </SelectTrigger>
@@ -505,10 +572,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
                                 <div className="space-y-2">
                                     <Label>Année académique *</Label>
-                                    <Select 
-                                        value={data.academic_year_id} 
-                                        onValueChange={(value) => setData('academic_year_id', value)}
-                                    >
+                                    <Select value={data.academic_year_id} onValueChange={(value) => setData('academic_year_id', value)}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Sélectionnez une année" />
                                         </SelectTrigger>
@@ -524,10 +588,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
                                 <div className="space-y-2">
                                     <Label>Promotion *</Label>
-                                    <Select 
-                                        value={data.promotion_id} 
-                                        onValueChange={(value) => setData('promotion_id', value)}
-                                    >
+                                    <Select value={data.promotion_id} onValueChange={(value) => setData('promotion_id', value)}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Sélectionnez une promotion" />
                                         </SelectTrigger>
@@ -543,9 +604,9 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                             </div>
 
                             {/* Section Étudiant transféré */}
-                            <div className="pt-4 border-t">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <Checkbox 
+                            <div className="border-t pt-4">
+                                <div className="mb-4 flex items-center gap-2">
+                                    <Checkbox
                                         id="is_transfer"
                                         checked={isTransferStudent}
                                         onCheckedChange={(checked) => setIsTransferStudent(checked === true)}
@@ -556,13 +617,10 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                 </div>
 
                                 {isTransferStudent && (
-                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                                    <div className="grid grid-cols-1 gap-4 rounded-lg bg-gray-50 p-4 md:grid-cols-2 dark:bg-gray-800">
                                         <div className="space-y-2">
                                             <Label>Ancienne institution *</Label>
-                                            <Select 
-                                                value={oldInstitutionId} 
-                                                onValueChange={setOldInstitutionId}
-                                            >
+                                            <Select value={oldInstitutionId} onValueChange={setOldInstitutionId}>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Sélectionnez l'ancienne institution" />
                                                 </SelectTrigger>
@@ -578,17 +636,15 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
                                         <div className="space-y-2">
                                             <Label>Ancienne promotion *</Label>
-                                            <Select 
-                                                value={oldPromotionId} 
-                                                onValueChange={setOldPromotionId}
-                                                disabled={!oldInstitutionId}
-                                            >
+                                            <Select value={oldPromotionId} onValueChange={setOldPromotionId} disabled={!oldInstitutionId}>
                                                 <SelectTrigger>
-                                                    <SelectValue placeholder={
-                                                        oldInstitutionId 
-                                                            ? "Sélectionnez l'ancienne promotion" 
-                                                            : "Sélectionnez d'abord une institution"
-                                                    } />
+                                                    <SelectValue
+                                                        placeholder={
+                                                            oldInstitutionId
+                                                                ? "Sélectionnez l'ancienne promotion"
+                                                                : "Sélectionnez d'abord une institution"
+                                                        }
+                                                    />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     {oldPromotions.map((promo) => (
@@ -625,12 +681,12 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                 Résultats d'équivalence de formation
                             </DialogTitle>
                             <DialogDescription>
-                                {equivalenceResults.length > 0 
-                                    ? `${equivalenceResults.length} cours équivalents trouvés` 
-                                    : "Aucune équivalence trouvée entre les programmes"}
+                                {equivalenceResults.length > 0
+                                    ? `${equivalenceResults.length} cours équivalents trouvés`
+                                    : 'Aucune équivalence trouvée entre les programmes'}
                             </DialogDescription>
                         </DialogHeader>
-                        
+
                         <div className="space-y-4">
                             {equivalenceResults.length > 0 ? (
                                 <div className="overflow-hidden rounded-lg border">
@@ -653,7 +709,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                                                 {Math.round(result.match_percentage)}%
                                                             </span>
                                                             <div className="relative h-2 w-32 rounded-full bg-gray-200">
-                                                                <div 
+                                                                <div
                                                                     className="absolute inset-y-0 left-0 rounded-full bg-green-500 transition-all duration-700"
                                                                     style={{ width: `${result.match_percentage}%` }}
                                                                 ></div>
@@ -671,17 +727,15 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                         <X className="h-8 w-8 text-gray-500" />
                                     </div>
                                     <h3 className="text-lg font-medium">Aucune équivalence trouvée</h3>
-                                    <p className="text-muted-foreground text-center mt-2">
+                                    <p className="text-muted-foreground mt-2 text-center">
                                         Les programmes des deux institutions ne présentent pas de cours équivalents.
                                     </p>
                                 </div>
                             )}
                         </div>
-                        
+
                         <DialogFooter>
-                            <Button onClick={() => setShowEquivalenceModal(false)}>
-                                Fermer
-                            </Button>
+                            <Button onClick={() => setShowEquivalenceModal(false)}>Fermer</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
@@ -694,19 +748,19 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                 <Upload className="h-5 w-5" />
                                 Importer des inscriptions
                             </DialogTitle>
-                            <DialogDescription>
-                                Téléversez un fichier Excel contenant la liste des étudiants
-                            </DialogDescription>
+                            <DialogDescription>Téléversez un fichier Excel contenant la liste des étudiants</DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleImportSubmit} className="space-y-4">
                             <div className="space-y-2">
                                 <Label>Fichier Excel *</Label>
-                                <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer bg-gray-50"
-                                     onClick={() => document.getElementById('file-upload')?.click()}>
-                                    <input 
+                                <div
+                                    className="cursor-pointer rounded-lg border-2 border-dashed bg-gray-50 p-6 text-center"
+                                    onClick={() => document.getElementById('file-upload')?.click()}
+                                >
+                                    <input
                                         id="file-upload"
-                                        type="file" 
-                                        className="hidden" 
+                                        type="file"
+                                        className="hidden"
                                         accept=".xlsx,.xls,.csv"
                                         onChange={(e) => {
                                             if (e.target.files?.[0]) {
@@ -733,8 +787,8 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                 <div className="space-y-2">
                                     <Label>Institution *</Label>
-                                    <Select 
-                                        value={importForm.data.institution_id} 
+                                    <Select
+                                        value={importForm.data.institution_id}
                                         onValueChange={(value) => importForm.setData('institution_id', value)}
                                     >
                                         <SelectTrigger>
@@ -752,8 +806,8 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
                                 <div className="space-y-2">
                                     <Label>Année académique *</Label>
-                                    <Select 
-                                        value={importForm.data.academic_year_id} 
+                                    <Select
+                                        value={importForm.data.academic_year_id}
                                         onValueChange={(value) => importForm.setData('academic_year_id', value)}
                                     >
                                         <SelectTrigger>
@@ -771,10 +825,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
 
                                 <div className="space-y-2">
                                     <Label>Promotion *</Label>
-                                    <Select 
-                                        value={importForm.data.promotion_id} 
-                                        onValueChange={(value) => importForm.setData('promotion_id', value)}
-                                    >
+                                    <Select value={importForm.data.promotion_id} onValueChange={(value) => importForm.setData('promotion_id', value)}>
                                         <SelectTrigger>
                                             <SelectValue placeholder="Promotion" />
                                         </SelectTrigger>
@@ -798,6 +849,72 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                     Importer
                                 </Button>
                             </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal Importation Générale */}
+                <Dialog open={isGeneralImportModalOpen} onOpenChange={setIsGeneralImportModalOpen}>
+                    <DialogContent className="sm:max-w-[600px]">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-xl">
+                                <Upload className="h-5 w-5" />
+                                Importer des inscriptions (Général)
+                            </DialogTitle>
+                            <DialogDescription>
+                                Téléversez un fichier Excel. L'institution, la promotion et l'année seront détectées automatiquement.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleGeneralImportSubmit} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>Fichier Excel *</Label>
+                                <div
+                                    className="cursor-pointer rounded-lg border-2 border-dashed bg-gray-50 p-6 text-center dark:bg-gray-800/50"
+                                    onClick={() => document.getElementById('general-file-upload')?.click()}
+                                >
+                                    <input
+                                        id="general-file-upload"
+                                        type="file"
+                                        className="hidden"
+                                        accept=".xlsx,.xls,.csv"
+                                        onChange={(e) => {
+                                            if (e.target.files?.[0]) {
+                                                setFile(e.target.files[0]);
+                                                generalImportForm.setData('file', e.target.files[0]);
+                                            }
+                                        }}
+                                    />
+                                    {file ? (
+                                        <p className="font-medium">{file.name}</p>
+                                    ) : (
+                                        <>
+                                            <Download className="mx-auto h-8 w-8 text-gray-400" />
+                                            <p className="mt-2 font-medium">Glissez votre fichier ici</p>
+                                            <p className="text-sm text-gray-500">Formats supportés: XLSX, XLS, CSV</p>
+                                            <Button type="button" variant="outline" className="mt-2">
+                                                Sélectionner un fichier
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            {isImporting && importJobId ? (
+                                <div className="flex flex-col items-center justify-center space-y-4 py-6">
+                                    <CircularProgress value={importProgress} size={120} strokeWidth={10} text="Traitement..." />
+                                    <p className="text-sm text-gray-500">Veuillez patienter, importation en cours...</p>
+                                </div>
+                            ) : (
+                                <DialogFooter>
+                                    <Button type="button" variant="outline" onClick={closeGeneralImportModal}>
+                                        Annuler
+                                    </Button>
+                                    <Button type="submit" disabled={isImporting} className="gap-2">
+                                        {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                        Importer
+                                    </Button>
+                                </DialogFooter>
+                            )}
                         </form>
                     </DialogContent>
                 </Dialog>

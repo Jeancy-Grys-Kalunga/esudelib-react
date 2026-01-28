@@ -24,6 +24,10 @@ use Spatie\Permission\Models\Permission;
 use Modules\Institution\Entities\Course;
 use Modules\Institution\Entities\Program;
 use Modules\Institution\Entities\CourseProgramDetail;
+use Modules\Student\Imports\GeneralStudentsImport;
+// use Modules\Student\Jobs\ProcessGeneralImportJob; // Unused
+use Illuminate\Support\Facades\Storage;
+
 
 class SubscriptionController extends Controller
 {
@@ -119,10 +123,10 @@ class SubscriptionController extends Controller
         return DB::transaction(function () use ($request) {
             // Création du compte utilisateur en premier
             $user = $this->createStudentUser($request);
-            
+
             // Génération du matricule
             $matricule = 'MAT-' . date('Y') . '-' . Str::padLeft(Student::max('id') + 1, 5, '0');
-            
+
             // Création de l'étudiant avec le user_id
             $student = Student::create([
                 'matricule' => $matricule,
@@ -197,7 +201,7 @@ class SubscriptionController extends Controller
 
         return DB::transaction(function () use ($request, $inscription) {
             $student = $inscription->student;
-            
+
             // Mise à jour de l'étudiant
             $student->update([
                 'name' => $request->name,
@@ -235,7 +239,7 @@ class SubscriptionController extends Controller
 
         return DB::transaction(function () use ($inscription) {
             $student = $inscription->student;
-            
+
             // Supprimer le compte utilisateur associé
             if ($student->user) {
                 $student->user->delete();
@@ -281,6 +285,57 @@ class SubscriptionController extends Controller
         ]);
     }
 
+    public function importGeneral(Request $request)
+    {
+        if (!auth()->user()->hasPermissionTo('import_inscriptions')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv',
+        ]);
+
+        $academicYear = AcademicYear::latest()->first();
+
+        if (!$academicYear) {
+            return response()->json([
+                'error' => 'Aucune année académique trouvée.'
+            ], 404);
+        }
+
+        // Store file temporarily or pass directly
+        // Excel::import works with the uploaded file object directly, no need to store manually if not queuing
+        // But for consistency/logging we might want to keep the file? User didn't specify.
+        // Let's use the uploaded file directly to keep it simple and robust.
+
+        set_time_limit(0);
+        ini_set('memory_limit', '-1');
+
+        try {
+            Excel::import(new GeneralStudentsImport($academicYear->id), $request->file('file'));
+
+            return response()->json([
+                'message' => 'Importation terminée avec succès.'
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Import Sync Error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Erreur lors de l\'importation: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function checkImportProgress($id)
+    {
+        $status = Cache::get("import_progress_{$id}");
+
+        if (!$status) {
+            return response()->json(['status' => 'not_found'], 404);
+        }
+
+        return response()->json($status);
+    }
+
     private function createStudentUser(StoreInscriptionRequest $request)
     {
         $password = Hash::make('12345678');
@@ -303,16 +358,16 @@ class SubscriptionController extends Controller
     {
         $institution = Institution::find($institutionId);
         $baseEmail = Str::slug($name) . '@' . Str::slug($institution->name) . '.edu';
-        
+
         // Vérification de l'unicité
         $counter = 1;
         $email = $baseEmail;
-        
+
         while (User::where('email', $email)->exists()) {
             $email = Str::slug($name) . $counter . '@' . Str::slug($institution->name) . '.edu';
             $counter++;
         }
-        
+
         return strtolower($email);
     }
 
@@ -338,12 +393,12 @@ class SubscriptionController extends Controller
     {
         // Récupérer les programmes des deux institutions
         $oldProgram = Program::where('institution_id', $oldInstitutionId)
-                        ->where('promotion_id', $oldPromotionId)
-                        ->first();
+            ->where('promotion_id', $oldPromotionId)
+            ->first();
 
         $newProgram = Program::where('institution_id', $newInstitutionId)
-                        ->where('promotion_id', $newPromotionId)
-                        ->first();
+            ->where('promotion_id', $newPromotionId)
+            ->first();
 
         if (!$oldProgram || !$newProgram) {
             return [];
@@ -351,12 +406,12 @@ class SubscriptionController extends Controller
 
         // Récupérer les cours des deux programmes
         $oldCourses = CourseProgramDetail::with('course')
-                    ->where('program_id', $oldProgram->id)
-                    ->get();
+            ->where('program_id', $oldProgram->id)
+            ->get();
 
         $newCourses = CourseProgramDetail::with('course')
-                    ->where('program_id', $newProgram->id)
-                    ->get();
+            ->where('program_id', $newProgram->id)
+            ->get();
 
         // Trouver les équivalences
         $equivalences = [];
@@ -367,8 +422,8 @@ class SubscriptionController extends Controller
                 // Comparaison par titre de cours (peut être amélioré avec des codes uniques)
                 $similarity = 0;
                 similar_text(
-                    strtolower($oldCourse->course->name), 
-                    strtolower($newCourse->course->name), 
+                    strtolower($oldCourse->course->name),
+                    strtolower($newCourse->course->name),
                     $similarity
                 );
 
