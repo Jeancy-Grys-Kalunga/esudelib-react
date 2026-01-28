@@ -18,6 +18,14 @@ class MasterPredictionService
     public function __construct()
     {
         $this->pythonPath = env('PYTHON_PATH', 'python');
+
+        // Force absolute path for storage-relative paths to satisfy Windows shell
+        if (str_starts_with($this->pythonPath, 'storage')) {
+            $this->pythonPath = base_path($this->pythonPath);
+        } elseif ($this->pythonPath !== 'python' && !file_exists($this->pythonPath) && file_exists(base_path($this->pythonPath))) {
+            $this->pythonPath = base_path($this->pythonPath);
+        }
+
         $this->scriptPath = storage_path('ml/master_prediction_xgboost.py');
         $this->modelPath = storage_path('ml/xgboost_filiere_model.pkl');
     }
@@ -90,10 +98,11 @@ class MasterPredictionService
             file_put_contents($tempFile, $jsonData);
 
             $command = sprintf(
-                '%s "%s" train "%s" 2>&1',
+                '%s "%s" train "%s" "%s" 2> NUL',
                 escapeshellcmd($this->pythonPath),
                 escapeshellarg($this->scriptPath),
-                escapeshellarg($tempFile)
+                escapeshellarg($tempFile), // Passe le chemin du fichier au lieu du JSON directement
+                escapeshellarg($this->modelPath)
             );
 
             Log::info("Commande Python: {$command}");
@@ -146,19 +155,33 @@ class MasterPredictionService
             }
 
             // Appeler le script Python pour la prédiction
-            $studentDataJson = json_encode($studentData, JSON_UNESCAPED_UNICODE);
+            // Utiliser JSON_INVALID_UTF8_IGNORE pour éviter les erreurs sur les données d'entrée
+            $studentDataJson = json_encode($studentData, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_IGNORE);
+
+            // Sauvegarder les données dans un fichier temporaire pour éviter les problèmes de CLI
+            $tempFile = storage_path('ml/temp_predict_' . uniqid() . '.json');
+            file_put_contents($tempFile, $studentDataJson);
 
             $command = sprintf(
-                '%s "%s" predict %s 2>&1',
+                '%s "%s" predict "%s" "%s" 2> NUL',
                 escapeshellcmd($this->pythonPath),
                 escapeshellarg($this->scriptPath),
-                escapeshellarg($studentDataJson)
+                escapeshellarg($tempFile),
+                escapeshellarg($this->modelPath)
             );
 
             Log::info("Commande de prédiction: " . $command);
             $output = shell_exec($command);
 
+            // Nettoyage
+            if (file_exists($tempFile)) {
+                @unlink($tempFile);
+            }
+
             Log::info("Sortie Python: " . substr($output, 0, 1000));
+
+            // Nettoyer la sortie pour garantir l'UTF-8 avant le décodage
+            $output = mb_convert_encoding($output, 'UTF-8', 'UTF-8');
 
             $result = json_decode($output, true);
 
@@ -180,6 +203,10 @@ class MasterPredictionService
                 [
                     'predicted_master' => $result['predicted_master'],
                     'confidence_score' => $result['confidence_score'],
+                    'age' => $studentData['age'] ?? null,
+                    'provenance' => $studentData['provenance_region'] ?? null,
+                    'intention_expressed' => $studentData['intention'] ?? null,
+                    'optional_courses' => $studentData['optional_courses'] ?? [],
                     'prediction_details' => [
                         'all_probabilities' => $result['all_probabilities'],
                         'top_3_programs' => $result['top_3_programs'],

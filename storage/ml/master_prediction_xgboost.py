@@ -27,13 +27,13 @@ class XGBoostPredictionService:
         if os.path.exists(model_path):
             self.load_model()
         else:
-            print(f"⚠️  Avertissement: Modèle non trouvé à {model_path}", file=sys.stderr)
-            print("⚠️  Le modèle doit être entraîné avant utilisation.", file=sys.stderr)
+            print(f"Avertissement: Modele non trouve a {model_path}", file=sys.stderr)
+            print("Le modele doit etre entraine avant utilisation.", file=sys.stderr)
     
     def load_model(self):
-        """Charge le modèle pré-entraîné et les encodeurs"""
+        """Charge le modele pre-entraine et les encodeurs"""
         try:
-            print(f"📥 Chargement du modèle depuis: {self.model_path}", file=sys.stderr)
+            print(f"Chargement du modele depuis: {self.model_path}", file=sys.stderr)
             model_data = joblib.load(self.model_path)
             
             self.model = model_data.get('model')
@@ -42,16 +42,16 @@ class XGBoostPredictionService:
             self.master_programs = model_data.get('master_programs', [])
             
             if self.model is None:
-                raise ValueError("Modèle non trouvé dans le fichier")
+                raise ValueError("Modele non trouve dans le fichier")
                 
-            print(f"✅ Modèle chargé avec succès", file=sys.stderr)
-            print(f"📊 Nombre de classes: {len(self.master_programs)}", file=sys.stderr)
-            print(f"📋 Classes disponibles: {self.master_programs}", file=sys.stderr)
+            print(f"Modele charge avec succes", file=sys.stderr)
+            print(f"Nombre de classes: {len(self.master_programs)}", file=sys.stderr)
+            print(f"Classes disponibles: {self.master_programs}", file=sys.stderr)
             
             return True
         except Exception as e:
-            print(f"❌ Erreur lors du chargement du modèle: {str(e)}", file=sys.stderr)
-            print(f"🔍 Traceback: {traceback.format_exc()}", file=sys.stderr)
+            print(f"Erreur lors du chargement du modele: {str(e)}", file=sys.stderr)
+            print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
             self.model = None
             return False
     
@@ -71,7 +71,7 @@ class XGBoostPredictionService:
                 'moyenne_licence': float(student_data.get('moyenne_licence', 10.0))
             }])
             
-            print(f"📊 Données brutes: {df.to_dict('records')[0]}", file=sys.stderr)
+            # print(f"📊 Données brutes: {df.to_dict('records')[0]}", file=sys.stderr)
             
             # Encoder les variables catégorielles
             categorical_cols = ['genre', 'intention', 'provenance_region', 'etablissement']
@@ -112,7 +112,7 @@ class XGBoostPredictionService:
             for col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
-            print(f"📈 Données prétraitées: {df.values.tolist()[0]}", file=sys.stderr)
+            # print(f"📈 Données prétraitées: {df.values.tolist()[0]}", file=sys.stderr)
             
             return df.values
             
@@ -135,15 +135,15 @@ class XGBoostPredictionService:
             features = self.preprocess_student_data(student_data)
             
             # Vérifier la forme des features
-            print(f"🔢 Features shape: {features.shape}", file=sys.stderr)
-            print(f"🔢 Features: {features}", file=sys.stderr)
+            # print(f"🔢 Features shape: {features.shape}", file=sys.stderr)
+            # print(f"🔢 Features: {features}", file=sys.stderr)
             
             # Prédiction des probabilités
             try:
                 probabilities = self.model.predict_proba(features)[0]
-                print(f"📊 Probabilités brutes: {probabilities}", file=sys.stderr)
+                # print(f"📊 Probabilités brutes: {probabilities}", file=sys.stderr)
             except Exception as e:
-                print(f"⚠️  Erreur predict_proba: {e}", file=sys.stderr)
+                # print(f"⚠️  Erreur predict_proba: {e}", file=sys.stderr)
                 # Essayer avec predict
                 pred = self.model.predict(features)[0]
                 probabilities = np.zeros(len(self.master_programs))
@@ -186,8 +186,8 @@ class XGBoostPredictionService:
                 'predicted_at': datetime.now().isoformat()
             }
             
-            print(f"🎯 Prédiction: {prediction} ({confidence:.1f}%)", file=sys.stderr)
-            print(f"🏆 Top 3: {sorted_programs[:3]}", file=sys.stderr)
+            # print(f"🎯 Prédiction: {prediction} ({confidence:.1f}%)", file=sys.stderr)
+            # print(f"🏆 Top 3: {sorted_programs[:3]}", file=sys.stderr)
             
             return result
             
@@ -197,7 +197,7 @@ class XGBoostPredictionService:
             raise
     
     def generate_explanation(self, student_data, prediction, confidence, sorted_programs):
-        """Génère une explication détaillée de la prédiction"""
+        """Génère une explication détaillée de la prédiction et des alternatives"""
         explanation = {
             'main_reason': '',
             'supporting_factors': [],
@@ -210,49 +210,127 @@ class XGBoostPredictionService:
         optional_courses = student_data.get('optional_courses', [])
         genre = student_data.get('genre', '')
         
-        # Raison principale
+        # 1. Raison principale pour le choix #1
         if confidence >= 80:
-            explanation['main_reason'] = f"Excellent profil pour {prediction} (confiance: {confidence:.1f}%)"
+            explanation['main_reason'] = f"Profil idéal pour {prediction} ({confidence:.1f}%)"
         elif confidence >= 60:
-            explanation['main_reason'] = f"Bon profil pour {prediction} (confiance: {confidence:.1f}%)"
+            explanation['main_reason'] = f"Bonne correspondance avec {prediction} ({confidence:.1f}%)"
         else:
-            explanation['main_reason'] = f"Profil polyvalent, {prediction} recommandé (confiance: {confidence:.1f}%)"
-        
-        # Facteurs de support
+            explanation['main_reason'] = f"Profil polyvalent, tendance vers {prediction} ({confidence:.1f}%)"
+            
+        # 2. Facteurs de support globaux
         if intention and intention == prediction:
-            explanation['supporting_factors'].append("Intention correspond à la prédiction")
-        
+            explanation['supporting_factors'].append("Correspond à votre vœu initial")
         if moyenne_licence >= 14:
-            explanation['supporting_factors'].append(f"Excellente moyenne ({moyenne_licence:.1f}/20)")
-        elif moyenne_licence >= 12:
-            explanation['supporting_factors'].append(f"Bonne moyenne académique ({moyenne_licence:.1f}/20)")
-        
-        if optional_courses and len(optional_courses) > 0:
-            explanation['supporting_factors'].append(f"{len(optional_courses)} cours optionnels pertinents")
-        
-        if genre == 'Féminin':
-            explanation['supporting_factors'].append("Diversité de genre appréciée")
-        
-        # Recommandation
-        if confidence >= 75:
-            explanation['recommendation'] = f"Nous recommandons fortement le Master {prediction}."
-        elif confidence >= 60:
-            explanation['recommendation'] = f"Le Master {prediction} est une excellente option."
-        else:
-            explanation['recommendation'] = f"Le Master {prediction} est une option valable, considérez aussi les alternatives."
-        
-        # Options alternatives
-        for i, (program, prob) in enumerate(sorted_programs[1:4], 1):
-            if prob >= 15:
+            explanation['supporting_factors'].append(f"Moyenne solide ({moyenne_licence:.1f}/20)")
+        if len(optional_courses) > 0:
+            explanation['supporting_factors'].append(f"{len(optional_courses)} cours optionnels validés")
+
+        # 3. Analyse détaillée pour le Top 3 (Recommandation et Alternatives)
+        # On traite les 3 premiers programmes pour leur donner une raison spécifique
+        for i, (program, prob) in enumerate(sorted_programs[:3]):
+            reason = "Option possible"
+            
+            # Logique de raisonnement spécifique par programme
+            if program == intention:
+                reason = "Correspond à votre choix initial"
+            elif program == 'Informatique' and 'Programmation' in str(optional_courses):
+                reason = "Intérêt pour la programmation détecté"
+            elif program == 'Gestion' and moyenne_licence > 12:
+                reason = "Bonne capacité d'analyse gestionnaire"
+            elif prob > 15:
+                # Raison générique basée sur le score
+                if prob > 50:
+                    reason = "Très forte compatibilité académique"
+                elif prob > 30:
+                    reason = "Bases académiques solides"
+                else:
+                    reason = "Alternative crédible"
+            
+            # Pour le #1, on met la recommandation globale
+            if i == 0:
+                if confidence >= 70:
+                    explanation['recommendation'] = f"Filière recommandée : {program} ({reason})"
+                else:
+                    explanation['recommendation'] = f"Filière suggérée : {program}"
+            else:
+                # Pour #2 et #3, on ajoute aux alternatives
                 explanation['alternative_options'].append({
                     'program': program,
                     'probability': prob,
-                    'reason': f"Alternative viable ({prob:.1f}% de probabilité)"
+                    'reason': reason
                 })
         
         return explanation
 
 
+    def train(self, training_data):
+        """Entramine le modele avec les donnees fournies"""
+        try:
+            # print(f"Debut de l'entrainement avec {len(training_data)} echantillons", file=sys.stderr)
+            
+            # Convertir en DataFrame
+            df = pd.DataFrame(training_data)
+            
+            # Encodage des labels (target)
+            self.label_encoder_master = LabelEncoder()
+            df['target'] = self.label_encoder_master.fit_transform(df['actual_master'])
+            self.master_programs = self.label_encoder_master.classes_.tolist()
+            
+            # Encodage des features catagorielles
+            categorical_cols = ['genre', 'intention', 'provenance_region', 'etablissement']
+            self.label_encoders = {}
+            
+            for col in categorical_cols:
+                le = LabelEncoder()
+                df[col] = le.fit_transform(df[col].astype(str))
+                self.label_encoders[col] = le
+            
+            # Pretraitement des cours optionnels
+            df['nb_cours_optionnels'] = df['optional_courses'].apply(
+                lambda x: len(json.loads(x)) if isinstance(x, str) else (len(x) if isinstance(x, list) else 0)
+            )
+            
+            # Selection des features
+            features_cols = ['genre', 'intention', 'nb_cours_optionnels', 'provenance_region', 
+                           'etablissement', 'age', 'moyenne_licence']
+            
+            # Entrainement
+            X = df[features_cols]
+            y = df['target']
+            
+            model = xgb.XGBClassifier(
+                objective='multi:softprob',
+                num_class=len(self.master_programs),
+                eval_metric='mlogloss',
+                use_label_encoder=False
+            )
+            
+            model.fit(X, y)
+            self.model = model
+            
+            # Sauvegarde
+            joblib.dump({
+                'model': self.model,
+                'label_encoders': self.label_encoders,
+                'label_encoder_master': self.label_encoder_master,
+                'master_programs': self.master_programs
+            }, self.model_path)
+            
+            # print("Entrainement termine et modele sauvegarde", file=sys.stderr)
+            
+            return {
+                'success': True, 
+                'accuracy': float(model.score(X, y)),
+                'classes': self.master_programs
+            }
+            
+        except Exception as e:
+            print(f"Erreur lors de l'entrainement: {str(e)}", file=sys.stderr)
+            print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
+            raise
+    
+    
 def load_data(input_arg):
     """Charge les données depuis JSON"""
     try:
@@ -261,10 +339,10 @@ def load_data(input_arg):
                 return json.load(f)
         return json.loads(input_arg)
     except json.JSONDecodeError as e:
-        print(f"❌ Erreur de décodage JSON: {str(e)}", file=sys.stderr)
+        print(f"Erreur de decodage JSON: {str(e)}", file=sys.stderr)
         raise
     except Exception as e:
-        print(f"❌ Erreur lors du chargement des données: {str(e)}", file=sys.stderr)
+        print(f"Erreur lors du chargement des donnees: {str(e)}", file=sys.stderr)
         raise
 
 
@@ -283,8 +361,8 @@ def main():
     data_arg = sys.argv[2]
     model_path = sys.argv[3] if len(sys.argv) > 3 else 'storage/ml/xgboost_filiere_model.pkl'
     
-    print(f"🚀 Action: {action}", file=sys.stderr)
-    print(f"📁 Chemin modèle: {model_path}", file=sys.stderr)
+    # print(f"🚀 Action: {action}", file=sys.stderr)
+    # print(f"📁 Chemin modèle: {model_path}", file=sys.stderr)
     
     service = XGBoostPredictionService(model_path)
     
@@ -292,9 +370,17 @@ def main():
         if action == 'predict':
             # Prédiction pour un étudiant
             student_data = load_data(data_arg)
-            print(f"👤 Données étudiant: {student_data}", file=sys.stderr)
+            # print(f"Donnees etudiant: {student_data}", file=sys.stderr)
             
             result = service.predict(student_data)
+            print(json.dumps(result, ensure_ascii=False))
+            
+        elif action == 'train':
+            # Entrainement du modele
+            training_data = load_data(data_arg)
+            # print(f"Donnees d'entrainement chargees: {len(training_data)} lignes", file=sys.stderr)
+            
+            result = service.train(training_data)
             print(json.dumps(result, ensure_ascii=False))
             
         else:

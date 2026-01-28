@@ -109,6 +109,13 @@ class OrientationPredictionController extends Controller
             $student = Student::findOrFail($studentId);
             $result = $this->predictionService->predictForStudent($student);
 
+            // Sanitize UTF-8 for response
+            array_walk_recursive($result, function (&$item, $key) {
+                if (is_string($item)) {
+                    $item = mb_convert_encoding($item, 'UTF-8', 'UTF-8');
+                }
+            });
+
             return response()->json([
                 'success' => true,
                 'data' => $result
@@ -181,6 +188,13 @@ class OrientationPredictionController extends Controller
                     ];
                 }
             }
+
+            // Sanitize UTF-8 for response
+            array_walk_recursive($results, function (&$item, $key) {
+                if (is_string($item)) {
+                    $item = mb_convert_encoding($item, 'UTF-8', 'UTF-8');
+                }
+            });
 
             return response()->json([
                 'success' => true,

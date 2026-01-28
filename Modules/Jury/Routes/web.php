@@ -22,6 +22,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/results', [ResultsController::class, 'index'])->name('jury.results');
         Route::post('/publish-results', [ResultsController::class, 'publishResults'])->name('jury.publish');
         Route::post('/add-points', [ResultsController::class, 'addPoints'])->name('jury.add-points');
+        Route::get('/print/deliberation/{promotion}', [ResultsController::class, 'printDeliberation'])->name('jury.print.deliberation');
+        Route::post('/course-details/update', [ResultsController::class, 'updateCourseDetails'])->name('jury.course-details.update');
         Route::post('/update-note', [ResultsController::class, 'updateNote'])->name('jury.update-note');
         Route::post('/save-grades', [ResultsController::class, 'saveGrades'])->name('jury.save-grades');
         Route::get('/export-results', [ResultsController::class, 'exportResults'])->name('jury.export-results');

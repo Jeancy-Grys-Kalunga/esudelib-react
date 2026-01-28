@@ -572,7 +572,17 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                         <div>
                                             <CardTitle className="flex items-center gap-2">
                                                 <Target className="h-6 w-6 text-indigo-600" />
-                                                Analyse Détaillée - {predictions[activeStudent].student.name}
+                                                Analyse Détaillée -{' '}
+                                                {(() => {
+                                                    const rawData = predictions[activeStudent];
+                                                    const predData =
+                                                        rawData && rawData.data && rawData.data.prediction
+                                                            ? rawData.data
+                                                            : rawData && rawData.prediction
+                                                              ? rawData
+                                                              : null;
+                                                    return predData?.student?.name || 'Étudiant Inconnu';
+                                                })()}
                                             </CardTitle>
                                             <CardDescription>
                                                 Résultats générés par notre système XGBoost avancé - Modèle: xgboost_filiere_model.pkl
@@ -591,34 +601,51 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                 <CardContent className="p-6">
                                     {/* Prédiction principale */}
                                     <div className="mb-8 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-white">
-                                        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-                                            <div>
-                                                <h3 className="mb-2 text-lg font-medium opacity-90">Filière Recommandée</h3>
-                                                <div className="text-4xl font-bold">{predictions[activeStudent].prediction.predicted_master}</div>
-                                                <div className="mt-2 flex items-center gap-2">
-                                                    <Badge className="bg-white/20 text-white">XGBoost Model</Badge>
-                                                    <Badge className={getConfidenceBadge(predictions[activeStudent].prediction.confidence_score)}>
-                                                        Hautement fiable
-                                                    </Badge>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="mb-2 text-sm opacity-90">Score de Confiance</div>
-                                                <div className="flex items-center gap-3">
-                                                    <Progress
-                                                        value={predictions[activeStudent].prediction.confidence_score}
-                                                        className="h-3 w-32 bg-white/30"
-                                                    />
-                                                    <span className="text-3xl font-bold">
-                                                        {predictions[activeStudent].prediction.confidence_score.toFixed(1)}%
-                                                    </span>
-                                                </div>
-                                                <div className="mt-2 text-sm opacity-90">
-                                                    Généré le{' '}
-                                                    {new Date(predictions[activeStudent].prediction.predicted_at).toLocaleDateString('fr-FR')}
-                                                </div>
-                                            </div>
+                                        {/* Debug Log hidden in production but useful here */}
+                                        <div className="hidden">
+                                            {console.log('Active Prediction Data:', predictions[activeStudent])}
+                                            {console.log('Student Name:', predictions[activeStudent]?.student?.name)}
+                                            {console.log('Predicted Master:', predictions[activeStudent]?.prediction?.predicted_master)}
                                         </div>
+
+                                        {(() => {
+                                            // Helper to safely extract data regardless of nesting
+                                            const rawData = predictions[activeStudent];
+                                            const predData =
+                                                rawData && rawData.data && rawData.data.prediction
+                                                    ? rawData.data
+                                                    : rawData && rawData.prediction
+                                                      ? rawData
+                                                      : null;
+
+                                            // Fallback values
+                                            const predictedMaster = predData?.prediction?.predicted_master || 'N/A';
+                                            const confidence = predData?.prediction?.confidence_score || 0;
+                                            const predictedAt = predData?.prediction?.predicted_at;
+
+                                            return (
+                                                <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                                                    <div>
+                                                        <h3 className="mb-2 text-lg font-medium opacity-90">Filière Recommandée</h3>
+                                                        <div className="text-4xl font-bold">{predictedMaster}</div>
+                                                        <div className="mt-2 flex items-center gap-2">
+                                                            <Badge className="bg-white/20 text-white">XGBoost Model</Badge>
+                                                            <Badge className={getConfidenceBadge(confidence)}>Hautement fiable</Badge>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="mb-2 text-sm opacity-90">Score de Confiance</div>
+                                                        <div className="flex items-center gap-3">
+                                                            <Progress value={confidence} className="h-3 w-32 bg-white/30" />
+                                                            <span className="text-3xl font-bold">{confidence.toFixed(1)}%</span>
+                                                        </div>
+                                                        <div className="mt-2 text-sm opacity-90">
+                                                            Généré le {predictedAt ? new Date(predictedAt).toLocaleDateString('fr-FR') : '-'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
                                     {/* Top 3 programmes */}
@@ -628,94 +655,130 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                             Top 3 des Filières Compatibles
                                         </h3>
                                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                            {predictions[activeStudent].prediction.top_3_programs.map(([program, probability], index) => (
-                                                <Card
-                                                    key={program}
-                                                    className={`border-2 ${index === 0 ? 'border-indigo-500 shadow-lg' : 'border-gray-200'}`}
-                                                >
-                                                    <CardHeader className="pb-3">
-                                                        <div className="flex items-center justify-between">
-                                                            <Badge className={index === 0 ? 'bg-indigo-600' : 'bg-gray-500'}>#{index + 1}</Badge>
-                                                            {index === 0 && <Award className="h-5 w-5 text-yellow-500" />}
-                                                        </div>
-                                                    </CardHeader>
-                                                    <CardContent>
-                                                        <div className="mb-2 text-lg font-semibold">{program}</div>
-                                                        <div className="flex items-center gap-2">
-                                                            <Progress value={probability} className="h-2 flex-1" />
-                                                            <span className={`text-sm font-medium ${getConfidenceColor(probability)}`}>
-                                                                {probability.toFixed(1)}%
-                                                            </span>
-                                                        </div>
-                                                        <div className="mt-3 text-xs text-gray-500">
-                                                            Pourcentage d'adaptation:{' '}
-                                                            {((probability / predictions[activeStudent].prediction.confidence_score) * 100).toFixed(
-                                                                0,
+                                            {(predictions[activeStudent]?.prediction?.top_3_programs || []).map(([program, probability], index) => {
+                                                // Trouver la raison spécifique dans l'explication
+                                                let reason = '';
+                                                const explanation = predictions[activeStudent]?.prediction?.explanation;
+
+                                                if (index === 0 && explanation?.recommendation) {
+                                                    // Extraire la raison entre parenthèses de la recommandation si possible
+                                                    const match = explanation.recommendation.match(/\((.*?)\)$/);
+                                                    reason = match ? match[1] : explanation.recommendation.split(':')[1] || '';
+                                                } else if (explanation?.alternative_options) {
+                                                    const alt = explanation.alternative_options.find((opt: any) => opt.program === program);
+                                                    reason = alt?.reason || '';
+                                                }
+
+                                                return (
+                                                    <Card
+                                                        key={program}
+                                                        className={`border-2 ${index === 0 ? 'border-indigo-500 shadow-lg' : 'border-gray-200'}`}
+                                                    >
+                                                        <CardHeader className="pb-3">
+                                                            <div className="flex items-center justify-between">
+                                                                <Badge className={index === 0 ? 'bg-indigo-600' : 'bg-gray-500'}>#{index + 1}</Badge>
+                                                                {index === 0 && <Award className="h-5 w-5 text-yellow-500" />}
+                                                            </div>
+                                                        </CardHeader>
+                                                        <CardContent>
+                                                            <div className="mb-2 text-lg font-semibold">{program}</div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Progress value={probability} className="h-2 flex-1" />
+                                                                <span className={`text-sm font-medium ${getConfidenceColor(probability)}`}>
+                                                                    {probability.toFixed(1)}%
+                                                                </span>
+                                                            </div>
+
+                                                            {reason && (
+                                                                <div className="mt-3 rounded bg-gray-50 p-2 text-xs text-gray-600 italic dark:bg-gray-800 dark:text-gray-400">
+                                                                    "{reason.replace(/[()]/g, '')}"
+                                                                </div>
                                                             )}
-                                                            %
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            ))}
+
+                                                            <div className="mt-3 text-xs text-gray-500">
+                                                                Pourcentage d'adaptation:{' '}
+                                                                {(
+                                                                    (probability / (predictions[activeStudent]?.prediction?.confidence_score || 1)) *
+                                                                    100
+                                                                ).toFixed(0)}
+                                                                %
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
                                     {/* Explication détaillée */}
-                                    {predictions[activeStudent].prediction.explanation && (
-                                        <div className="mb-6">
-                                            <h3 className="mb-4 flex items-center gap-2 text-xl font-semibold">
-                                                <BrainCircuit className="h-5 w-5 text-indigo-600" />
-                                                Explication de l'Analyse
-                                            </h3>
+                                    {(() => {
+                                        const rawData = predictions[activeStudent];
+                                        const predData =
+                                            rawData && rawData.data && rawData.data.prediction
+                                                ? rawData.data
+                                                : rawData && rawData.prediction
+                                                  ? rawData
+                                                  : null;
+                                        const explanation = predData?.prediction?.explanation;
 
-                                            <div className="space-y-4">
-                                                {/* Raison principale */}
-                                                <div className="rounded-lg border-l-4 border-indigo-500 bg-indigo-50 p-4 dark:bg-indigo-950">
-                                                    <h4 className="mb-2 font-semibold text-indigo-900 dark:text-indigo-100">Analyse Principale</h4>
-                                                    <p className="text-indigo-800 dark:text-indigo-200">
-                                                        {predictions[activeStudent].prediction.explanation.main_reason}
-                                                    </p>
-                                                </div>
+                                        if (!explanation) return null;
 
-                                                {/* Facteurs de support */}
-                                                {predictions[activeStudent].prediction.explanation.supporting_factors.length > 0 && (
-                                                    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:bg-gray-900">
-                                                        <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">Facteurs Déterminants</h4>
-                                                        <ul className="space-y-2">
-                                                            {predictions[activeStudent].prediction.explanation.supporting_factors.map(
-                                                                (factor, index) => (
+                                        return (
+                                            <div className="mb-6">
+                                                <h3 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+                                                    <BrainCircuit className="h-5 w-5 text-indigo-600" />
+                                                    Explication de l'Analyse
+                                                </h3>
+
+                                                <div className="space-y-4">
+                                                    {/* Raison principale */}
+                                                    <div className="rounded-lg border-l-4 border-indigo-500 bg-indigo-50 p-4 dark:bg-indigo-950">
+                                                        <h4 className="mb-2 font-semibold text-indigo-900 dark:text-indigo-100">
+                                                            Analyse Principale
+                                                        </h4>
+                                                        <p className="text-indigo-800 dark:text-indigo-200">{explanation.main_reason}</p>
+                                                    </div>
+
+                                                    {/* Facteurs de support */}
+                                                    {(explanation.supporting_factors?.length || 0) > 0 && (
+                                                        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:bg-gray-900">
+                                                            <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
+                                                                Facteurs Déterminants
+                                                            </h4>
+                                                            <ul className="space-y-2">
+                                                                {(explanation.supporting_factors || []).map((factor: string, index: number) => (
                                                                     <li key={index} className="flex items-start gap-2">
                                                                         <div className="mt-1 rounded-full bg-green-500 p-1">
                                                                             <Check className="h-3 w-3 text-white" />
                                                                         </div>
                                                                         <span className="text-gray-700 dark:text-gray-300">{factor}</span>
                                                                     </li>
-                                                                ),
-                                                            )}
-                                                        </ul>
-                                                    </div>
-                                                )}
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
 
-                                                {/* Recommandation */}
-                                                <div className="rounded-lg border-l-4 border-green-500 bg-green-50 p-4 dark:bg-green-950">
-                                                    <div className="flex items-start gap-3">
-                                                        <ArrowRight className="mt-1 h-5 w-5 text-green-600" />
-                                                        <div>
-                                                            <h4 className="mb-2 font-semibold text-green-900 dark:text-green-100">Recommandation</h4>
-                                                            <p className="text-green-800 dark:text-green-200">
-                                                                {predictions[activeStudent].prediction.explanation.recommendation}
-                                                            </p>
+                                                    {/* Recommandation */}
+                                                    <div className="rounded-lg border-l-4 border-green-500 bg-green-50 p-4 dark:bg-green-950">
+                                                        <div className="flex items-start gap-3">
+                                                            <ArrowRight className="mt-1 h-5 w-5 text-green-600" />
+                                                            <div>
+                                                                <h4 className="mb-2 font-semibold text-green-900 dark:text-green-100">
+                                                                    Recommandation
+                                                                </h4>
+                                                                <p className="text-green-800 dark:text-green-200">{explanation.recommendation}</p>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
 
-                                                {/* Options alternatives */}
-                                                {predictions[activeStudent].prediction.explanation.alternative_options.length > 0 && (
-                                                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900">
-                                                        <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">Options Alternatives</h4>
-                                                        <div className="space-y-2">
-                                                            {predictions[activeStudent].prediction.explanation.alternative_options.map(
-                                                                (option, index) => (
+                                                    {/* Options alternatives */}
+                                                    {(explanation.alternative_options?.length || 0) > 0 && (
+                                                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900">
+                                                            <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
+                                                                Options Alternatives
+                                                            </h4>
+                                                            <div className="space-y-2">
+                                                                {(explanation.alternative_options || []).map((option: any, index: number) => (
                                                                     <div
                                                                         key={index}
                                                                         className="flex items-center justify-between rounded-md bg-white p-3 dark:bg-gray-800"
@@ -733,14 +796,14 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                                                             </span>
                                                                         </div>
                                                                     </div>
-                                                                ),
-                                                            )}
+                                                                ))}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                )}
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        );
+                                    })()}
 
                                     {/* Variables utilisées par le modèle */}
                                     <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900">
@@ -773,7 +836,17 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                             <span className="font-medium">Fichier:</span> xgboost_filiere_model.pkl
                                             <span className="mx-2">•</span>
                                             <span className="font-medium">Date:</span>{' '}
-                                            {new Date(predictions[activeStudent].prediction.predicted_at).toLocaleString('fr-FR')}
+                                            {(() => {
+                                                const rawData = predictions[activeStudent];
+                                                const predData =
+                                                    rawData && rawData.data && rawData.data.prediction
+                                                        ? rawData.data
+                                                        : rawData && rawData.prediction
+                                                          ? rawData
+                                                          : null;
+                                                const date = predData?.prediction?.predicted_at;
+                                                return date ? new Date(date).toLocaleString('fr-FR') : '-';
+                                            })()}
                                         </div>
                                     </div>
                                 </CardFooter>

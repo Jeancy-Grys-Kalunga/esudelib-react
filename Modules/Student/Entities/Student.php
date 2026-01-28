@@ -106,9 +106,22 @@ class Student extends Model implements HasMedia
             }
         }
 
-        return $totalCredits > 0
-            ? round($sommeNotesPonderees / $totalCredits, 2)
-            : 0.0;
+        if ($totalCredits > 0) {
+            return round($sommeNotesPonderees / $totalCredits, 2);
+        }
+
+        // Fallback: Moyenne simple si aucun crédit n'est configuré
+        // Cela correspond au comportement du Dashboard étudiant
+        $count = 0;
+        $simpleSum = 0;
+        foreach ($notes as $note) {
+            if ($note->cote !== null) {
+                $simpleSum += $note->cote;
+                $count++;
+            }
+        }
+
+        return $count > 0 ? round($simpleSum / $count, 2) : 0.0;
     }
 
     /**
