@@ -47,7 +47,7 @@ class DashboardController extends Controller
                         return [
                             'course' => $note->course->title ?? 'Cours Inconnu',
                             'cote' => $note->cote,
-                            'date' => $note->created_at->format('d/m/Y')
+                            'date' => $note->created_at ? $note->created_at->format('d/m/Y') : ''
                         ];
                     });
             }

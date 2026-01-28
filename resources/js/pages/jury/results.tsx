@@ -42,6 +42,11 @@ type Course = {
     title: string;
     credit?: number;
     orientation?: string;
+    cm?: number;
+    td?: number;
+    tp?: number;
+    program_detail_id?: number | null;
+    unit_teaching_id?: number;
 };
 
 type NoteData = {
@@ -190,6 +195,123 @@ const EditableCell = ({
     );
 };
 
+// Composant Modal pour éditer les détails du cours
+const CourseDetailsModal = ({
+    isOpen,
+    onClose,
+    course,
+    onSave,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    course: Course | null;
+    onSave: (data: any) => void;
+}) => {
+    const [formData, setFormData] = useState({
+        credits: 0,
+        cm: 0,
+        td: 0,
+        tp: 0,
+    });
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        if (course) {
+            setFormData({
+                credits: course.credit || 0,
+                cm: course.cm || 0,
+                td: course.td || 0,
+                tp: course.tp || 0,
+            });
+        }
+    }, [course]);
+
+    const handleSave = async () => {
+        // if (!course?.program_detail_id) { ... } -> Removed check to allow creation
+
+        setSaving(true);
+        try {
+            await axios.post(route('jury.course-details.update'), {
+                program_detail_id: course.program_detail_id,
+                course_id: course.id,
+                // @ts-ignore
+                unit_teaching_id: course.unit_teaching_id,
+                ...formData,
+            });
+            toast.success('Détails du cours mis à jour');
+            onSave(formData);
+            onClose();
+            router.reload(); // Recharger pour mettre à jour les moyennes
+        } catch (error: any) {
+            console.error(error);
+            const message = error.response?.data?.message || 'Erreur lors de la mise à jour';
+            toast.error(message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!isOpen || !course) return null;
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Modifier : {course.title}</DialogTitle>
+                    <DialogDescription>Ajustez les crédits et volumes horaires pour ce cours.</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <label className="text-right text-sm font-medium">Crédits</label>
+                        <Input
+                            type="number"
+                            value={formData.credits}
+                            onChange={(e) => setFormData({ ...formData, credits: parseFloat(e.target.value) || 0 })}
+                            className="col-span-3"
+                        />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <label className="text-right text-sm font-medium">CM (h)</label>
+                        <Input
+                            type="number"
+                            value={formData.cm}
+                            onChange={(e) => setFormData({ ...formData, cm: parseFloat(e.target.value) || 0 })}
+                            className="col-span-3"
+                        />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <label className="text-right text-sm font-medium">TD (h)</label>
+                        <Input
+                            type="number"
+                            value={formData.td}
+                            onChange={(e) => setFormData({ ...formData, td: parseFloat(e.target.value) || 0 })}
+                            className="col-span-3"
+                        />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <label className="text-right text-sm font-medium">TP (h)</label>
+                        <Input
+                            type="number"
+                            value={formData.tp}
+                            onChange={(e) => setFormData({ ...formData, tp: parseFloat(e.target.value) || 0 })}
+                            className="col-span-3"
+                        />
+                    </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={onClose}>
+                        Annuler
+                    </Button>
+                    <Button type="button" onClick={handleSave} disabled={saving}>
+                        {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Enregistrer
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
 // Composant pour afficher une grille de résultats
 const ResultsTable = ({
     courses,
@@ -200,7 +322,7 @@ const ResultsTable = ({
     isSaving,
     highlightedStudentId = null,
 }: {
-    courses: Array<{ id: number; title: string; credit: number }>;
+    courses: Array<Course>;
     students: Array<{
         id: number;
         name: string;
@@ -221,6 +343,7 @@ const ResultsTable = ({
     const [massEditPoints, setMassEditPoints] = useState<Record<number, string>>({});
     const [isMassEditing, setIsMassEditing] = useState<Record<number, boolean>>({});
     const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
+    const [editingCourse, setEditingCourse] = useState<Course | null>(null);
 
     const handleMassEdit = (courseId: number) => {
         if (onMassEdit) {
@@ -294,8 +417,18 @@ const ResultsTable = ({
                         <TableHead className="sticky left-0 min-w-[200px] bg-white px-4 py-3">Étudiant</TableHead>
                         {courses.map((course) => (
                             <TableHead key={course.id} className="group min-w-[250px] px-4 py-3 text-center">
-                                <div className="font-medium">{course.title}</div>
+                                <div
+                                    className="flex cursor-pointer items-center justify-center gap-1 font-medium hover:text-indigo-600 hover:underline"
+                                    onClick={() => setEditingCourse(course)}
+                                    title="Cliquez pour modifier les crédits"
+                                >
+                                    {course.title}
+                                    <span className="text-xs text-gray-400">✎</span>
+                                </div>
                                 <div className="text-xs text-gray-500">Crédits: {course.credit}</div>
+                                <div className="text-[10px] text-gray-400">
+                                    CM: {course.cm || 0} | TD: {course.td || 0} | TP: {course.tp || 0}
+                                </div>
 
                                 <div className="mt-2 flex items-center justify-center">
                                     {isMassEditing[course.id] ? (
@@ -406,6 +539,13 @@ const ResultsTable = ({
                     ))}
                 </TableBody>
             </Table>
+
+            <CourseDetailsModal
+                isOpen={!!editingCourse}
+                onClose={() => setEditingCourse(null)}
+                course={editingCourse}
+                onSave={() => setEditingCourse(null)}
+            />
         </div>
     );
 };

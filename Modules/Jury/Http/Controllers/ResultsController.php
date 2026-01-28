@@ -18,6 +18,10 @@ use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use Modules\Jury\Exports\ResultsExport;
 use Modules\RegistrationDesk\Entities\Inscription;
+use Modules\Institution\Entities\CourseCategory;
+use Modules\Institution\Entities\CourseProgramDetail;
+use Modules\Institution\Entities\Program;
+use Modules\Institution\Entities\Semestre;
 
 class ResultsController extends Controller
 {
@@ -41,7 +45,10 @@ class ResultsController extends Controller
         }])->get();
 
         $allCourses = $allTeachingUnits->flatMap(function ($unit) {
-            return $unit->courses;
+            return $unit->courses->map(function ($course) use ($unit) {
+                $course->unit_teaching_id = $unit->id;
+                return $course;
+            });
         })->each(function ($course) use ($coursesWithCredits) {
             $course->credit = $coursesWithCredits[$course->id] ?? 0;
         });
@@ -62,65 +69,14 @@ class ResultsController extends Controller
         }])->paginate(10);
 
         $students->getCollection()->transform(function ($student) use ($coursesWithCredits, &$gridData) {
-            $sommeNotesPonderees = 0;
-            $totalCredits = 0;
-            $reserve = 0;
-            $need = 0;
-            $hasMissingNote = false;
-            $hasFailedNote = false;
-            $allPassed = true;
+            // Calculs via le modèle Student
+            $student->average = $student->calculateWeightedAverage($student->notes, $coursesWithCredits);
+            $student->decision = $student->calculateDecision($student->notes, $coursesWithCredits, $student->average);
+            $student->mention = $student->calculateMention($student->decision, $student->notes);
 
-            foreach ($student->notes as $note) {
-
-                $credits = $coursesWithCredits[$note->course_id] ?? 0;
-
-
-                if ($note->cote === null) {
-                    $hasMissingNote = true;
-                } else {
-                    $sommeNotesPonderees += $note->cote * $credits;
-                    $totalCredits += $credits;
-
-                    if ($note->cote > 10) {
-                        $reserve += ($note->cote - 10);
-                    } elseif ($note->cote < 10) {
-                        $need += (10 - $note->cote);
-                        $hasFailedNote = true;
-                        $allPassed = false;
-                    }
-                }
-            }
-
-            $student->average = $totalCredits > 0
-                ? round($sommeNotesPonderees / $totalCredits, 2)
-                : 0;
-
-            $student->reserve = round($reserve, 2);
-            $student->need = round($need, 2);
-
-            // Calcul de la décision
-            if ($hasMissingNote) {
-                $student->decision = 'DEF';
-            } elseif ($hasFailedNote) {
-                $student->decision = 'AJ';
-            } else {
-                if ($student->average   >= 18) $student->decision = 'A';
-                elseif ($student->average  < 18 && $student->average >= 16) $student->decision = 'B';
-                elseif ($student->average  < 16 && $student->average >= 14) $student->decision = 'C';
-                elseif ($student->average < 14 && $student->average >= 12) $student->decision = 'D';
-                elseif ($student->average < 12 && $student->average >= 10) $student->decision = 'E';
-                elseif ($student->average < 10 && $student->average >= 8) $student->decision = 'F';
-                else $student->decision = 'G';
-            }
-
-            // Calcul de la mention
-            if ($student->decision === 'DEF') {
-                $student->mention = 'DEF';
-            } elseif (in_array($student->decision, ['F', 'G', 'AJ'])) {
-                $student->mention = 'AJ';
-            } else {
-                $student->mention = $allPassed ? 'Admis' : 'Comp';
-            }
+            $stats = $student->calculateStats($student->notes, $coursesWithCredits);
+            $student->reserve = $stats['reserve'];
+            $student->need = $stats['need'];
 
             $gridStudent = [
                 'id' => $student->id,
@@ -151,16 +107,30 @@ class ResultsController extends Controller
             ->with(['courses' => function ($query) use ($promotion) {
                 $query->whereHas('courseProgramDetails', function ($q) use ($promotion) {
                     $q->where('promotion_id', $promotion->id);
-                });
+                })->with(['courseProgramDetails' => function ($q) use ($promotion) {
+                    $q->where('promotion_id', $promotion->id);
+                }]);
             }])
             ->get()
             ->map(function ($unit) {
                 // Transformez la relation pivot en structure directe
-                $unit->courses = $unit->courses->map(function ($course) {
+                $unit->courses = $unit->courses->map(function ($course) use ($unit) {
+                    // Try to find the pivot record from loaded relation if possible, or just use what we have
+                    // Note: In `with` closure we loaded courseProgramDetails.
+                    // But here we are iterating courses relation of UnitsTeaching.
+                    // The pivot between UnitsTeaching and Course is UnitCourse (not CourseProgramDetail).
+                    // However, we eager loaded `courseProgramDetails`.
+                    $detail = $course->courseProgramDetails->first();
+
                     return [
                         'id' => $course->id,
                         'title' => $course->title,
-                        'credit' => $course->pivot->credits ?? 0, // Accès au crédit via pivot
+                        'credit' => $detail->credits ?? 0,
+                        'cm' => $detail->cm ?? 0,
+                        'td' => $detail->td ?? 0,
+                        'tp' => $detail->tp ?? 0,
+                        'program_detail_id' => $detail->id ?? null,
+                        'unit_teaching_id' => $unit->id, // Add unit_teaching_id for creation context
                         'orientation' => $course->orientation
                     ];
                 });
@@ -259,9 +229,7 @@ class ResultsController extends Controller
                     }
                 }
 
-                $average = $totalCredits > 0
-                    ? round($sommeNotesPonderees / $totalCredits, 2)
-                    : 0;
+                $average = $student->calculateWeightedAverage($student->notes, $coursesWithCredits);
 
                 $message .= "\nMoyenne générale: {$average}/20\nMerci pour votre confiance.";
                 $this->sendSMS($student->phone, $message);
@@ -597,5 +565,133 @@ class ResultsController extends Controller
                 }
             }
         }
+    }
+
+    /**
+     * Update course program details (credits, hours)
+     */
+    public function updateCourseDetails(Request $request)
+    {
+        $request->validate([
+            'course_id' => 'required_without:program_detail_id|exists:courses,id',
+            'program_detail_id' => 'nullable|exists:course_program_details,id',
+            'unit_teaching_id' => 'nullable|exists:units_teachings,id',
+            'credits' => 'required|numeric|min:0',
+            'cm' => 'required|numeric|min:0',
+            'td' => 'required|numeric|min:0',
+            'tp' => 'required|numeric|min:0',
+        ]);
+
+        try {
+            $context = $request->session()->get('jury_context');
+            if (!$context) {
+                return response()->json(['message' => 'Contexte jury manquant.'], 400);
+            }
+
+            if ($request->program_detail_id) {
+                DB::table('course_program_details')
+                    ->where('id', $request->program_detail_id)
+                    ->update([
+                        'credits' => $request->credits,
+                        'cm' => $request->cm,
+                        'td' => $request->td,
+                        'tp' => $request->tp,
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                // 1. Récupérer la promotion pour déterminer le programme
+                $promotionId = $context['promotion_id'];
+                $promotion = Promotion::find($promotionId);
+                if (!$promotion) {
+                    return response()->json(['message' => 'Promotion introuvable.'], 400);
+                }
+
+                $programName = $this->determineProgramName($promotion->title);
+
+                // Fallback si on ne trouve pas le programme via les keywords
+                if (!$programName) {
+                    // Utiliser un nom générique comme dans l'import
+                    $programName = 'PROGRAMME ' . $promotion->title;
+                }
+
+                // Trouver ou Créer le programme
+                $program = Program::firstOrCreate(
+                    ['name' => $programName, 'institution_id' => $promotion->institution_id]
+                );
+
+                $programId = $program->id;
+
+                $unitTeachingId = $request->input('unit_teaching_id');
+                // Allow null unit_teaching_id as per user request (nullable in DB)
+                // if (!$unitTeachingId) {
+                //    return response()->json(['message' => 'Unité d\'enseignement non spécifiée.'], 400);
+                // }
+
+                // Gérer la catégorie
+                $categoryId = null;
+                // On va utiliser une catégorie par défaut "COURS MAGISTRAL" ou la première existante
+                // Note: CourseCategory requires a slug. We generate one if creating.
+                $defaultCategoryName = 'COURS MAGISTRAL';
+                $defaultCategory = CourseCategory::firstOrCreate(
+                    ['name' => $defaultCategoryName],
+                    ['slug' => \Illuminate\Support\Str::slug($defaultCategoryName)]
+                );
+                $categoryId = $defaultCategory->id;
+
+                // Gérer le semestre (Défaut Semestre 1 comme l'import)
+                $defaultSemestre = Semestre::firstOrCreate(['title' => 'Semestre 1']);
+
+                CourseProgramDetail::updateOrCreate(
+                    [
+                        'program_id' => $programId,
+                        'course_id' => $request->course_id,
+                        'promotion_id' => $promotionId,
+                    ],
+                    [
+                        'units_teaching_id' => $unitTeachingId,
+                        'course_category_id' => $categoryId,
+                        'semestre_id' => $defaultSemestre->id,
+                        'credits' => $request->credits,
+                        'cm' => $request->cm,
+                        'td' => $request->td,
+                        'tp' => $request->tp,
+                        'updated_at' => now(),
+                    ]
+                );
+            }
+
+            return response()->json(['message' => 'Détails du cours mis à jour avec succès.']);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Erreur lors de la mise à jour : ' . $e->getMessage()], 500);
+        }
+    }
+
+    private function determineProgramName($promotionName)
+    {
+        $promotionName = strtoupper($promotionName);
+
+        // 1. SCIENCES ET TECHNOLOGIE
+        $sciencesTelecomKeywords = ['GENIE LOGICIEL', 'INTELLIGENCE ARTIFICIELLE', 'RESEAUX ET TELECOMMUNICATION', 'STATISTIQUE'];
+        foreach ($sciencesTelecomKeywords as $keyword) {
+            if (str_contains($promotionName, $keyword)) {
+                return 'SCIENCES ET TECHNOLOGIE';
+            }
+        }
+
+        // 2. GESTION COMMERCIALES ET ADMINISTRATIVE
+        $gestionCommercialeKeywords = ['COMPTABILITE', 'FISCALITE ET DOUANE', 'MARKETING', 'BANQUE'];
+        foreach ($gestionCommercialeKeywords as $keyword) {
+            if (str_contains($promotionName, $keyword)) {
+                return 'GESTION COMMERCIALES ET ADMINISTRATIVE';
+            }
+        }
+
+        // 3. SCIENCES ECONOMIQUE ET DE GESTION
+        if (str_contains($promotionName, 'INFORMATIQUE DE GESTION')) {
+            return 'SCIENCES ECONOMIQUE ET DE GESTION';
+        }
+
+        // Si aucune correspondance, on retourne null
+        return null;
     }
 }

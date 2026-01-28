@@ -26,7 +26,7 @@ class MasterPrediction extends Model
     protected $casts = [
         'optional_courses' => 'array',
         'internships' => 'array',
-        'prediction_details' => 'array',
+        'prediction_details' => 'array', // Ensures automatic json_encode/decode
         'predicted_at' => 'datetime',
         'confidence_score' => 'float',
     ];
