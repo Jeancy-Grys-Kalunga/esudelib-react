@@ -3,7 +3,6 @@
 namespace Modules\Jury\Services;
 
 use Modules\Jury\Entities\MasterPrediction;
-use Modules\Jury\Entities\MasterTrainingDataset;
 use Modules\Student\Entities\Student;
 use Modules\Student\Entities\Note;
 use Illuminate\Support\Facades\DB;
@@ -14,65 +13,61 @@ class MasterPredictionService
 {
     private $pythonPath;
     private $scriptPath;
+    private $modelPath;
 
     public function __construct()
     {
         $this->pythonPath = env('PYTHON_PATH', 'python');
-        $this->scriptPath = storage_path('ml/master_prediction.py');
+        $this->scriptPath = storage_path('ml/master_prediction_xgboost.py');
+        $this->modelPath = storage_path('ml/xgboost_filiere_model.pkl');
     }
 
     /**
-     * Entraîne le modèle avec le dataset
+     * Entraîne le modèle XGBoost
      */
     public function trainModel()
     {
         try {
-            // Augmenter le temps d'exécution maximum à 10 minutes pour l'entraînement
             set_time_limit(600);
             ini_set('memory_limit', '1024M');
 
-            Log::info('Début de l\'entraînement du modèle ML');
+            Log::info('Début de l\'entraînement du modèle XGBoost');
 
             // Vérifier que le script Python existe
             if (!file_exists($this->scriptPath)) {
                 throw new Exception("Script Python non trouvé: {$this->scriptPath}");
             }
 
-            // Vérifier que Python est accessible
-            $pythonVersion = shell_exec("{$this->pythonPath} --version 2>&1");
-            Log::info("Version Python: {$pythonVersion}");
-
-            // Récupérer le dataset directement depuis la base de données
+            // Récupérer le dataset
             Log::info('Récupération du dataset depuis la base de données...');
 
             $dataset = DB::table('master_training_datasets')
                 ->select([
-                    'age',
-                    'provenance',
-                    'intention_expressed',
+                    'genre',
+                    'intention',
                     'optional_courses',
-                    'internships',
-                    'average_grade',
-                    'grades_by_subject',
+                    'provenance_region',
+                    'etablissement',
+                    'age',
+                    'moyenne_licence',
                     'actual_master'
                 ])
                 ->get()
                 ->map(function ($record) {
-                    // Décoder les champs JSON si nécessaire
                     return [
-                        'age' => $record->age,
-                        'provenance' => $record->provenance,
-                        'intention_expressed' => $record->intention_expressed,
+                        'genre' => $record->genre,
+                        'intention' => $record->intention,
                         'optional_courses' => json_decode($record->optional_courses, true) ?? [],
-                        'internships' => json_decode($record->internships, true) ?? [],
-                        'average_grade' => (float) $record->average_grade,
-                        'grades_by_subject' => json_decode($record->grades_by_subject, true) ?? [],
+                        'provenance_region' => $record->provenance_region,
+                        'etablissement' => $record->etablissement,
+                        'age' => (int) $record->age,
+                        'moyenne_licence' => (float) $record->moyenne_licence,
                         'actual_master' => $record->actual_master,
                     ];
                 })->toArray();
 
             if (empty($dataset)) {
-                throw new Exception("Le dataset est vide. Veuillez générer le dataset d'abord avec: php artisan master:generate-dataset");
+                throw new Exception("Le dataset est vide. Veuillez d'abord générer le dataset.");
             }
 
             Log::info("Dataset récupéré: " . count($dataset) . " enregistrements");
@@ -84,12 +79,6 @@ class MasterPredictionService
             $mlDir = dirname($tempFile);
             if (!file_exists($mlDir)) {
                 mkdir($mlDir, 0755, true);
-                Log::info("Répertoire ML créé: {$mlDir}");
-            }
-
-            // Vérifier les permissions d'écriture
-            if (!is_writable($mlDir)) {
-                throw new Exception("Le répertoire {$mlDir} n'est pas accessible en écriture. Vérifiez les permissions.");
             }
 
             // Sauvegarder avec encodage UTF-8
@@ -99,39 +88,29 @@ class MasterPredictionService
             }
 
             file_put_contents($tempFile, $jsonData);
-            Log::info("Dataset sauvegardé dans: {$tempFile} (" . filesize($tempFile) . " bytes)");
-
-            $pythonCmd = $this->pythonPath;
-            // Sur Windows, si le chemin vers Python contient des espaces ou si c'est juste 'python', on doit faire attention
-            // Utilisons escapeshellarg pour le script et le fichier temp, mais pour python, escapeshellcmd devrait aller si c'est juste 'python'
-            // Mais si c'est un chemin absolu, il faut des guillemets.
 
             $command = sprintf(
-                '%s "%s" "%s" 2>&1',
-                $pythonCmd, // On suppose que python est dans le PATH ou correctement configuré
-                $this->scriptPath,
-                $tempFile
+                '%s "%s" train "%s" 2>&1',
+                escapeshellcmd($this->pythonPath),
+                escapeshellarg($this->scriptPath),
+                escapeshellarg($tempFile)
             );
 
-            Log::info("Commande Python (RAW): " . $command);
             Log::info("Commande Python: {$command}");
             Log::info("Lancement de l'entraînement...");
 
             $output = shell_exec($command);
 
-            Log::info("Sortie Python brute: " . substr($output, 0, 500));
-
             // Supprimer le fichier temporaire
             if (file_exists($tempFile)) {
                 unlink($tempFile);
-                Log::info("Fichier temporaire supprimé");
             }
 
             // Parser la sortie JSON
             $result = json_decode($output, true);
 
             if ($result === null && json_last_error() !== JSON_ERROR_NONE) {
-                $error = "Erreur de parsing JSON: " . json_last_error_msg() . "\nSortie Python: " . $output;
+                $error = "Erreur de parsing JSON: " . json_last_error_msg() . "\nSortie Python: " . substr($output, 0, 500);
                 Log::error($error);
                 throw new Exception($error);
             }
@@ -141,11 +120,8 @@ class MasterPredictionService
                 throw new Exception($result['error']);
             }
 
-            if (!isset($result['accuracy'])) {
-                throw new Exception("Réponse invalide du script Python. Sortie: " . $output);
-            }
-
-            Log::info("Modèle entraîné avec succès. Précision: " . ($result['accuracy'] * 100) . "%");
+            Log::info("Modèle XGBoost entraîné avec succès. Précision: " . ($result['accuracy'] * 100) . "%");
+            Log::info("Modèle sauvegardé dans: " . $this->modelPath);
 
             return $result;
         } catch (Exception $e) {
@@ -164,34 +140,44 @@ class MasterPredictionService
             // Préparer les données de l'étudiant
             $studentData = $this->prepareStudentData($student);
 
-            // Appeler le script Python pour la prédiction
-            $studentDataJson = json_encode($studentData);
+            // Vérifier si le modèle existe
+            if (!file_exists($this->modelPath)) {
+                throw new Exception("Modèle XGBoost non trouvé. Veuillez d'abord entraîner le modèle.");
+            }
 
-            $pythonCmd = $this->pythonPath;
+            // Appeler le script Python pour la prédiction
+            $studentDataJson = json_encode($studentData, JSON_UNESCAPED_UNICODE);
 
             $command = sprintf(
                 '%s "%s" predict %s 2>&1',
-                $pythonCmd,
-                $this->scriptPath,
-                escapeshellarg($studentDataJson) // JSON argument needs standard escaping
+                escapeshellcmd($this->pythonPath),
+                escapeshellarg($this->scriptPath),
+                escapeshellarg($studentDataJson)
             );
 
+            Log::info("Commande de prédiction: " . $command);
             $output = shell_exec($command);
+
+            Log::info("Sortie Python: " . substr($output, 0, 1000));
+
             $result = json_decode($output, true);
+
+            if ($result === null && json_last_error() !== JSON_ERROR_NONE) {
+                throw new Exception("Erreur de parsing JSON: " . json_last_error_msg() . ". Sortie: " . substr($output, 0, 500));
+            }
 
             if (isset($result['error'])) {
                 throw new Exception($result['error']);
+            }
+
+            if (!isset($result['predicted_master'])) {
+                throw new Exception("Réponse invalide du script Python.");
             }
 
             // Sauvegarder la prédiction
             $prediction = MasterPrediction::updateOrCreate(
                 ['student_id' => $student->id],
                 [
-                    'age' => $studentData['age'],
-                    'provenance' => $studentData['provenance'],
-                    'intention_expressed' => $studentData['intention_expressed'],
-                    'optional_courses' => $studentData['optional_courses'],
-                    'internships' => $studentData['internships'],
                     'predicted_master' => $result['predicted_master'],
                     'confidence_score' => $result['confidence_score'],
                     'prediction_details' => [
@@ -204,6 +190,7 @@ class MasterPredictionService
             );
 
             return [
+                'success' => true,
                 'student' => [
                     'id' => $student->id,
                     'name' => $student->name,
@@ -223,139 +210,165 @@ class MasterPredictionService
     private function prepareStudentData(Student $student)
     {
         // Calculer l'âge
-        if (is_numeric($student->date_of_birth)) {
-            // Supposons un format Excel serial date (jours depuis 30/12/1899)
-            // 25569 est le nombre de jours entre 01/01/1970 et 30/12/1899
-            $birthDate = \Carbon\Carbon::createFromTimestamp(($student->date_of_birth - 25569) * 86400);
-        } else {
+        $age = 20; // Valeur par défaut
+        if (!empty($student->date_of_birth)) {
             try {
-                $birthDate = \Carbon\Carbon::parse($student->date_of_birth);
+                if (is_numeric($student->date_of_birth)) {
+                    // Format Excel serial date
+                    $birthDate = \Carbon\Carbon::createFromTimestamp(($student->date_of_birth - 25569) * 86400);
+                } else {
+                    $birthDate = \Carbon\Carbon::parse($student->date_of_birth);
+                }
+                $age = $birthDate->age;
             } catch (\Exception $e) {
-                // Fallback si la date est invalide, on met une date par défaut pour éviter le crash
-                Log::warning("Date de naissance invalide pour l'étudiant {$student->id}: {$student->date_of_birth}. Utilisation de la date actuelle.");
-                $birthDate = now()->subYears(20); // Supposons 20 ans
+                Log::warning("Date de naissance invalide pour l'étudiant {$student->id}: {$student->date_of_birth}");
             }
         }
-        $age = $birthDate->age;
 
-        // Récupérer les notes
+        // Récupérer les notes et calculer la moyenne
+        $notes = Note::where('student_id', $student->id)
+            ->whereNotNull('cote')
+            ->get();
+
+        $moyenne_licence = $notes->avg('cote') ?? 10.0;
+
+        // Extraire le genre
+        $genre = $this->extractGender($student);
+
+        // Intention exprimée
+        $intention = $this->extractIntention($student);
+
+        // Cours optionnels
+        $optionalCourses = $this->extractOptionalCourses($student);
+
+        // Provenance région
+        $provenance_region = $this->extractProvenanceRegion($student);
+
+        // Établissement
+        $etablissement = $this->extractEtablissement($student);
+
+        return [
+            'genre' => $genre,
+            'intention' => $intention,
+            'optional_courses' => $optionalCourses,
+            'provenance_region' => $provenance_region,
+            'etablissement' => $etablissement,
+            'age' => $age,
+            'moyenne_licence' => round($moyenne_licence, 2),
+        ];
+    }
+
+    private function extractGender($student)
+    {
+        if (isset($student->gender) && !empty($student->gender)) {
+            return ucfirst(strtolower($student->gender));
+        }
+
+        // Détection basée sur le prénom
+        $name = strtolower($student->name);
+        $femaleKeywords = ['marie', 'rose', 'anne', 'sarah', 'fatima', 'naomi', 'claire', 'sophie'];
+
+        foreach ($femaleKeywords as $keyword) {
+            if (strpos($name, $keyword) !== false) {
+                return 'Féminin';
+            }
+        }
+
+        return 'Masculin';
+    }
+
+    private function extractIntention($student)
+    {
+        if (isset($student->intention_master) && !empty($student->intention_master)) {
+            return $student->intention_master;
+        }
+
+        // Déterminer à partir des meilleures notes
         $notes = Note::where('student_id', $student->id)
             ->with('course')
             ->whereNotNull('cote')
             ->get();
 
-        // Calculer la moyenne générale
-        $averageGrade = $notes->avg('cote') ?? 10.0;
-
-        // Calculer les notes par domaine
-        $gradesBySubject = $this->calculateGradesBySubject($notes);
-
-        // Extraire la provenance (à adapter selon vos données)
-        $provenance = $this->extractProvenance($student);
-
-        // Intention exprimée (à adapter selon vos données)
-        $intentionExpressed = $this->extractIntention($student);
-
-        // Cours optionnels (à adapter selon vos données)
-        $optionalCourses = $this->extractOptionalCourses($student);
-
-        // Stages (à adapter selon vos données)
-        $internships = $this->extractInternships($student);
-
-        return [
-            'age' => $age,
-            'provenance' => $provenance,
-            'intention_expressed' => $intentionExpressed,
-            'optional_courses' => $optionalCourses,
-            'internships' => $internships,
-            'average_grade' => round($averageGrade, 2),
-            'grades_by_subject' => $gradesBySubject,
-        ];
-    }
-
-    private function calculateGradesBySubject($notes)
-    {
-        $subjectAreas = [
-            'Informatique',
-            'Mathématiques',
-            'Physique',
-            'Chimie',
-            'Sciences Humaines',
-            'Langues',
-            'Gestion',
-            'Droit'
+        $domainMapping = [
+            'Informatique' => ['informatique', 'programmation', 'algorithme', 'base de données', 'réseau'],
+            'Génie Civil' => ['génie civil', 'construction', 'bâtiment', 'structure'],
+            'Électromécanique' => ['électromécanique', 'électricité', 'mécanique', 'automatisme'],
+            'Gestion' => ['gestion', 'comptabilité', 'finance', 'marketing', 'management'],
+            'Droit' => ['droit', 'juridique', 'législation'],
+            'Économie' => ['économie', 'macroéconomie', 'microéconomie'],
+            'Médecine' => ['médecine', 'santé', 'anatomie', 'physiologie'],
+            'Sciences Politiques' => ['politique', 'sociologie', 'philosophie']
         ];
 
-        $courseMapping = [
-            'Informatique' => ['informatique', 'programmation', 'algorithme', 'base de données', 'réseau', 'web', 'software'],
-            'Mathématiques' => ['mathématique', 'algèbre', 'analyse', 'statistique', 'probabilité'],
-            'Physique' => ['physique', 'mécanique', 'électricité', 'thermodynamique'],
-            'Chimie' => ['chimie', 'biochimie', 'organique'],
-            'Sciences Humaines' => ['sociologie', 'psychologie', 'philosophie', 'histoire', 'anthropologie'],
-            'Langues' => ['français', 'anglais', 'lingala', 'swahili', 'langue'],
-            'Gestion' => ['gestion', 'comptabilité', 'finance', 'marketing', 'économie', 'management'],
-            'Droit' => ['droit', 'juridique', 'législation', 'constitution'],
-        ];
+        $domainScores = array_fill_keys(array_keys($domainMapping), 0);
 
-        $gradesBySubject = [];
-        $averageGrade = $notes->avg('cote') ?? 10.0;
+        foreach ($notes as $note) {
+            $courseTitle = strtolower($note->course->title ?? '');
+            $cote = $note->cote;
 
-        foreach ($subjectAreas as $subject) {
-            $keywords = $courseMapping[$subject] ?? [];
-            $relevantNotes = $notes->filter(function ($note) use ($keywords) {
-                $courseTitle = strtolower($note->course->title ?? '');
+            foreach ($domainMapping as $domain => $keywords) {
                 foreach ($keywords as $keyword) {
                     if (str_contains($courseTitle, $keyword)) {
-                        return true;
+                        $domainScores[$domain] += $cote;
+                        break;
                     }
                 }
-                return false;
-            });
-
-            if ($relevantNotes->count() > 0) {
-                $gradesBySubject[$subject] = round($relevantNotes->avg('cote'), 2);
-            } else {
-                $gradesBySubject[$subject] = round($averageGrade, 2);
             }
         }
 
-        return $gradesBySubject;
-    }
-
-    private function extractProvenance($student)
-    {
-        // À adapter selon vos données
-        // Pour l'instant, retourne une valeur par défaut
-        return 'Kinshasa';
-    }
-
-    private function extractIntention($student)
-    {
-        // À adapter selon vos données
-        // Vérifier s'il y a un champ d'intention dans votre base de données
-        return null;
+        // Retourner le domaine avec le score le plus élevé
+        arsort($domainScores);
+        return array_key_first($domainScores) ?? 'Informatique';
     }
 
     private function extractOptionalCourses($student)
     {
-        // À adapter selon vos données
-        // Récupérer les cours optionnels suivis par l'étudiant
         $optionalCourses = DB::table('course_student')
             ->join('courses', 'courses.id', '=', 'course_student.course_id')
             ->where('course_student.student_id', $student->id)
-            ->where('courses.is_optional', true) // Supposant qu'il y a un champ is_optional
+            ->where('courses.is_optional', true)
             ->pluck('courses.title')
             ->toArray();
 
         return $optionalCourses;
     }
 
-    private function extractInternships($student)
+    private function extractProvenanceRegion($student)
     {
-        // À adapter selon vos données
-        // Pour l'instant, retourne un tableau vide
-        // Vous pouvez créer une table internships si nécessaire
-        return [];
+        if (isset($student->region_origin) && !empty($student->region_origin)) {
+            return $student->region_origin;
+        }
+
+        if (isset($student->birth_place) && !empty($student->birth_place)) {
+            $place = strtolower($student->birth_place);
+            $regions = [
+                'kinshasa' => 'Kinshasa',
+                'lubumbashi' => 'Katanga',
+                'goma' => 'Nord-Kivu',
+                'bukavu' => 'Sud-Kivu',
+                'kisangani' => 'Tshopo',
+                'mbuji-mayi' => 'Kasaï Oriental',
+                'kananga' => 'Kasaï Central',
+                'matadi' => 'Kongo Central'
+            ];
+
+            foreach ($regions as $keyword => $region) {
+                if (str_contains($place, $keyword)) {
+                    return $region;
+                }
+            }
+        }
+
+        return 'Kinshasa';
+    }
+
+    private function extractEtablissement($student)
+    {
+        if (isset($student->institution_origin) && !empty($student->institution_origin)) {
+            return $student->institution_origin;
+        }
+
+        return 'ESU-DELIB';
     }
 
     /**
@@ -370,6 +383,7 @@ class MasterPredictionService
         }
 
         return [
+            'success' => true,
             'student' => [
                 'id' => $student->id,
                 'name' => $student->name,

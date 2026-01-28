@@ -62,65 +62,14 @@ class ResultsController extends Controller
         }])->paginate(10);
 
         $students->getCollection()->transform(function ($student) use ($coursesWithCredits, &$gridData) {
-            $sommeNotesPonderees = 0;
-            $totalCredits = 0;
-            $reserve = 0;
-            $need = 0;
-            $hasMissingNote = false;
-            $hasFailedNote = false;
-            $allPassed = true;
+            // Calculs via le modèle Student
+            $student->average = $student->calculateWeightedAverage($student->notes, $coursesWithCredits);
+            $student->decision = $student->calculateDecision($student->notes, $coursesWithCredits, $student->average);
+            $student->mention = $student->calculateMention($student->decision, $student->notes);
 
-            foreach ($student->notes as $note) {
-
-                $credits = $coursesWithCredits[$note->course_id] ?? 0;
-
-
-                if ($note->cote === null) {
-                    $hasMissingNote = true;
-                } else {
-                    $sommeNotesPonderees += $note->cote * $credits;
-                    $totalCredits += $credits;
-
-                    if ($note->cote > 10) {
-                        $reserve += ($note->cote - 10);
-                    } elseif ($note->cote < 10) {
-                        $need += (10 - $note->cote);
-                        $hasFailedNote = true;
-                        $allPassed = false;
-                    }
-                }
-            }
-
-            $student->average = $totalCredits > 0
-                ? round($sommeNotesPonderees / $totalCredits, 2)
-                : 0;
-
-            $student->reserve = round($reserve, 2);
-            $student->need = round($need, 2);
-
-            // Calcul de la décision
-            if ($hasMissingNote) {
-                $student->decision = 'DEF';
-            } elseif ($hasFailedNote) {
-                $student->decision = 'AJ';
-            } else {
-                if ($student->average   >= 18) $student->decision = 'A';
-                elseif ($student->average  < 18 && $student->average >= 16) $student->decision = 'B';
-                elseif ($student->average  < 16 && $student->average >= 14) $student->decision = 'C';
-                elseif ($student->average < 14 && $student->average >= 12) $student->decision = 'D';
-                elseif ($student->average < 12 && $student->average >= 10) $student->decision = 'E';
-                elseif ($student->average < 10 && $student->average >= 8) $student->decision = 'F';
-                else $student->decision = 'G';
-            }
-
-            // Calcul de la mention
-            if ($student->decision === 'DEF') {
-                $student->mention = 'DEF';
-            } elseif (in_array($student->decision, ['F', 'G', 'AJ'])) {
-                $student->mention = 'AJ';
-            } else {
-                $student->mention = $allPassed ? 'Admis' : 'Comp';
-            }
+            $stats = $student->calculateStats($student->notes, $coursesWithCredits);
+            $student->reserve = $stats['reserve'];
+            $student->need = $stats['need'];
 
             $gridStudent = [
                 'id' => $student->id,
@@ -259,9 +208,7 @@ class ResultsController extends Controller
                     }
                 }
 
-                $average = $totalCredits > 0
-                    ? round($sommeNotesPonderees / $totalCredits, 2)
-                    : 0;
+                $average = $student->calculateWeightedAverage($student->notes, $coursesWithCredits);
 
                 $message .= "\nMoyenne générale: {$average}/20\nMerci pour votre confiance.";
                 $this->sendSMS($student->phone, $message);

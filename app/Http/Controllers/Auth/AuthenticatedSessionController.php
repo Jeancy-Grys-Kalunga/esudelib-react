@@ -124,14 +124,26 @@ class AuthenticatedSessionController extends Controller
             ])->withInput();
         }
 
+        // Récupérer le profil enseignant de l'utilisateur
+        $teacher = $user->teacher;
+
+        if (!$teacher) {
+            return back()->with([
+                'flash' => [
+                    'type' => 'error',
+                    'message' => 'Aucun profil enseignant associé à ce compte.'
+                ]
+            ])->withInput();
+        }
+
         // Vérification de l'appartenance au jury
         $jury = Jury::where('institution_id', $request->institution_id)
             ->where('academic_year_id', $request->academic_year_id)
             ->where('promotion_id', $request->promotion_id)
-            ->where(function ($query) use ($user) {
-                $query->where('president_id', $user->id)
-                    ->orWhere('secretary_id', $user->id)
-                    ->orWhere('member_id', $user->id);
+            ->where(function ($query) use ($teacher) {
+                $query->where('president_id', $teacher->id)
+                    ->orWhere('secretary_id', $teacher->id)
+                    ->orWhere('member_id', $teacher->id);
             })
             ->first();
 
@@ -173,8 +185,33 @@ class AuthenticatedSessionController extends Controller
             ])->withInput();
         }
 
-        $user->load('institutions');
-        if (!$user->institutions->contains('id', $request->institution_id)) {
+        // Vérifier l'accès via la table pivot ou via le profil étudiant/enseignant
+        $hasAccess = false;
+
+        // 1. Vérification via la table pivot (utilisateurs administratifs/standard)
+        if ($user->institutions()->where('institutions.id', $request->institution_id)->exists()) {
+            $hasAccess = true;
+        }
+
+        // 2. Vérification pour les étudiants
+        if (!$hasAccess && $user->hasRole('Etudiant')) {
+            $student = \Modules\Student\Entities\Student::where('user_id', $user->id)
+                ->where('institution_id', $request->institution_id)
+                ->first();
+            if ($student) {
+                $hasAccess = true;
+            }
+        }
+
+        // 3. Vérification pour les enseignants
+        if (!$hasAccess && $user->hasRole('Enseignant')) {
+            $teacher = \Modules\Teacher\Entities\Teacher::where('user_id', $user->id)->first();
+            if ($teacher && $teacher->institutions()->where('institutions.id', $request->institution_id)->exists()) {
+                $hasAccess = true;
+            }
+        }
+
+        if (!$hasAccess) {
             return back()->with([
                 'flash' => [
                     'type' => 'error',
