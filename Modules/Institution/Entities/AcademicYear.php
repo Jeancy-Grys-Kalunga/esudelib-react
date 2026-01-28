@@ -15,7 +15,7 @@ class AcademicYear extends Model
     /**
      * The attributes that are mass assignable.
      */
-    protected $fillable = [];
+    protected $fillable = ['title'];
 
     // public function inscriptions()
     // {
