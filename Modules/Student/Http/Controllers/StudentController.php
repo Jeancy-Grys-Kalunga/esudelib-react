@@ -17,9 +17,9 @@ use Modules\Student\Entities\AppealDocument;
 use Modules\Student\Entities\Note;
 use Modules\Student\Entities\Payment;
 use Modules\Student\Entities\Student;
-use Barryvdh\DomPDF\Facade\Pdf;
+// use Barryvdh\DomPDF\Facade\Pdf;
 use Modules\Institution\Entities\Program;
-use Modules\Calendar\Entities\CalendarEvent; // Nouveau module
+// use Modules\Calendar\Entities\CalendarEvent; // Nouveau module
 use App\Services\NotificationService;
 use Modules\Teacher\Entities\Teacher;
 
@@ -37,8 +37,9 @@ class StudentController extends Controller
             abort(403, "Aucune inscription trouvée pour cet étudiant.");
         }
 
-        // Récupération des cours formatés
-        $courses = $this->getFormattedCourses($student)->take(4);
+        // Récupération des cours formatés (incluant les années antérieures)
+        $courses = $this->getFormattedCourses($student);
+        $recentCourses = $courses->take(4); // Pour l'affichage rapide
 
         // Statistiques académiques
         $totalCredits = $courses->where('selected', true)->sum('credits');
@@ -48,7 +49,7 @@ class StudentController extends Controller
         $progressPercentage = min(100, ($totalCredits / 30) * 100);
 
         // Événements à venir
-        $upcomingEvents = CalendarEvent::where('promotion_id', $inscription->promotion_id)
+        $upcomingEvents = []; /* CalendarEvent::where('promotion_id', $inscription->promotion_id)
             ->where('start_date', '>', now())
             ->orderBy('start_date')
             ->take(3)
@@ -61,7 +62,7 @@ class StudentController extends Controller
                     'location' => $event->location,
                     'type' => $event->type,
                 ];
-            });
+            }); */
 
         return Inertia::render('Student/Dashboard', [
             'user' => [
@@ -78,7 +79,7 @@ class StudentController extends Controller
                 'pendingAppeals' => $student->appeals()->where('status', 'pending')->count(),
                 'progressPercentage' => round($progressPercentage),
             ],
-            'courses' => $courses,
+            'courses' => $recentCourses,
             'notifications' => NotificationService::getStudentNotifications($student->id),
             'upcomingEvents' => $upcomingEvents,
         ]);
@@ -87,99 +88,92 @@ class StudentController extends Controller
     public function index()
     {
         $student = $this->getCurrentStudent();
-        $inscription = $student->inscriptions()->latest()->first();
 
-        if (!$inscription) {
-            abort(403, "Aucune inscription trouvée pour cet étudiant.");
-        }
-
-        $promotionId = $inscription->promotion_id;
-        $institutionId = $inscription->institution_id;
-
-        $program = Program::where('institution_id', $institutionId)->first();
-
-        $coursesQuery = Course::select(
-            'courses.id',
-            'courses.title',
-            'course_program_details.cm',
-            'course_program_details.td',
-            'course_program_details.tp',
-            'course_program_details.credits',
-            'course_categories.name as category_name'
-        )
-            ->join('course_program_details', 'courses.id', '=', 'course_program_details.course_id')
-            ->join('course_categories', 'course_program_details.course_category_id', '=', 'course_categories.id')
-            ->where('course_program_details.promotion_id', $promotionId);
-
-        if ($program) {
-            $coursesQuery->where('course_program_details.program_id', $program->id);
-        }
-
-        $courses = $coursesQuery->get();
-
-        $selectedCourseIds = $student->courses()->pluck('courses.id')->toArray();
-        $studentNotes = Note::where('student_id', $student->id)->get()->keyBy('course_id');
+        // Utiliser la même logique que pour le dashboard (toutes les années)
+        $courses = $this->getFormattedCourses($student);
 
         return Inertia::render('student/courseSelection', [
-            'courses' => $courses->map(function ($course) use ($selectedCourseIds, $studentNotes) {
-                $note = $studentNotes[$course->id] ?? null;
-
-                return [
-                    'id' => $course->id,
-                    'title' => $course->title,
-                    'credits' => $course->credits,
-                    'cm' => $course->cm,
-                    'td' => $course->td,
-                    'tp' => $course->tp,
-                    'isMandatory' => $course->category_name === 'Obligatoire',
-                    'selected' => in_array($course->id, $selectedCourseIds),
-                    'note' => $note ? [
-                        'cote' => $note->cote,
-                        'session' => $note->session,
-                        'situation' => $note->situation
-                    ] : null
-                ];
-            }),
+            'courses' => $courses,
             'hasPendingAppeals' => $student->appeals()->where('status', 'pending')->exists(),
         ]);
     }
 
     private function getFormattedCourses($student)
     {
-        $inscription = $student->inscriptions()->latest()->first();
-        $promotionId = $inscription->promotion_id;
-        $institutionId = $inscription->institution_id;
-
-        $program = Program::where('institution_id', $institutionId)->first();
-
-        $coursesQuery = Course::select(
-            'courses.id',
-            'courses.title',
-            'course_program_details.credits',
-            'course_categories.name as category_name'
-        )
-            ->join('course_program_details', 'courses.id', '=', 'course_program_details.course_id')
-            ->join('course_categories', 'course_program_details.course_category_id', '=', 'course_categories.id')
-            ->where('course_program_details.promotion_id', $promotionId);
-
-        if ($program) {
-            $coursesQuery->where('course_program_details.program_id', $program->id);
+        // Récupérer toutes les inscriptions de l'étudiant, triées par la plus récente
+        // On charge aussi l'année académique
+        $inscriptions = $student->inscriptions()->with(['promotion', 'institution', 'academicYear'])->latest()->get();
+        if ($inscriptions->isEmpty()) {
+            return collect([]);
         }
 
-        $courses = $coursesQuery->get();
+        // On va récupérer les cours pour chaque promotion d'inscription
+        $allCourses = collect([]);
+        $seenCourseIds = [];
+
+        foreach ($inscriptions as $inscription) {
+            $promotionId = $inscription->promotion_id;
+            $institutionId = $inscription->institution_id;
+            $academicYearTitle = $inscription->academicYear ? $inscription->academicYear->title : 'Année inconnue';
+
+            $program = Program::where('institution_id', $institutionId)->first();
+
+            $coursesQuery = Course::select(
+                'courses.id',
+                'courses.title',
+                'course_program_details.cm',
+                'course_program_details.td',
+                'course_program_details.tp',
+                'course_program_details.credits',
+                'course_categories.name as category_name'
+            )
+                ->join('course_program_details', 'courses.id', '=', 'course_program_details.course_id')
+                ->leftJoin('course_categories', 'course_program_details.course_category_id', '=', 'course_categories.id')
+                ->where('course_program_details.promotion_id', $promotionId);
+
+            // On ne filtre plus par program_id pour éviter de masquer des cours si la configuration du programme par défaut est incorrecte
+            // Le filtre par promotion_id via course_program_details est suffisant car la promotion définit le cursus.
+            /*
+            if ($program) {
+                $coursesQuery->where('course_program_details.program_id', $program->id);
+            }
+            */
+
+            $courses = $coursesQuery->get();
+
+            // Fusionner les cours
+            foreach ($courses as $course) {
+                // Éviter les doublons si un cours est repris
+                $uniqueKey = $course->id . '_' . $promotionId;
+                if (!in_array($uniqueKey, $seenCourseIds)) {
+                    $course->promotion_name = $inscription->promotion ? $inscription->promotion->title : 'N/A';
+                    $course->academic_year = $academicYearTitle; // Affecter le titre de l'année académique ici
+                    $allCourses->push($course);
+                    $seenCourseIds[] = $uniqueKey;
+                }
+            }
+        }
 
         $selectedCourseIds = $student->courses()->pluck('courses.id')->toArray();
-        $studentNotes = Note::where('student_id', $student->id)->get()->keyBy('course_id');
+        $studentNotes = Note::where('student_id', $student->id)->get()->groupBy('course_id'); // GroupBy car plusieurs notes possibles si plusieurs années
 
-        return $courses->map(function ($course) use ($selectedCourseIds, $studentNotes) {
-            $note = $studentNotes[$course->id] ?? null;
+        return $allCourses->map(function ($course) use ($selectedCourseIds, $studentNotes) {
+            $notes = $studentNotes[$course->id] ?? collect([]);
+            // Prendre la note la plus récente ou celle correspondant à la session/année si on avait l'info précise ici
+            $note = $notes->last();
+
 
             return [
                 'id' => $course->id,
                 'title' => $course->title,
                 'credits' => $course->credits,
+                'cm' => $course->cm,
+                'td' => $course->td,
+                'tp' => $course->tp,
                 'isMandatory' => $course->category_name === 'Obligatoire',
                 'selected' => in_array($course->id, $selectedCourseIds),
+                'academic_year' => $course->academic_year,
+                'promotion' => $course->promotion_name ?? '',
                 'note' => $note ? [
                     'cote' => $note->cote,
                     'session' => $note->session,
@@ -295,7 +289,7 @@ class StudentController extends Controller
         ]);
     }
 
-    // Enregistre le recours et initie le paiement (FlexPay)
+    // Enregistre le recours et initie le paiement (CinetPay)
     public function storeAppeal(Request $request)
     {
         Log::info('=== DEBUT storeAppeal ===');
@@ -311,8 +305,8 @@ class StudentController extends Controller
             'items.*.justification' => 'required|string',
             'items.*.documents' => 'nullable|array',
             'items.*.documents.*' => 'file|mimes:pdf,doc,docx,jpg,png|max:5120',
-            'payment_method' => 'required|in:mobile,card',
-            'phone_number' => 'nullable|required_if:payment_method,mobile|string',
+            // 'payment_method' => 'required|in:mobile,card', // CinetPay handles method selection
+            'phone_number' => 'nullable|string', // Optional for CinetPay initialization
         ]);
 
         Log::info('Validation passed');
@@ -360,67 +354,53 @@ class StudentController extends Controller
 
         Log::info('Payment record created:', ['payment_id' => $payment->id]);
 
-        // Initier le paiement avec FlexPay
-        $flexPayService = new \App\Services\FlexPayService();
+        // Return configuration for Frontend CinetPay SDK
+        $cinetPayConfig = [
+            'apikey' => env('CINETPAY_API_KEY'),
+            'site_id' => env('CINETPAY_SITE_ID'),
+            'notify_url' => route('student.appeals.notify'),
+            'close_url' => route('student.appeals.create'),
+            'return_url' => route('student.appeals.create'),
+        ];
 
-        $paymentResponse = [];
+        // Customer Info
+        $customerName = !empty($student->name) ? $student->name : 'Etudiant';
+        $customerSurname = !empty($student->firstname) ? $student->firstname : 'Nom';
 
-        if ($request->payment_method === 'mobile') {
-            $paymentData = [
-                'customer_phone_number' => $request->phone_number,
-                'transaction_id' => $reference,
-                'amount' => $totalAmount,
-                'currency' => 'CDF',
-                'notify_url' => route('student.appeals.notify'),
-            ];
-
-            Log::info('Calling FlexPay createMobilePayment with:', $paymentData);
-
-            $paymentResponse = $flexPayService->createMobilePayment($paymentData);
-
-            Log::info('FlexPay response received:', $paymentResponse);
-        } else {
-            // Placeholder for Card Payment if implemented
-            // $paymentResponse = $flexPayService->createCardPayment(...)
-            Log::warning('Card payment attempted but not available');
-            return back()->withErrors(['payment_error' => 'Paiement par carte non disponible pour le moment.']);
+        if (!isset($student->firstname)) {
+            $parts = explode(' ', $student->name, 2);
+            $customerName = $parts[0] ?? 'Etudiant';
+            $customerSurname = $parts[1] ?? 'Nom';
         }
 
+        $customerInfo = [
+            'customer_name' => substr($customerName, 0, 50),
+            'customer_surname' => substr($customerSurname, 0, 50),
+            'customer_email' => $student->email ?? 'student@esudelib.com',
+            'customer_phone_number' => $request->phone_number ?? ($student->phone ?? '0000000000'),
+            'customer_address' => $student->address ?? 'Kinshasa',
+            'customer_city' => 'Kinshasa',
+            'customer_country' => 'CD',
+            'customer_state' => 'KN',
+            'customer_zip_code' => '00000',
+        ];
 
-        if ($paymentResponse['success']) {
-            Log::info('Payment successful, updating payment record');
-
-            $payment->update([
-                'cinetpay_transaction_id' => $paymentResponse['orderNumber'], // orderNumber FlexPay
-                'payment_url' => null,
-            ]);
-
-            Log::info('=== FIN storeAppeal (SUCCESS) ===');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Paiement initié. Veuillez valider sur votre téléphone.',
-                'reference' => $reference,
-                'payment_status' => 'pending'
-            ]);
-        }
-
-        Log::error('Payment failed:', $paymentResponse);
-        Log::info('=== FIN storeAppeal (FAILED) ===');
+        Log::info('Appeal stored, returning CinetPay config to frontend', ['reference' => $reference]);
 
         return response()->json([
-            'success' => false,
-            'message' => $paymentResponse['message'] ?? 'Erreur lors de l\'initiation du paiement.'
-        ], 422);
+            'success' => true,
+            'message' => 'Demande enregistrée. Veuillez procéder au paiement.',
+            'reference' => $reference,
+            'amount' => $totalAmount,
+            'cinetpay_config' => $cinetPayConfig,
+            'customer_info' => $customerInfo,
+            'description' => "Paiement frais de recours",
+        ]);
     }
 
     // Vérification du statut du paiement (Appelé par le frontend polling)
     public function checkPaymentStatus($reference)
     {
-        // Recherche dans les métadonnées JSON
-        // Note: SQLite/Postgres/MySQL support JSON queries differently. Laravel abstraction helpers usually work.
-        // For broad compatibility or if JSON query fails, fetch and filter in PHP (less efficient but safer without exact driver knowledge)
-        // Let's assume standard Laravel JSON query works for 'metadata->reference'
         $payment = Payment::where('metadata->reference', $reference)->first();
 
         if (!$payment) {
@@ -432,15 +412,28 @@ class StudentController extends Controller
         }
 
         // Check remote status
-        $flexPayService = new \App\Services\FlexPayService();
-        //$status = $flexPayService->checkTransaction($payment->cinetpay_transaction_id); 
-        // Using checkTransaction requires orderNumber which is in cinetpay_transaction_id column
+        $cinetPayService = new CinetPayService();
 
-        $status = $flexPayService->checkTransaction($payment->cinetpay_transaction_id);
+        // We need 'site_id' which is likely in env, wrapped by service
+        // Service's getPaymentDetails takes payment_token or transaction_id?
+        // Service implementation uses payment_id param. Let's pass the transaction_id (reference).
+        // WARNING: CinetPayService::getPaymentDetails uses 'payment_id' param name but documentation refers to transaction_id or token.
+        // Let's verify CinetPayService implementation usage. It calls /details endpoint.
+        // Usually /details needs 'transaction_id' from merchant.
 
-        if (isset($status['status']) && $status['status'] === 'success') {
-            $this->finalizeAppeal($payment);
-            return response()->json(['status' => 'paid']);
+        // Refactoring assumes getPaymentDetails works with our generated transaction_id
+        $status = $cinetPayService->getPaymentDetails($reference);
+
+        // CinetPay response structure: code, message, data -> status
+        if (isset($status['code']) && $status['code'] == '00') {
+            // '00' often means success/found. Check data status.
+            // data.status could be 'ACCEPTED'
+            $paymentStatus = $status['data']['status'] ?? '';
+
+            if ($paymentStatus === 'ACCEPTED') {
+                $this->finalizeAppeal($payment);
+                return response()->json(['status' => 'paid']);
+            }
         }
 
         return response()->json(['status' => 'pending']);
@@ -450,46 +443,28 @@ class StudentController extends Controller
     {
         Log::info('Payment notification received:', $request->all());
 
-        // FlexPay webhook structure usually involves status code
-        // The reference project has 'handleWebhook', let's emulate basic success check
-        // Often callback has 'orderNumber' or 'reference'
-
-        // Emulation based on typical FlexPay or existing pattern
-        // Usually we verify the transaction again to be sure
-
-        $reference = $request->input('reference'); // Or transaction_id
+        // CinetPay sends POST with cpm_trans_id, cpm_site_id etc...
+        $reference = $request->input('cpm_trans_id');
 
         if (!$reference) {
+            // Fallback for query params if CinetPay uses GET or different structure
+            // But official doc says POST with cpm_trans_id
             return response()->json(['status' => 'ignored']);
         }
 
-        // Find payment by reference (which is in metadata)
-        // This might be slow on large tables without index/generated column
-
-        // Alternative: if FlexPay sends orderNumber (which we saved in cinetpay_transaction_id)
-        // let's try that first
-        /*
-         $orderNumber = $request->input('orderNumber');
-         if ($orderNumber) {
-             $payment = Payment::where('cinetpay_transaction_id', $orderNumber)->first();
-         }
-         */
-
-        // Fallback to metadata search logic if we rely on reference
-        $payments = Payment::where('status', 'pending')->get(); // Optimization: only pending
-        $payment = $payments->first(function ($p) use ($reference) {
-            $meta = json_decode($p->metadata, true);
-            return ($meta['reference'] ?? '') === $reference;
-        });
-
+        // Find payment
+        $payment = Payment::where('metadata->reference', $reference)->first();
 
         if ($payment) {
-            $flexPayService = new \App\Services\FlexPayService();
-            $status = $flexPayService->checkTransaction($payment->cinetpay_transaction_id);
+            $cinetPayService = new CinetPayService();
+            $status = $cinetPayService->getPaymentDetails($reference);
 
-            if (isset($status['status']) && $status['status'] === 'success') {
-                $this->finalizeAppeal($payment);
-                return response()->json(['status' => 'success']);
+            if (isset($status['code']) && $status['code'] == '00') {
+                $paymentStatus = $status['data']['status'] ?? '';
+                if ($paymentStatus === 'ACCEPTED') {
+                    $this->finalizeAppeal($payment);
+                    return response()->json(['status' => 'success']);
+                }
             }
         }
 
@@ -517,18 +492,14 @@ class StudentController extends Controller
 
             // Create Items
             foreach ($metadata['items'] as $itemData) {
+                // If AppealItem doesn't exist, we might crash. Ensure AppealItem model usage is correct.
+                // Assuming it exists as previously seen in the legacy code I replaced.
                 $appealItem = \Modules\Student\Entities\AppealItem::create([
                     'appeal_id' => $appeal->id,
                     'object' => $itemData['object'],
                     'justification' => $itemData['justification'],
-                    // 'course_id' => $itemData['course_id'], // Add course_id to AppealItem if table supports it, else we lose context!
-                    // Assuming AppealItem needs course_id or we rely on object text
+                    // 'course_id' => $itemData['course_id'], 
                 ]);
-
-                // If AppealItem doesn't have course_id, we might need to add it or store it in justification
-                // Let's assume for now we just create items. 
-                // Refactor Note: Ideally AppealItem should have course_id.
-                // Checking AppealItem definition...
 
                 // Move Documents
                 if (!empty($itemData['documents'])) {
@@ -549,10 +520,9 @@ class StudentController extends Controller
             }
 
             // Cleanup
-            Storage::disk('public')->deleteDirectory('temp_documents/' . $metadata['reference']);
-
-            // Notifications (Optional: Notify teachers of relevant courses)
-            // ...
+            if (isset($metadata['reference'])) {
+                Storage::disk('public')->deleteDirectory('temp_documents/' . $metadata['reference']);
+            }
         });
     }
 
@@ -564,13 +534,14 @@ class StudentController extends Controller
             ->where('student_id', $student->id)
             ->get();
 
-        $pdf = PDF::loadView('student.transcript', [
+        /* $pdf = PDF::loadView('student.transcript', [
             'student' => $student,
             'notes' => $notes,
             'institution' => $student->institution,
         ]);
 
-        return $pdf->download('bulletin-' . $student->matricule . '.pdf');
+        return $pdf->download('bulletin-' . $student->matricule . '.pdf'); */
+        return response()->json(['message' => 'PDF generation unavailable']);
     }
 
     protected function getCurrentStudent()

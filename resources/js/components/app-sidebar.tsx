@@ -267,7 +267,7 @@ const groupedNavItems: GroupedNavItem[] = [
         icon: Users,
         color: 'text-green-500',
         items: RegistrationDeskItems,
-        permission: 'access_registration_desk',
+        permission: 'access_inscriptions',
         isActive: route().current('subscriptions.*'),
     },
     {

@@ -255,6 +255,9 @@ class TeacherController extends Controller
     /**
      * Affiche la liste des cours attribués à l'enseignant
      */
+    /**
+     * Affiche la liste des cours attribués à l'enseignant
+     */
     public function courses(Request $request)
     {
         $user = auth()->user();
@@ -264,34 +267,28 @@ class TeacherController extends Controller
             abort(403, "Vous n'êtes pas associé à un enseignant");
         }
 
-        // Récupérer les cours de l'enseignant avec les détails du programme et de la catégorie
-        $courses = Course::select(
-            'courses.id',
-            'courses.title',
-            'course_program_details.cm',
-            'course_program_details.td',
-            'course_program_details.tp',
-            'course_program_details.credits',
-            'course_categories.name as category_name',
-            'programs.name as program'
-        )
-            ->join('course_program_details', 'courses.id', '=', 'course_program_details.course_id')
-            ->join('course_categories', 'course_program_details.course_category_id', '=', 'course_categories.id')
-            ->join('programs', 'course_program_details.program_id', '=', 'programs.id')
-            ->whereIn('courses.id', $user->teacher->courses()->pluck('courses.id'))
+        // Récupérer tous les cours assignés à l'enseignant
+        $assignedCourseIds = $user->teacher->courses()->pluck('courses.id');
+
+        // Récupérer les détails des cours avec eager loading
+        $courses = Course::with(['courseProgramDetails.program', 'courseProgramDetails.category'])
+            ->whereIn('id', $assignedCourseIds)
             ->get()
             ->map(function ($course) {
+                // On prend le premier détail de programme trouvé (ou on pourrait gérer autrement si multiples)
+                $detail = $course->courseProgramDetails->first();
+
                 return [
                     'id' => $course->id,
                     'title' => $course->title,
-                    'cm' => $course->cm,
-                    'td' => $course->td,
-                    'tp' => $course->tp,
-                    'credits' => $course->credits,
-                    'program' => $course->program,
-                    'category_name' => $course->category_name,
-                    'student_count' => Course::find($course->id)->students()->count(),
-                    'appeals_count' => Course::find($course->id)->appeals()->count(),
+                    'cm' => $detail ? $detail->cm : 0,
+                    'td' => $detail ? $detail->td : 0,
+                    'tp' => $detail ? $detail->tp : 0,
+                    'credits' => $detail ? $detail->credits : 0,
+                    'program' => $detail && $detail->program ? $detail->program->name : 'Non défini',
+                    'category_name' => $detail && $detail->category ? $detail->category->name : 'Non défini',
+                    'student_count' => $course->students()->count(),
+                    'appeals_count' => $course->appeals()->count(),
                 ];
             });
 

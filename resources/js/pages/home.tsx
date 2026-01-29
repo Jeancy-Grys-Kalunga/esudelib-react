@@ -76,7 +76,7 @@ const Home: NextPageWithLayout = () => {
                         </div>
 
                         <h1 className="animate-fade-in-up mb-6 text-5xl leading-tight font-extrabold md:text-7xl">
-                            Suivie Cursus
+                            Suivi Cursus
                             <span className="animate-shimmer mt-2 block bg-gradient-to-r from-sky-300 via-blue-300 to-cyan-300 bg-clip-text text-transparent">
                                 Réinventée
                             </span>

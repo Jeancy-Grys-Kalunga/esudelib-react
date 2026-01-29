@@ -28,7 +28,50 @@ Route::get('/test-flexpay', function () {
     ]);
 });
 
+// Test route for CinetPay
+Route::get('/test-cinetpay', function () {
+    $cinetPayService = new \App\Services\CinetPayService();
 
+    $testData = [
+        'transaction_id' => 'TEST-CINET-' . time(),
+        'amount' => 100,
+        'currency' => 'CDF',
+        'customer_surname' => 'Doe',
+        'customer_name' => 'John',
+        'description' => 'Test Transaction',
+        'customer_email' => 'john.doe@example.com',
+        'customer_phone_number' => '+243999999999',
+        'customer_address' => '123 Test St',
+        'customer_city' => 'Kinshasa',
+        'customer_country' => 'CD',
+        'customer_state' => 'Kinshasa',
+        'customer_zip_code' => '00000',
+        'notify_url' => route('student.appeals.notify'),
+        'return_url' => route('student.appeals.create'),
+        'cancel_url' => route('student.appeals.create'),
+    ];
+
+    Log::channel('cinetpay')->info('Testing CinetPay with data:', $testData);
+
+    try {
+        $paymentData = $testData;
+        // Adding dummy metadata as expected by service
+        $paymentData['metadata'] = 'TEST_MODE';
+
+        $response = $cinetPayService->createPayment($paymentData);
+        Log::channel('cinetpay')->info('CinetPay Test Response:', $response);
+
+        return response()->json([
+            'test_data' => $testData,
+            'response' => $response
+        ]);
+    } catch (\Exception $e) {
+        Log::channel('cinetpay')->error('CinetPay Test Error: ' . $e->getMessage());
+        return response()->json([
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('students', StudentController::class)->names('student');
