@@ -72,7 +72,10 @@ class MasterPredictionService
                         'moyenne_licence' => (float) $record->moyenne_licence,
                         'actual_master' => $record->actual_master,
                     ];
-                })->toArray();
+                })
+
+                ->values() // Réindexer le tableau
+                ->toArray();
 
             if (empty($dataset)) {
                 throw new Exception("Le dataset est vide. Veuillez d'abord générer le dataset.");

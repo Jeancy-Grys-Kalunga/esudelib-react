@@ -82,8 +82,20 @@ export default function Login({ status, canResetPassword, institutions = [], fla
         }
     }, [data.email]);
 
-    const submit: FormEventHandler = (e) => {
+    const submit: FormEventHandler = async (e) => {
         e.preventDefault();
+
+        // ALWAYS fetch fresh CSRF cookie before submitting (especially important after logout)
+        try {
+            await fetch('/sanctum/csrf-cookie', {
+                credentials: 'same-origin',
+            });
+            // Small delay to ensure cookie is properly set in browser
+            await new Promise((resolve) => setTimeout(resolve, 150));
+        } catch (error) {
+            console.error('Failed to fetch CSRF cookie:', error);
+        }
+
         post(route('login'), {
             onFinish: () => reset('password'),
             onError: (errors) => {
@@ -327,7 +339,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                         rel="noopener noreferrer"
                         className="underline hover:text-blue-600"
                     >
-                        Jeancy Grys Kalunga
+                        Patrick Masangu
                     </a>
                 </div>
             </div>

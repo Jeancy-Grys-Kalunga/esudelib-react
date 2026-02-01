@@ -36,13 +36,14 @@ class ResultsController extends Controller
             ->pluck('credits', 'course_id')
             ->toArray();
 
-        $allTeachingUnits = UnitsTeaching::with(['courses' => function ($query) use ($context) {
-            $query->with(['notes' => function ($q) use ($context) {
-                $q->where('academic_year_id', $context['academic_year_id'])
-                    ->where('promotion_id', $context['promotion_id'])
-                    ->with('student');
-            }]);
-        }])->get();
+        $allTeachingUnits = UnitsTeaching::where('promotion_id', $context['promotion_id'])
+            ->with(['courses' => function ($query) use ($context) {
+                $query->with(['notes' => function ($q) use ($context) {
+                    $q->where('academic_year_id', $context['academic_year_id'])
+                        ->where('promotion_id', $context['promotion_id'])
+                        ->with('student');
+                }]);
+            }])->get();
 
         $allCourses = $allTeachingUnits->flatMap(function ($unit) {
             return $unit->courses->map(function ($course) use ($unit) {
@@ -62,17 +63,20 @@ class ResultsController extends Controller
             'students' => []
         ];
 
-        $students = Student::with(['notes' => function ($query) use ($context) {
+        $students = Student::whereHas('inscriptions', function ($query) use ($context) {
+            $query->where('academic_year_id', $context['academic_year_id'])
+                ->where('promotion_id', $context['promotion_id']);
+        })->with(['notes' => function ($query) use ($context) {
             $query->where('academic_year_id', $context['academic_year_id'])
                 ->where('promotion_id', $context['promotion_id'])
                 ->with('course');
-        }])->paginate(10);
+        }])->orderBy('name')->paginate(10);
 
         $students->getCollection()->transform(function ($student) use ($coursesWithCredits, &$gridData) {
             // Calculs via le modèle Student
             $student->average = $student->calculateWeightedAverage($student->notes, $coursesWithCredits);
             $student->decision = $student->calculateDecision($student->notes, $coursesWithCredits, $student->average);
-            $student->mention = $student->calculateMention($student->decision, $student->notes);
+            $student->mention = $student->calculateMention($student->decision, $student->notes, $student->average);
 
             $stats = $student->calculateStats($student->notes, $coursesWithCredits);
             $student->reserve = $stats['reserve'];
@@ -450,14 +454,14 @@ class ResultsController extends Controller
         $needs = [];
 
         foreach ($student->notes as $note) {
-            $credits = $coursesWithCredits[$note->course_id] ?? 0;
+            // $credits = $coursesWithCredits[$note->course_id] ?? 0; // Ancienne logique pondérée
 
             if ($note->cote > 10) {
-                $reserve += ($note->cote - 10) * $credits;
+                $reserve += ($note->cote - 10); // Somme simple
             } elseif ($note->cote < 10) {
                 $needs[$note->course_id] = [
-                    'credits' => $credits,
-                    'need' => (10 - $note->cote) * $credits
+                    'credits' => 1, // Fixe à 1 pour calcul simple
+                    'need' => (10 - $note->cote)
                 ];
             }
         }
@@ -468,7 +472,7 @@ class ResultsController extends Controller
             $ratio = min(1, $reserve / $totalNeed);
 
             foreach ($needs as $courseId => $data) {
-                $pointsToAdd = $data['need'] * $ratio / $data['credits'];
+                $pointsToAdd = $data['need'] * $ratio; // Simple distribution
                 $note = $student->notes->firstWhere('course_id', $courseId);
 
                 if ($note) {
@@ -497,14 +501,14 @@ class ResultsController extends Controller
         foreach ($student->notes as $note) {
             if (!in_array($note->course_id, $ueCourseIds)) continue;
 
-            $credits = $coursesWithCredits[$note->course_id] ?? 0;
+            // $credits = $coursesWithCredits[$note->course_id] ?? 0;
 
             if ($note->cote > 10) {
-                $reserve += ($note->cote - 10) * $credits;
+                $reserve += ($note->cote - 10);
             } elseif ($note->cote < 10) {
                 $needs[$note->course_id] = [
-                    'credits' => $credits,
-                    'need' => (10 - $note->cote) * $credits
+                    'credits' => 1,
+                    'need' => (10 - $note->cote)
                 ];
             }
         }
@@ -515,7 +519,7 @@ class ResultsController extends Controller
             $ratio = min(1, $reserve / $totalNeed);
 
             foreach ($needs as $courseId => $data) {
-                $pointsToAdd = $data['need'] * $ratio / $data['credits'];
+                $pointsToAdd = $data['need'] * $ratio;
                 $note = $student->notes->firstWhere('course_id', $courseId);
 
                 if ($note) {
@@ -540,11 +544,11 @@ class ResultsController extends Controller
             if ($courseCredit != $credit) continue;
 
             if ($note->cote > 10) {
-                $reserve += ($note->cote - 10) * $credit;
+                $reserve += ($note->cote - 10);
             } elseif ($note->cote < 10) {
                 $needs[$note->course_id] = [
-                    'credits' => $credit,
-                    'need' => (10 - $note->cote) * $credit
+                    'credits' => 1,
+                    'need' => (10 - $note->cote)
                 ];
             }
         }
@@ -555,7 +559,7 @@ class ResultsController extends Controller
             $ratio = min(1, $reserve / $totalNeed);
 
             foreach ($needs as $courseId => $data) {
-                $pointsToAdd = $data['need'] * $ratio / $data['credits'];
+                $pointsToAdd = $data['need'] * $ratio;
                 $note = $student->notes->firstWhere('course_id', $courseId);
 
                 if ($note) {

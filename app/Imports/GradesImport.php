@@ -29,20 +29,30 @@ class GradesImport implements ToModel, WithHeadingRow
 
     public function model(array $row)
     {
-        $student = Student::where('matricule', $row['matricule'])->first();
-        
+        $matricule = isset($row['matricule']) ? trim($row['matricule']) : '';
+        $student = Student::where('matricule', $matricule)->first();
+
         if ($student) {
-            $session = $row['session'] ?? $this->session; 
+            // Rechercher l'inscription de l'étudiant pour l'année académique concernée
+            // afin d'associer la note à sa promotion réelle (cas des cours partagés)
+            $inscription = \Modules\RegistrationDesk\Entities\Inscription::where('student_id', $student->id)
+                ->where('academic_year_id', $this->academicYear->id)
+                ->first();
+
+            // Si une inscription est trouvée, on utilise sa promotion, sinon on garde celle du fichier/prof
+            $targetPromotionId = $inscription ? $inscription->promotion_id : $this->promotion->id;
+
+            $session = $row['session'] ?? $this->session;
             $observation = $row['observation'] ?? '';
             $situation = $row['situation'] ?? '';
             $participation = $row['participation'] ?? null;
-            
+
             DB::table('notes')->updateOrInsert(
                 [
                     'course_id' => $this->course->id,
                     'student_id' => $student->id,
                     'academic_year_id' => $this->academicYear->id,
-                    'promotion_id' => $this->promotion->id,
+                    'promotion_id' => $targetPromotionId, // Utiliser la promotion réelle de l'étudiant
                     'exam_session_id' => $this->examSessionId,
                 ],
                 [
@@ -50,7 +60,7 @@ class GradesImport implements ToModel, WithHeadingRow
                     'observation' => $observation,
                     'situation' => $situation,
                     'participation' => $participation,
-                    'is_submitted' => true, 
+                    'is_submitted' => true,
                     'updated_at' => now(),
                     'created_at' => now(),
                 ]
