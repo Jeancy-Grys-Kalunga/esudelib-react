@@ -107,18 +107,19 @@ class AuthenticatedSessionController extends Controller
 
         // Jury: Vérification des champs spécifiques AVANT authentification
         if ($request->boolean('is_jury')) {
-            // Vérifier les champs obligatoires
-            if (!$request->institution_id || !$request->academic_year_id || !$request->promotion_id) {
+            // Vérifier les champs obligatoires (Retiré institution_id car masqué en front)
+            if (!$request->academic_year_id || !$request->promotion_id) {
                 return back()->with([
                     'flash' => [
                         'type' => 'error',
-                        'message' => 'Pour les jurys, l\'institution, l\'année académique et la promotion sont obligatoires'
+                        'message' => 'Pour les jurys, l\'année académique et la promotion sont obligatoires'
                     ]
                 ])->withInput();
             }
 
-            // Récupérer le profil enseignant
-            $teacher = $user->teacher;
+            // Récupérer le profil enseignant (avec fallback par email comme dans le projet de référence)
+            $teacher = $user->teacher ?? \Modules\Teacher\Entities\Teacher::where('email', $user->email)->first();
+
             if (!$teacher) {
                 return back()->with([
                     'flash' => [
@@ -129,15 +130,20 @@ class AuthenticatedSessionController extends Controller
             }
 
             // Vérifier l'appartenance au jury
-            $jury = Jury::where('institution_id', $request->institution_id)
-                ->where('academic_year_id', $request->academic_year_id)
+            $juryQuery = Jury::where('academic_year_id', $request->academic_year_id)
                 ->where('promotion_id', $request->promotion_id)
                 ->where(function ($query) use ($teacher) {
                     $query->where('president_id', $teacher->id)
                         ->orWhere('secretary_id', $teacher->id)
                         ->orWhere('member_id', $teacher->id);
-                })
-                ->first();
+                });
+
+            // Si une institution est fournie, on l'utilise pour filtrer davantage
+            if ($request->institution_id) {
+                $juryQuery->where('institution_id', $request->institution_id);
+            }
+
+            $jury = $juryQuery->first();
 
             if (!$jury) {
                 return back()->with([
@@ -151,10 +157,11 @@ class AuthenticatedSessionController extends Controller
             // Tout est OK, authentifier
             Auth::login($user, $request->boolean('remember'));
             $request->session()->put('jury_context', [
-                'institution_id' => $request->institution_id,
+                'institution_id' => $jury->institution_id, // Utiliser l'id du jury trouvé
                 'academic_year_id' => $request->academic_year_id,
                 'promotion_id' => $request->promotion_id,
-                'jury_id' => $jury->id
+                'jury_id' => $jury->id,
+                'teacher_id' => $teacher->id // Ajout pour usage ultérieur
             ]);
 
             return redirect()->intended(route('jury.dashboard'))->with([

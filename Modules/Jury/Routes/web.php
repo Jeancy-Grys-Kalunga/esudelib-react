@@ -15,7 +15,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 
 
-    Route::prefix('jury')->middleware('role:Jury')->group(function () {
+    Route::prefix('jury')->group(function () {
         // Dashboard
         Route::get('/dashboard', [JuryDashboardController::class, 'index'])->name('jury.dashboard');
 
@@ -62,7 +62,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('student.prediction');
 
     // Ressources principales du Jury - Accessibles uniquement au Jury (Mis après pour éviter les conflits de prefix)
-    Route::resource('jury', JuryController::class)->names('jury')->middleware('role:Jury');
+    Route::resource('jury', JuryController::class)->names('jury');
 
     // Proxy API pour le service ML
     Route::prefix('api/ml')->group(function () {
