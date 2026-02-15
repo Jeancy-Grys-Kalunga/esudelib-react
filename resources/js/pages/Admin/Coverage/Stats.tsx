@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { exportCoveragePDF } from '@/lib/export';
 import { Head } from '@inertiajs/react';
 import { AlertCircle, BarChart3, CheckCircle2, Download, Search, Timer, Zap } from 'lucide-react';
 import { useState } from 'react';
@@ -31,6 +32,10 @@ interface StatsProps {
 
 export default function CoverageStats({ auth, testStats, codeCoverage, testFiles = [] }: StatsProps) {
     const [searchQuery, setSearchQuery] = useState('');
+
+    const handleExportPDF = () => {
+        exportCoveragePDF({ testStats, codeCoverage, testFiles }, ['clover-chart', 'category-chart']);
+    };
 
     // Pre-calculate aggregate stats
     const totalTests = Object.values(testStats).reduce((acc, cat) => acc + (cat.tests || 0), 0);
@@ -84,7 +89,7 @@ export default function CoverageStats({ auth, testStats, codeCoverage, testFiles
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <Button variant="outline" className="rounded-xl border-gray-200 shadow-sm" onClick={() => window.print()}>
+                        <Button variant="outline" className="rounded-xl border-gray-200 shadow-sm" onClick={handleExportPDF}>
                             <Download className="mr-2 h-4 w-4" />
                             Rapport PDF
                         </Button>
@@ -134,7 +139,7 @@ export default function CoverageStats({ auth, testStats, codeCoverage, testFiles
                             <CardDescription>Score global de santé du code</CardDescription>
                         </CardHeader>
                         <CardContent className="relative flex flex-col items-center">
-                            <div className="h-64 w-64">
+                            <div className="h-64 w-64" id="clover-chart">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie data={pieData} innerRadius={80} outerRadius={105} paddingAngle={8} dataKey="value" stroke="none">
@@ -162,7 +167,7 @@ export default function CoverageStats({ auth, testStats, codeCoverage, testFiles
                             <CardDescription>Volume de tests et taux d'échecs détectés</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="mt-4 h-[300px]">
+                            <div className="mt-4 h-[300px]" id="category-chart">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart
                                         data={categories.map((c) => ({

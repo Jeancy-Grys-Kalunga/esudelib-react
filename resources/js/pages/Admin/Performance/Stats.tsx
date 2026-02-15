@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { exportPerformancePDF } from '@/lib/export';
 import { Head } from '@inertiajs/react';
 import { Activity, Clock, Cpu, Download, HardDrive, Play, Zap } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -42,6 +43,10 @@ export default function PerformanceStats({ auth, perfData, jmxExists, jmxPath }:
         alert('Lancement du test JMeter en arrière-plan...');
     };
 
+    const handleExportPDF = () => {
+        exportPerformancePDF(perfData, ['latency-chart', 'reliability-chart']);
+    };
+
     const pieData = [
         { name: 'Succès', value: perfData.summary.total_requests * (1 - perfData.summary.error_rate / 100) },
         { name: 'Erreurs', value: perfData.summary.total_requests * (perfData.summary.error_rate / 100) },
@@ -79,7 +84,7 @@ export default function PerformanceStats({ auth, perfData, jmxExists, jmxPath }:
                             <Play className="h-4 w-4 fill-white" />
                             Lancer Test JMeter
                         </Button>
-                        <Button variant="outline" className="flex items-center gap-2 border-gray-200" onClick={() => window.print()}>
+                        <Button variant="outline" className="flex items-center gap-2 border-gray-200" onClick={handleExportPDF}>
                             <Download className="h-4 w-4" />
                             Télécharger Report
                         </Button>
@@ -157,7 +162,7 @@ export default function PerformanceStats({ auth, perfData, jmxExists, jmxPath }:
                             <CardDescription>Analyse temporelle des temps de réponse moyens</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="mt-4 h-[300px] w-full">
+                            <div className="mt-4 h-[300px] w-full" id="latency-chart">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart data={perfData.history}>
                                         <defs>
@@ -195,7 +200,7 @@ export default function PerformanceStats({ auth, perfData, jmxExists, jmxPath }:
                             <CardDescription>Répartition Succès vs Échecs</CardDescription>
                         </CardHeader>
                         <CardContent className="flex w-full flex-1 flex-col items-center justify-center">
-                            <div className="relative h-64 w-full">
+                            <div className="relative h-64 w-full" id="reliability-chart">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
