@@ -9,11 +9,16 @@ use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Promotion;
 use Modules\Student\Entities\Student;
 
-// use Modules\RegistrationDesk\Database\Factories\InscriptionFactory;
+use Modules\RegistrationDesk\Database\Factories\InscriptionFactory;
 
 class Inscription extends Model
 {
     use HasFactory;
+
+    protected static function newFactory()
+    {
+        return InscriptionFactory::new();
+    }
 
     /**
      * The attributes that are mass assignable.

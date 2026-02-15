@@ -4,18 +4,17 @@ namespace Modules\Institution\Entities;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Modules\Institution\Database\factories\UnitsTeachingFactory;
 
 class UnitsTeaching extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     */
+    protected static function newFactory()
+    {
+        return \Modules\Institution\Database\Factories\UnitsTeachingFactory::new();
+    }
+
     protected $guarded = [];
-
-
 
     public function courses()
     {
@@ -26,6 +25,4 @@ class UnitsTeaching extends Model
     {
         return $this->belongsTo(Promotion::class, 'promotion_id', 'id');
     }
-
-
 }

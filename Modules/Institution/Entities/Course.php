@@ -4,7 +4,6 @@ namespace Modules\Institution\Entities;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Modules\Institution\Database\factories\CourseFactory;
 use Modules\Student\Entities\Appeal;
 use Modules\Student\Entities\Note;
 use Modules\Student\Entities\Student;
@@ -12,6 +11,13 @@ use Modules\Student\Entities\Student;
 class Course extends Model
 {
     use HasFactory;
+
+    protected $table = 'courses';
+
+    protected static function newFactory()
+    {
+        return \Modules\Institution\Database\Factories\CourseFactory::new();
+    }
 
     /**
      * The attributes that are mass assignable.

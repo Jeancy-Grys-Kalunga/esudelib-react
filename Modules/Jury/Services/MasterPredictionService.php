@@ -429,4 +429,94 @@ class MasterPredictionService
             ],
         ];
     }
+
+    /**
+     * Calcule les statistiques de prédiction pour un contexte donné
+     */
+    public function calculatePredictionStats(array $context): array
+    {
+        $predictions = MasterPrediction::whereHas('student.notes', function ($query) use ($context) {
+            $query->where('academic_year_id', $context['academic_year_id'])
+                ->where('promotion_id', $context['promotion_id']);
+        })->get();
+
+        if ($predictions->count() === 0) {
+            return [
+                'total_predictions' => 0,
+                'average_confidence' => 0,
+                'high_confidence_count' => 0,
+                'medium_confidence_count' => 0,
+                'low_confidence_count' => 0,
+                'programs_distribution' => []
+            ];
+        }
+
+        $stats = [
+            'total_predictions' => $predictions->count(),
+            'average_confidence' => round($predictions->avg('confidence_score'), 1),
+            'programs_distribution' => [],
+            'high_confidence_count' => $predictions->where('confidence_score', '>=', 75)->count(),
+            'medium_confidence_count' => $predictions->whereBetween('confidence_score', [60, 74])->count(),
+            'low_confidence_count' => $predictions->where('confidence_score', '<', 60)->count(),
+        ];
+
+        // Distribution par programme
+        $distribution = $predictions->groupBy('predicted_master')
+            ->map(function ($group) {
+                return $group->count();
+            })
+            ->toArray();
+
+        $stats['programs_distribution'] = $distribution;
+
+        return $stats;
+    }
+
+    /**
+     * Prédit l'orientation pour tous les étudiants d'une promotion
+     */
+    public function predictBatch(array $context): array
+    {
+        // Vérifier si le modèle existe
+        if (!file_exists($this->modelPath)) {
+            throw new Exception("Modèle non entraîné. Veuillez d'abord entraîner le modèle.");
+        }
+
+        // Récupérer tous les étudiants de la promotion
+        $students = Student::whereHas('notes', function ($query) use ($context) {
+            $query->where('academic_year_id', $context['academic_year_id'])
+                ->where('promotion_id', $context['promotion_id']);
+        })->get();
+
+        $results = [
+            'successful' => 0,
+            'failed' => 0,
+            'total' => count($students),
+            'details' => []
+        ];
+
+        foreach ($students as $student) {
+            try {
+                $prediction = $this->predictForStudent($student);
+                $results['successful']++;
+                $results['details'][] = [
+                    'student_id' => $student->id,
+                    'student_name' => $student->name,
+                    'success' => true,
+                    'prediction' => $prediction['prediction']['predicted_master'],
+                    'confidence' => $prediction['prediction']['confidence_score']
+                ];
+            } catch (Exception $e) {
+                $results['failed']++;
+                $results['details'][] = [
+                    'student_id' => $student->id,
+                    'student_name' => $student->name,
+                    'success' => false,
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+
+        return $results;
+    }
 }

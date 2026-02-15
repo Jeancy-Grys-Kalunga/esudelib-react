@@ -32,12 +32,11 @@ class OrientationPredictionController extends Controller
             $context = $request->session()->get('jury_context');
 
             if (!$context) {
-                return redirect()->route('jury.dashboard')
-                    ->with('error', 'Contexte de jury non défini');
+                abort(403, 'Jury context not set.');
             }
 
-            $academicYear = AcademicYear::find($context['academic_year_id']);
-            $promotion = Promotion::find($context['promotion_id']);
+            $academicYear = AcademicYear::findOrFail($context['academic_year_id']);
+            $promotion = Promotion::findOrFail($context['promotion_id']);
 
             // Récupérer les étudiants avec leurs moyennes et prédictions
             $students = Student::whereHas('notes', function ($query) use ($context) {
@@ -64,7 +63,7 @@ class OrientationPredictionController extends Controller
             });
 
             // Calculer les statistiques
-            $stats = $this->calculatePredictionStats($context);
+            $stats = $this->predictionService->calculatePredictionStats($context);
 
             return Inertia::render('jury/orientation-prediction', [
                 'academicYear' => $academicYear,
@@ -144,50 +143,7 @@ class OrientationPredictionController extends Controller
                 ], 400);
             }
 
-            // Vérifier si le modèle existe
-            $modelPath = storage_path('ml/xgboost_filiere_model.pkl');
-            if (!file_exists($modelPath)) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Modèle non entraîné. Veuillez d\'abord entraîner le modèle.'
-                ], 400);
-            }
-
-            // Récupérer tous les étudiants de la promotion
-            $students = Student::whereHas('notes', function ($query) use ($context) {
-                $query->where('academic_year_id', $context['academic_year_id'])
-                    ->where('promotion_id', $context['promotion_id']);
-            })
-                ->get();
-
-            $results = [
-                'successful' => 0,
-                'failed' => 0,
-                'total' => count($students),
-                'details' => []
-            ];
-
-            foreach ($students as $student) {
-                try {
-                    $prediction = $this->predictionService->predictForStudent($student);
-                    $results['successful']++;
-                    $results['details'][] = [
-                        'student_id' => $student->id,
-                        'student_name' => $student->name,
-                        'success' => true,
-                        'prediction' => $prediction['prediction']['predicted_master'],
-                        'confidence' => $prediction['prediction']['confidence_score']
-                    ];
-                } catch (Exception $e) {
-                    $results['failed']++;
-                    $results['details'][] = [
-                        'student_id' => $student->id,
-                        'student_name' => $student->name,
-                        'success' => false,
-                        'error' => $e->getMessage()
-                    ];
-                }
-            }
+            $results = $this->predictionService->predictBatch($context);
 
             // Sanitize UTF-8 for response
             array_walk_recursive($results, function (&$item, $key) {
@@ -208,6 +164,69 @@ class OrientationPredictionController extends Controller
                 'error' => 'Erreur lors de la prédiction en lot: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Récupère la prédiction pour un étudiant
+     */
+    public function getPrediction($student_id)
+    {
+        try {
+            $student = Student::findOrFail($student_id);
+            $prediction = $this->predictionService->getPrediction($student);
+
+            return response()->json([
+                'success' => true,
+                'data' => $prediction
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Génère le dataset d'entraînement
+     */
+    public function generateDataset()
+    {
+        try {
+            // Logique de génération à implémenter si nécessaire
+            // Pour l'instant on retourne un succès simulé
+            return response()->json([
+                'success' => true,
+                'message' => 'Dataset généré avec succès (Simulé)'
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Exporte le rapport de prédiction pour un étudiant
+     */
+    public function exportPredictionReport($student_id)
+    {
+        return response()->json([
+            'success' => false,
+            'error' => 'Fonctionnalité d\'export non implémentée'
+        ], 501);
+    }
+
+    /**
+     * Exporte toutes les prédictions
+     */
+    public function exportAllPredictions()
+    {
+        return response()->json([
+            'success' => false,
+            'error' => 'Fonctionnalité d\'export global non implémentée'
+        ], 501);
     }
 
     /**
@@ -241,48 +260,6 @@ class OrientationPredictionController extends Controller
         }
     }
 
-    /**
-     * Calcule les statistiques de prédiction
-     */
-    private function calculatePredictionStats($context)
-    {
-        $predictions = MasterPrediction::whereHas('student.notes', function ($query) use ($context) {
-            $query->where('academic_year_id', $context['academic_year_id'])
-                ->where('promotion_id', $context['promotion_id']);
-        })
-            ->get();
-
-        if ($predictions->count() === 0) {
-            return [
-                'total_predictions' => 0,
-                'average_confidence' => 0,
-                'high_confidence_count' => 0,
-                'medium_confidence_count' => 0,
-                'low_confidence_count' => 0,
-                'programs_distribution' => []
-            ];
-        }
-
-        $stats = [
-            'total_predictions' => $predictions->count(),
-            'average_confidence' => round($predictions->avg('confidence_score'), 1),
-            'programs_distribution' => [],
-            'high_confidence_count' => $predictions->where('confidence_score', '>=', 75)->count(),
-            'medium_confidence_count' => $predictions->whereBetween('confidence_score', [60, 74])->count(),
-            'low_confidence_count' => $predictions->where('confidence_score', '<', 60)->count(),
-        ];
-
-        // Distribution par programme
-        $distribution = $predictions->groupBy('predicted_master')
-            ->map(function ($group) {
-                return $group->count();
-            })
-            ->toArray();
-
-        $stats['programs_distribution'] = $distribution;
-
-        return $stats;
-    }
 
     /**
      * Récupère le statut du modèle

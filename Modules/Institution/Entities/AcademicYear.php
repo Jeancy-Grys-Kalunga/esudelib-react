@@ -4,13 +4,17 @@ namespace Modules\Institution\Entities;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Modules\Institution\Database\factories\AcademicYearFactory;
-use Modules\RegistrationDesk\Entities\Inscription;
+use Modules\Institution\Entities\Assignment;
 use Modules\Student\Entities\Note;
 
 class AcademicYear extends Model
 {
     use HasFactory;
+
+    protected static function newFactory()
+    {
+        return \Modules\Institution\Database\Factories\AcademicYearFactory::new();
+    }
 
     /**
      * The attributes that are mass assignable.

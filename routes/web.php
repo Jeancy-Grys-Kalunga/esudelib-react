@@ -25,6 +25,11 @@ Route::get('/debug-csrf', function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/admin/coverage/stats', [App\Http\Controllers\Admin\CoverageStatsController::class, 'index'])->name('admin.coverage.stats');
+    Route::get('/admin/performance', [App\Http\Controllers\Admin\PerformanceController::class, 'index'])->name('admin.performance');
+    Route::get('/admin/coverage/{path?}', [App\Http\Controllers\Admin\CoverageController::class, 'show'])
+        ->where('path', '.*')
+        ->name('admin.coverage');
 });
 
 

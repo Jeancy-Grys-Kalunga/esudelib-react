@@ -2,99 +2,140 @@
 
 namespace Modules\Upload\Providers;
 
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Database\Eloquent\Factory;
+use Nwidart\Modules\Traits\PathNamespace;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 
 class UploadServiceProvider extends ServiceProvider
 {
-    /**
-     * @var string $moduleName
-     */
-    protected $moduleName = 'Upload';
+    use PathNamespace;
 
-    /**
-     * @var string $moduleNameLower
-     */
-    protected $moduleNameLower = 'upload';
+    protected string $name = 'Upload';
+
+    protected string $nameLower = 'upload';
 
     /**
      * Boot the application events.
-     *
-     * @return void
      */
-    public function boot()
+    public function boot(): void
     {
+        $this->registerCommands();
+        $this->registerCommandSchedules();
         $this->registerTranslations();
         $this->registerConfig();
         $this->registerViews();
-        $this->loadMigrationsFrom(module_path($this->moduleName, 'Database/Migrations'));
+        $this->loadMigrationsFrom(module_path($this->name, 'database/migrations'));
     }
 
     /**
      * Register the service provider.
-     *
-     * @return void
      */
-    public function register()
+    public function register(): void
     {
+        $this->app->register(EventServiceProvider::class);
         $this->app->register(RouteServiceProvider::class);
     }
 
     /**
-     * Register config.
-     *
-     * @return void
+     * Register commands in the format of Command::class
      */
-    protected function registerConfig()
+    protected function registerCommands(): void
     {
-        $this->publishes([
-            module_path($this->moduleName, 'Config/config.php') => config_path($this->moduleNameLower . '.php'),
-        ], 'config');
-        $this->mergeConfigFrom(
-            module_path($this->moduleName, 'Config/config.php'), $this->moduleNameLower
-        );
+        // $this->commands([]);
     }
 
     /**
-     * Register views.
-     *
-     * @return void
+     * Register command Schedules.
      */
-    public function registerViews()
+    protected function registerCommandSchedules(): void
     {
-        $viewPath = resource_path('views/modules/' . $this->moduleNameLower);
-
-        $sourcePath = module_path($this->moduleName, 'Resources/views');
-
-        $this->publishes([
-            $sourcePath => $viewPath
-        ], ['views', $this->moduleNameLower . '-module-views']);
-
-        $this->loadViewsFrom(array_merge($this->getPublishableViewPaths(), [$sourcePath]), $this->moduleNameLower);
+        // $this->app->booted(function () {
+        //     $schedule = $this->app->make(Schedule::class);
+        //     $schedule->command('inspire')->hourly();
+        // });
     }
 
     /**
      * Register translations.
-     *
-     * @return void
      */
-    public function registerTranslations()
+    public function registerTranslations(): void
     {
-        $langPath = resource_path('lang/modules/' . $this->moduleNameLower);
+        $langPath = resource_path('lang/modules/'.$this->nameLower);
 
         if (is_dir($langPath)) {
-            $this->loadTranslationsFrom($langPath, $this->moduleNameLower);
+            $this->loadTranslationsFrom($langPath, $this->nameLower);
+            $this->loadJsonTranslationsFrom($langPath);
         } else {
-            $this->loadTranslationsFrom(module_path($this->moduleName, 'Resources/lang'), $this->moduleNameLower);
+            $this->loadTranslationsFrom(module_path($this->name, 'lang'), $this->nameLower);
+            $this->loadJsonTranslationsFrom(module_path($this->name, 'lang'));
         }
     }
 
     /**
-     * Get the services provided by the provider.
-     *
-     * @return array
+     * Register config.
      */
-    public function provides()
+    protected function registerConfig(): void
+    {
+        $configPath = module_path($this->name, config('modules.paths.generator.config.path'));
+
+        if (is_dir($configPath)) {
+            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($configPath));
+
+            foreach ($iterator as $file) {
+                if ($file->isFile() && $file->getExtension() === 'php') {
+                    $config = str_replace($configPath.DIRECTORY_SEPARATOR, '', $file->getPathname());
+                    $config_key = str_replace([DIRECTORY_SEPARATOR, '.php'], ['.', ''], $config);
+                    $segments = explode('.', $this->nameLower.'.'.$config_key);
+
+                    // Remove duplicated adjacent segments
+                    $normalized = [];
+                    foreach ($segments as $segment) {
+                        if (end($normalized) !== $segment) {
+                            $normalized[] = $segment;
+                        }
+                    }
+
+                    $key = ($config === 'config.php') ? $this->nameLower : implode('.', $normalized);
+
+                    $this->publishes([$file->getPathname() => config_path($config)], 'config');
+                    $this->merge_config_from($file->getPathname(), $key);
+                }
+            }
+        }
+    }
+
+    /**
+     * Merge config from the given path recursively.
+     */
+    protected function merge_config_from(string $path, string $key): void
+    {
+        $existing = config($key, []);
+        $module_config = require $path;
+
+        config([$key => array_replace_recursive($existing, $module_config)]);
+    }
+
+    /**
+     * Register views.
+     */
+    public function registerViews(): void
+    {
+        $viewPath = resource_path('views/modules/'.$this->nameLower);
+        $sourcePath = module_path($this->name, 'resources/views');
+
+        $this->publishes([$sourcePath => $viewPath], ['views', $this->nameLower.'-module-views']);
+
+        $this->loadViewsFrom(array_merge($this->getPublishableViewPaths(), [$sourcePath]), $this->nameLower);
+
+        Blade::componentNamespace(config('modules.namespace').'\\' . $this->name . '\\View\\Components', $this->nameLower);
+    }
+
+    /**
+     * Get the services provided by the provider.
+     */
+    public function provides(): array
     {
         return [];
     }
@@ -102,11 +143,12 @@ class UploadServiceProvider extends ServiceProvider
     private function getPublishableViewPaths(): array
     {
         $paths = [];
-        foreach (\Config::get('view.paths') as $path) {
-            if (is_dir($path . '/modules/' . $this->moduleNameLower)) {
-                $paths[] = $path . '/modules/' . $this->moduleNameLower;
+        foreach (config('view.paths') as $path) {
+            if (is_dir($path.'/modules/'.$this->nameLower)) {
+                $paths[] = $path.'/modules/'.$this->nameLower;
             }
         }
+
         return $paths;
     }
 }

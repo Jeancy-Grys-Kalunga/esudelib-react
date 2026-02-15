@@ -5,6 +5,7 @@ import { usePermissions } from '@/lib/auth';
 import { type GroupedNavItem, type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 import {
+    Activity,
     Bookmark,
     Building,
     Building2,
@@ -15,6 +16,7 @@ import {
     DiamondIcon,
     FilePlus,
     FileText,
+    Gauge,
     GraduationCap,
     Home,
     Key,
@@ -23,6 +25,7 @@ import {
     Shield,
     Sliders,
     Users,
+    Zap,
 } from 'lucide-react';
 import AppLogo from './app-logo';
 
@@ -192,6 +195,23 @@ const userManagementItems: NavItem[] = [
     },
 ];
 
+const qualityItems: NavItem[] = [
+    {
+        title: 'Qualité du Code',
+        href: '/admin/coverage/stats',
+        icon: Activity,
+        isActive: route().current('admin.coverage.stats'),
+        color: 'text-green-500',
+    },
+    {
+        title: 'Performances',
+        href: '/admin/performance',
+        icon: Zap,
+        isActive: route().current('admin.performance'),
+        color: 'text-amber-500',
+    },
+];
+
 const settingsItems: NavItem[] = [
     {
         title: 'Année Académique',
@@ -309,6 +329,14 @@ const groupedNavItems: GroupedNavItem[] = [
         items: userManagementItems,
         permission: 'access_user_management',
         isActive: route().current('roles*'),
+    },
+    {
+        groupTitle: 'Qualité & Maintenance',
+        icon: Gauge,
+        color: 'text-rose-500',
+        items: qualityItems,
+        permission: 'access_settings', // Using access_settings for now as a proxy for admin
+        isActive: route().current('admin.coverage.*') || route().current('admin.performance'),
     },
     {
         groupTitle: 'Paramètres',

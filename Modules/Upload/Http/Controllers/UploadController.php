@@ -2,68 +2,55 @@
 
 namespace Modules\Upload\Http\Controllers;
 
-use Illuminate\Contracts\Support\Renderable;
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\Storage;
-use Intervention\Image\Facades\Image;
-use Modules\Upload\Entities\Upload;
 
 class UploadController extends Controller
 {
-
-    public function filepondUpload(Request $request) {
-        $request->validate([
-            'image' => 'required|image|mimes:png,jpeg,jpg'
-        ]);
-
-        if ($request->hasFile('image')) {
-            $uploaded_file = $request->file('image');
-            $filename = now()->timestamp . '.' . $uploaded_file->getClientOriginalExtension();
-            $folder = uniqid() . '-' . now()->timestamp;
-
-            $file = Image::make($uploaded_file)->encode($uploaded_file->getClientOriginalExtension());
-
-            Storage::put('temp/' . $folder . '/' . $filename, $file);
-
-            Upload::create([
-                'folder'   => $folder,
-                'filename' => $filename
-            ]);
-
-            return $folder;
-        }
-
-        return false;
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        return view('upload::index');
     }
 
-
-    public function filepondDelete(Request $request) {
-        $upload = Upload::where('folder', $request->getContent())->first();
-
-        Storage::deleteDirectory('temp/' . $upload->folder);
-        $upload->delete();
-
-        return response(null);
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create()
+    {
+        return view('upload::create');
     }
 
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request $request) {}
 
-    public function dropzoneUpload(Request $request) {
-        $file = $request->file('file');
-
-        $filename = now()->timestamp . '.' . trim($file->getClientOriginalExtension());
-
-        Storage::putFileAs('temp/dropzone/', $file, $filename);
-
-        return response()->json([
-            'name'          => $filename,
-            'original_name' => $file->getClientOriginalName(),
-        ]);
+    /**
+     * Show the specified resource.
+     */
+    public function show($id)
+    {
+        return view('upload::show');
     }
 
-    public function dropzoneDelete(Request $request) {
-        Storage::delete('temp/dropzone/' . $request->file_name);
-
-        return response()->json($request->file_name, 200);
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit($id)
+    {
+        return view('upload::edit');
     }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request $request, $id) {}
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy($id) {}
 }

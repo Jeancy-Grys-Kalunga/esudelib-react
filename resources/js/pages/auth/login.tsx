@@ -82,20 +82,8 @@ export default function Login({ status, canResetPassword, institutions = [], fla
         }
     }, [data.email]);
 
-    const submit: FormEventHandler = async (e) => {
+    const submit: FormEventHandler = (e) => {
         e.preventDefault();
-
-        // ALWAYS fetch fresh CSRF cookie before submitting (especially important after logout)
-        try {
-            await fetch('/sanctum/csrf-cookie', {
-                credentials: 'same-origin',
-            });
-            // Small delay to ensure cookie is properly set in browser
-            await new Promise((resolve) => setTimeout(resolve, 150));
-        } catch (error) {
-            console.error('Failed to fetch CSRF cookie:', error);
-        }
-
         post(route('login'), {
             onFinish: () => reset('password'),
             onError: (errors) => {

@@ -10,14 +10,22 @@ use Modules\Institution\Entities\CourseProgramDetail;
 use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Palmares;
 use Modules\RegistrationDesk\Entities\Inscription;
-use Modules\Student\Database\factories\StudentFactory;
+use Modules\Student\Database\Factories\StudentFactory;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+
 
 
 class Student extends Model implements HasMedia
 {
     use HasFactory, InteractsWithMedia;
+
+    protected $table = 'students';
+
+    protected static function newFactory()
+    {
+        return StudentFactory::new();
+    }
 
     /**
      * The attributes that are mass assignable.

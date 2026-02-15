@@ -14,6 +14,13 @@ class Appeal extends Model implements HasMedia
 {
     use HasFactory, InteractsWithMedia;
 
+    protected static function newFactory()
+    {
+        return \Modules\Student\Database\Factories\AppealFactory::new();
+    }
+
+    protected $table = 'appeals';
+
     /**
      * The attributes that are mass assignable.
      */

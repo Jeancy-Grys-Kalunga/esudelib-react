@@ -251,16 +251,15 @@ class TeacherController extends Controller
         ]);
     }
 
-
-    /**
-     * Affiche la liste des cours attribués à l'enseignant
-     */
     /**
      * Affiche la liste des cours attribués à l'enseignant
      */
     public function courses(Request $request)
     {
         $user = auth()->user();
+
+        // Charge la relation teacher pour éviter le lazy loading
+        $user->load('teacher');
 
         // Vérifier si l'utilisateur a un enseignant associé
         if (!$user->teacher) {
@@ -308,7 +307,6 @@ class TeacherController extends Controller
             'courses' => $courses,
         ]);
     }
-
 
     public function exportStudents(Course $course)
     {
@@ -415,7 +413,7 @@ class TeacherController extends Controller
             ->map(function ($appeal) {
                 return [
                     'id' => $appeal->id,
-                    'object' => json_decode($appeal->objects), // Décoder les objets multiples
+                    'object' => json_decode($appeal->objects),
                     'status' => $appeal->status,
                     'created_at' => $appeal->created_at->format('d/m/Y'),
                     'student' => $appeal->student->name,
@@ -427,8 +425,8 @@ class TeacherController extends Controller
                 ];
             });
 
-        // Marquer les notifications comme lues
-        NotificationService::markAsReadForCourseAppeals($course->id);
+        // ✅ Résolution correcte du service
+        app(\App\Services\NotificationService::class)->markAsReadForCourseAppeals($course->id);
 
         return Inertia::render('teacher/appeals', [
             'appeals' => $appeals,
@@ -643,7 +641,14 @@ class TeacherController extends Controller
      */
     private function isTeacherAssignedToCourse(Course $course): bool
     {
-        return auth()->user()->teacher->courses()
+        $user = auth()->user();
+
+        // Charge la relation teacher si elle n'est pas déjà chargée
+        if (!$user->relationLoaded('teacher')) {
+            $user->load('teacher');
+        }
+
+        return $user->teacher && $user->teacher->courses()
             ->where('course_id', $course->id)
             ->exists();
     }
