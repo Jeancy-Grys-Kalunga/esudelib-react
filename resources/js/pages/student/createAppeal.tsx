@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FileInput } from '@/components/ui/file-input';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,16 +43,35 @@ type AppealItem = {
     documents: File[];
 };
 
+declare global {
+    interface Window {
+        CinetPay: any;
+    }
+}
+
 const CreateAppeal = () => {
     const { props } = usePage<PageProps>();
-    const { courses, appeal_fee, has_pending_payment, payment_reference } = props;
+    const { courses, appeal_fee, has_pending_payment, pending_payment_url, payment_reference } = props;
+    console.log('Props:', props, 'pending_payment_url:', pending_payment_url);
+
+    // Load CinetPay Script
+    useEffect(() => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.cinetpay.com/seamless/main.js';
+        script.async = true;
+        document.body.appendChild(script);
+
+        return () => {
+            document.body.removeChild(script);
+        };
+    }, []);
 
     const [items, setItems] = useState<AppealItem[]>([{ course_id: null, object: '', justification: '', documents: [] }]);
 
     // Payment State
-    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-    const [paymentMethod, setPaymentMethod] = useState<'mobile' | 'card'>('mobile');
-    const [phoneNumber, setPhoneNumber] = useState('');
+    // const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    // const [paymentMethod, setPaymentMethod] = useState<'mobile' | 'card'>('mobile');
+    // const [phoneNumber, setPhoneNumber] = useState('');
     const [isProcessingPayment, setIsProcessingPayment] = useState(false);
     const [paymentStatus, setPaymentStatus] = useState<'idle' | 'pending' | 'success' | 'failed'>('idle');
     const [currentReference, setCurrentReference] = useState<string | null>(payment_reference || null);
@@ -61,7 +80,7 @@ const CreateAppeal = () => {
     useEffect(() => {
         if (has_pending_payment && payment_reference) {
             // setIsPaymentModalOpen(true); // Disabled as per requirement to only show on click
-            setPaymentStatus('pending');
+            // setPaymentStatus('pending');
             setCurrentReference(payment_reference);
         }
     }, [has_pending_payment, payment_reference]);
@@ -109,9 +128,6 @@ const CreateAppeal = () => {
     };
 
     const initiatePayment = async () => {
-        console.log('=== DEBUT initiatePayment ===');
-        console.log('Payment method:', paymentMethod);
-        console.log('Phone number:', phoneNumber);
         console.log('Items:', items);
 
         setIsProcessingPayment(true);
@@ -126,10 +142,10 @@ const CreateAppeal = () => {
             });
         });
 
-        formData.append('payment_method', paymentMethod);
-        if (paymentMethod === 'mobile') {
-            formData.append('phone_number', phoneNumber);
-        }
+        // formData.append('payment_method', 'cinetpay');
+        // if (paymentMethod === 'mobile') {
+        //     formData.append('phone_number', phoneNumber);
+        // }
 
         console.log('FormData prepared, sending request to:', route('student.appeals.store'));
 
@@ -156,13 +172,53 @@ const CreateAppeal = () => {
             }
 
             const data = await response.json();
-            console.log('Response received:', data);
+            console.log('Response received from backend:', data);
 
-            if (data.success) {
-                setCurrentReference(data.reference);
-                setPaymentStatus('pending');
+            if (data.success && data.cinetpay_config) {
+                const { cinetpay_config, customer_info, reference, amount, description } = data;
+
+                setCurrentReference(reference);
+
+                // Hide our loading state as CinetPay widget will appear
                 setIsProcessingPayment(false);
-                console.log('Payment initiated successfully, reference:', data.reference);
+
+                if (window.CinetPay) {
+                    window.CinetPay.setConfig({
+                        apikey: cinetpay_config.apikey,
+                        site_id: cinetpay_config.site_id,
+                        notify_url: cinetpay_config.notify_url,
+                        close_url: cinetpay_config.close_url,
+                    });
+
+                    window.CinetPay.getCheckout({
+                        transaction_id: reference,
+                        amount: amount,
+                        currency: 'CDF',
+                        channels: 'ALL',
+                        description: description,
+                        ...customer_info,
+                    });
+
+                    window.CinetPay.waitResponse(function (response: any) {
+                        console.log('CinetPay waitResponse:', response);
+                        if (response.status === 'ACCEPTED') {
+                            setPaymentStatus('success');
+                            setTimeout(() => (window.location.href = route('student.courses.index')), 2000);
+                        } else {
+                            // Handle other statuses if needed, but usually we wait for final status
+                            // or user closes it.
+                        }
+                    });
+
+                    window.CinetPay.onError(function (error: any) {
+                        console.error('CinetPay onError:', error);
+                        alert('Une erreur est survenue lors du paiement.');
+                        setIsProcessingPayment(false);
+                    });
+                } else {
+                    alert("Erreur: Le module de paiement n'a pas pu être chargé. Veuillez rafraîchir la page.");
+                    setIsProcessingPayment(false);
+                }
             } else {
                 throw new Error(data.message || "Échec de l'initiation du paiement");
             }
@@ -175,6 +231,51 @@ const CreateAppeal = () => {
 
         console.log('=== FIN initiatePayment ===');
     };
+
+    if (has_pending_payment && payment_reference) {
+        return (
+            <AppLayout>
+                <Head title="Paiement en attente" />
+                <div className="container mx-auto px-4 py-8 sm:px-6">
+                    <div className="mx-auto max-w-2xl pt-20">
+                        <Card className="overflow-hidden rounded-2xl border-0 shadow-xl">
+                            <CardContent className="flex flex-col items-center p-12 text-center">
+                                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-yellow-100">
+                                    <AlertCircle className="h-10 w-10 text-yellow-600" />
+                                </div>
+
+                                <h2 className="mb-3 text-2xl font-bold text-gray-800">Paiement en attente</h2>
+
+                                <p className="mb-8 max-w-md text-gray-600">
+                                    Une demande de recours est déjà en cours de traitement pour votre compte. Veuillez finaliser le paiement pour
+                                    valider votre demande.
+                                </p>
+
+                                <div className="space-y-4">
+                                    <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-6 py-3">
+                                        <span className="text-sm font-medium text-indigo-600">Montant à régler</span>
+                                        <div className="text-2xl font-bold text-indigo-700">{appeal_fee} FC</div>
+                                    </div>
+
+                                    <Button
+                                        size="lg"
+                                        className="w-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 sm:w-auto"
+                                        onClick={() => (window.location.href = pending_payment_url)}
+                                    >
+                                        Procéder au paiement
+                                    </Button>
+
+                                    <div className="pt-4">
+                                        <p className="text-xs text-gray-400">Référence: {payment_reference}</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            </AppLayout>
+        );
+    }
 
     return (
         <AppLayout>
@@ -215,7 +316,10 @@ const CreateAppeal = () => {
                                         return;
                                     }
 
-                                    setIsPaymentModalOpen(true);
+                                    // Confirmation avant paiement
+                                    if (window.confirm(`Voulez-vous procéder au paiement de ${appeal_fee} FC pour ces réclamations ?`)) {
+                                        initiatePayment();
+                                    }
                                 }}
                                 className="space-y-6"
                             >
@@ -303,8 +407,14 @@ const CreateAppeal = () => {
                                 </Button>
 
                                 <div className="flex justify-end pt-4">
-                                    <Button type="submit" size="lg" className="bg-indigo-600 text-white shadow-xl hover:bg-indigo-700">
-                                        Passer au paiement ({appeal_fee} FC)
+                                    <Button
+                                        type="submit"
+                                        size="lg"
+                                        disabled={isProcessingPayment}
+                                        className="bg-indigo-600 text-white shadow-xl hover:bg-indigo-700"
+                                    >
+                                        {isProcessingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        {isProcessingPayment ? 'Initialisation...' : `Payer via CinetPay (${appeal_fee} FC)`}
                                     </Button>
                                 </div>
                             </form>
@@ -337,98 +447,27 @@ const CreateAppeal = () => {
                 </div>
             </div>
 
-            {/* Payment Modal */}
-            <Dialog
-                open={isPaymentModalOpen}
-                onOpenChange={(open) => {
-                    if (!isProcessingPayment && paymentStatus !== 'pending') setIsPaymentModalOpen(open);
-                }}
-            >
-                <DialogContent className="sm:max-w-md">
+            <Dialog open={isProcessingPayment || paymentStatus === 'pending' || paymentStatus === 'success'}>
+                <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Paiement Sécurisé</DialogTitle>
-                        <DialogDescription>
-                            Montant total à payer : <span className="font-bold text-indigo-600">{appeal_fee} FC</span>
-                        </DialogDescription>
+                        <DialogTitle>Traitement en cours</DialogTitle>
+                        <DialogDescription>Veuillez patienter...</DialogDescription>
                     </DialogHeader>
-
-                    {paymentStatus === 'success' ? (
-                        <div className="space-y-4 py-6 text-center">
-                            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                                <CheckCircle2 className="h-10 w-10 text-green-600" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900">Paiement Réussi !</h3>
-                            <p className="text-gray-500">Votre réclamation a été enregistrée avec succès.</p>
-                        </div>
-                    ) : paymentStatus === 'pending' ? (
-                        <div className="space-y-6 py-8 text-center">
-                            <div className="relative mx-auto h-20 w-20">
-                                <Loader2 className="h-20 w-20 animate-spin text-indigo-600" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="text-lg font-semibold">En attente de validation</h3>
-                                <p className="mx-auto max-w-xs text-sm text-gray-500">
-                                    Veuillez valider la transaction sur votre téléphone. Ne fermez pas cette fenêtre.
-                                </p>
-                            </div>
-                            <Badge variant="outline" className="animate-pulse">
-                                Vérification automatique...
-                            </Badge>
-                        </div>
-                    ) : (
-                        <div className="space-y-6 py-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div
-                                    className={`cursor-pointer rounded-xl border-2 p-4 text-center transition-all ${paymentMethod === 'mobile' ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}
-                                    onClick={() => setPaymentMethod('mobile')}
-                                >
-                                    <div className="font-semibold text-gray-900">Mobile Money</div>
-                                    <div className="text-xs text-gray-500">M-Pesa, Airtel, Orange</div>
-                                </div>
-                                <div
-                                    className={`cursor-pointer rounded-xl border-2 p-4 text-center transition-all ${paymentMethod === 'card' ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}
-                                    onClick={() => setPaymentMethod('card')}
-                                >
-                                    <div className="font-semibold text-gray-900">Carte Bancaire</div>
-                                    <div className="text-xs text-gray-500">Visa, Mastercard</div>
-                                </div>
-                            </div>
-
-                            {paymentMethod === 'mobile' && (
-                                <div className="space-y-2">
-                                    <Label>Numéro de téléphone</Label>
-                                    <Input placeholder="Ex: 099..." value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
-                                </div>
-                            )}
-
-                            {paymentMethod === 'card' && (
-                                <div className="rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">
-                                    Le paiement par carte sera bientôt disponible.
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    <DialogFooter>
-                        {paymentStatus === 'idle' && (
-                            <Button
-                                className="w-full bg-indigo-600 text-white hover:bg-indigo-700"
-                                onClick={initiatePayment}
-                                disabled={isProcessingPayment || (paymentMethod === 'mobile' && !phoneNumber) || paymentMethod === 'card'}
-                            >
-                                {isProcessingPayment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                {isProcessingPayment ? 'Traitement...' : 'Payer maintennant'}
-                            </Button>
+                    <div className="flex flex-col items-center justify-center space-y-4 py-8">
+                        {paymentStatus === 'success' ? (
+                            <>
+                                <CheckCircle2 className="h-16 w-16 text-green-500" />
+                                <p className="text-lg font-semibold text-green-700">Paiement accepté !</p>
+                            </>
+                        ) : (
+                            <>
+                                <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
+                                {isProcessingPayment
+                                    ? 'Initialisation de la transaction...'
+                                    : 'Veuillez finaliser le paiement dans la fenêtre CinetPay...'}
+                            </>
                         )}
-                        {paymentStatus === 'pending' && (
-                            <div className="mt-2 w-full">
-                                <p className="mb-2 text-center text-xs text-gray-400">Si vous n'avez rien reçu après 30s</p>
-                                <Button variant="outline" className="w-full" onClick={() => window.location.reload()}>
-                                    Actualiser la page
-                                </Button>
-                            </div>
-                        )}
-                    </DialogFooter>
+                    </div>
                 </DialogContent>
             </Dialog>
         </AppLayout>

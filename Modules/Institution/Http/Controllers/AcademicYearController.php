@@ -5,24 +5,38 @@ namespace Modules\Institution\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use Inertia\Inertia;
+use Modules\Institution\Entities\AcademicYear;
 
 class AcademicYearController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        return view('institution::index');
-    }
+        $query = AcademicYear::query();
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        return view('institution::create');
+        if ($request->input('search')) {
+            $query->where('title', 'like', '%' . $request->input('search') . '%');
+        }
+
+        $academicYears = $query->latest()->get();
+
+        return Inertia::render('academic-year/index', [
+            'academicYears' => $academicYears,
+            'filters' => $request->only(['search']),
+            'can' => [
+                'create' => true,
+                'edit' => true,
+                'delete' => true,
+                'access' => true,
+            ],
+            'flash' => [
+                'type' => session('type'),
+                'message' => session('message'),
+            ]
+        ]);
     }
 
     /**
@@ -30,23 +44,18 @@ class AcademicYearController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
-        //
-    }
+        $request->validate([
+            'title' => 'required|string|max:255|unique:academic_years,title',
+        ]);
 
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('institution::show');
-    }
+        AcademicYear::create([
+            'title' => $request->title
+        ]);
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('institution::edit');
+        return redirect()->back()->with([
+            'type' => 'success',
+            'message' => 'Année académique créée avec succès.'
+        ]);
     }
 
     /**
@@ -54,14 +63,33 @@ class AcademicYearController extends Controller
      */
     public function update(Request $request, $id): RedirectResponse
     {
-        //
+        $academicYear = AcademicYear::findOrFail($id);
+
+        $request->validate([
+            'title' => 'required|string|max:255|unique:academic_years,title,' . $id,
+        ]);
+
+        $academicYear->update([
+            'title' => $request->title
+        ]);
+
+        return redirect()->back()->with([
+            'type' => 'success',
+            'message' => 'Année académique mise à jour avec succès.'
+        ]);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy($id)
+    public function destroy($id): RedirectResponse
     {
-        //
+        $academicYear = AcademicYear::findOrFail($id);
+        $academicYear->delete();
+
+        return redirect()->back()->with([
+            'type' => 'success',
+            'message' => 'Année académique supprimée avec succès.'
+        ]);
     }
 }

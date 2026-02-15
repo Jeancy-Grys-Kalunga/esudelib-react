@@ -5,7 +5,7 @@ namespace Modules\Institution\Entities;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Modules\Institution\Database\factories\InstitutionFactory;
+use Modules\Institution\Database\Factories\InstitutionFactory;
 use Modules\Student\Entities\Student;
 use Modules\Teacher\Entities\Teacher;
 use Modules\Institution\Entities\Course;
@@ -17,6 +17,11 @@ class Institution extends Model implements HasMedia
 {
 
     use HasFactory, InteractsWithMedia;
+
+    protected static function newFactory()
+    {
+        return InstitutionFactory::new();
+    }
 
     protected $guarded = [];
 
@@ -74,6 +79,4 @@ class Institution extends Model implements HasMedia
             ->where('user_id', $userId)
             ->first();
     }
-
-    
 }

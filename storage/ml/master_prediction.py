@@ -22,16 +22,16 @@ class MasterPredictionService:
         self.label_encoder = LabelEncoder()
         self.feature_names = []
         
-        # Filières de Master disponibles
+        # Filières de Master disponibles (Liste officielle du modèle)
         self.master_programs = [
-            'Informatique',
-            'Génie Civil',
-            'Électromécanique',
-            'Gestion',
             'Droit',
-            'Économie',
+            'Gestion',
+            'Génie Civil',
+            'Informatique',
             'Médecine',
-            'Sciences Politiques'
+            'Sciences Politiques',
+            'Économie',
+            'Électromécanique'
         ]
         
     def prepare_features(self, data):
@@ -114,7 +114,16 @@ class MasterPredictionService:
         X = []
         y = []
         
+        # Filtrer les données pour ne garder que les filières valides
+        valid_training_data = []
         for data in training_data:
+            if data['actual_master'] in self.master_programs:
+                valid_training_data.append(data)
+                
+        if not valid_training_data:
+            raise ValueError("Aucune donnée d'entraînement valide trouvée (correspondance avec les filières officielles)")
+            
+        for data in valid_training_data:
             features = self.prepare_features(data)
             X.append(features[0])
             y.append(data['actual_master'])
@@ -313,7 +322,10 @@ class MasterPredictionService:
         self.model = model_data['model']
         self.scaler = model_data['scaler']
         self.label_encoder = model_data['label_encoder']
-        self.master_programs = model_data['master_programs']
+        self.label_encoder = model_data['label_encoder']
+        # Utiliser la liste officielle définie dans __init__ ou chargée du modèle si présente
+        if 'master_programs' in model_data:
+            self.master_programs = model_data['master_programs']
 
 
 def load_data(input_arg):

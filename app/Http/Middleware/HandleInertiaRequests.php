@@ -41,8 +41,9 @@ class HandleInertiaRequests extends Middleware
 
         $permissions = [];
         if ($user = $request->user()) {
+            $user->loadMissing('roles.permissions', 'permissions');
             $permissions = $user->hasRole('Super Admin')
-                ? ['*'] 
+                ? ['*']
                 : $user->getAllPermissions()->pluck('name')->toArray();
         }
 

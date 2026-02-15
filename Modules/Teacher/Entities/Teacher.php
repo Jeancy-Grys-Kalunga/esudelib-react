@@ -19,6 +19,13 @@ class Teacher extends Model implements HasMedia
 
     use HasFactory, InteractsWithMedia;
 
+    protected static function newFactory()
+    {
+        return \Modules\Teacher\Database\Factories\TeacherFactory::new();
+    }
+
+    protected $table = 'teachers';
+
     protected $guarded = [];
     public $preventsLazyLoading = true;
 

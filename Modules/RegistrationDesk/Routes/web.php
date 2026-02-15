@@ -8,5 +8,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('registrationdesks', RegistrationDeskController::class)->names('registrationdesk');
     Route::resource('subscriptions', SubscriptionController::class)->names('subscriptions');
     Route::post('subscriptions/import', [SubscriptionController::class, 'import'])->name('subscriptions.import');
+    Route::post('subscriptions/import-general', [SubscriptionController::class, 'importGeneral'])->name('subscriptions.import-general');
+    Route::get('subscriptions/import-progress/{id}', [SubscriptionController::class, 'checkImportProgress'])->name('subscriptions.import-progress');
 });
-

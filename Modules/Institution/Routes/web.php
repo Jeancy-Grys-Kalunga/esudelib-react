@@ -45,6 +45,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 
     Route::resource('assignments', AssignmentController::class, ['except' => ['show']])->names('assignments');
+    Route::post('assignments/auto-assign', [AssignmentController::class, 'autoAssign'])->name('assignments.auto-assign');
 
     Route::post('assignmentsbulk', [AssignmentController::class, 'bulkStore'])->name('assignments.bulk');
     Route::post('/assignments/bulk', [AssignmentController::class, 'storeBulk'])->name('assignments.store.bulk');

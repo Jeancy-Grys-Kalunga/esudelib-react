@@ -327,7 +327,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                         rel="noopener noreferrer"
                         className="underline hover:text-blue-600"
                     >
-                        Jeancy Grys Kalunga
+                        Patrick Masangu
                     </a>
                 </div>
             </div>

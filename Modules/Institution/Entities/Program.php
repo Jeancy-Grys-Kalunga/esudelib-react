@@ -4,11 +4,16 @@ namespace Modules\Institution\Entities;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Modules\Institution\Database\factories\ProgramFactory;
+use Modules\Institution\Database\Factories\ProgramFactory;
 
 class Program extends Model
 {
     use HasFactory;
+
+    protected static function newFactory()
+    {
+        return \Modules\Institution\Database\Factories\ProgramFactory::new();
+    }
 
     /**
      * The attributes that are mass assignable.
@@ -46,7 +51,7 @@ class Program extends Model
     }
 
     // Charger les relations uniquement quand nécessaire
-     public function loadDetails()
+    public function loadDetails()
     {
         return $this->load([
             'courseDetails' => function ($query) {

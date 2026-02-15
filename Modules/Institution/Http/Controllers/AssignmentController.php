@@ -405,7 +405,7 @@ class AssignmentController extends Controller
             );
         } catch (\Exception $e) {
             // Journaliser l'erreur complète
-            \Log::error("Export error: " . $e->getMessage(), [
+            Log::error("Export error: " . $e->getMessage(), [
                 'exception' => $e,
                 'request' => $request->all(),
                 'trace' => $e->getTraceAsString()
@@ -476,9 +476,96 @@ class AssignmentController extends Controller
             . Str::slug($institution->name)
             . '@esudelib.com';
 
-        return "Bonjour {$teacher->name}, "
-            . "vous avez été assigné au cours : $course "
-            . "pour l'année académique $year. "
-            . "Votre email de connexion : $email";
+        return "BONJOUR {$teacher->name}, "
+            . "VOUS AVEZ ETE ASSIGNE AU COURS : $course "
+            . "POUR L'ANNEE ACADEMIQUE $year. "
+            . "VOTRE EMAIL DE CONNEXION : $email";
+    }
+
+    public function autoAssign(Request $request)
+    {
+        if (!auth()->user()->hasPermissionTo('edit_assignments')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $request->validate([
+            'academic_year_id' => 'required|exists:academic_years,id'
+        ]);
+
+        $academicYearId = (int)$request->academic_year_id;
+        $institutionId = $this->getUserInstitutionId();
+
+        // SUPPRESSION des assignations existantes pour cette année et cette institution
+        Assignment::where('academic_year_id', $academicYearId)
+            ->where('institution_id', $institutionId)
+            ->delete();
+
+        $count = 0;
+
+        // 1. Charger les enseignants avec leur spécialité et leur charge actuelle
+        // On initialise la charge à 0 car on vient de tout supprimer (pour cette année)
+        $allTeachers = Teacher::whereNotNull('specialty')
+            ->get()
+            ->map(function ($teacher) {
+                $teacher->current_load = 0;
+                return $teacher;
+            });
+
+        // 2. Récupérer les cours à attribuer
+        $programDetails = CourseProgramDetail::with(['course', 'promotion.faculty'])
+            ->whereHas('promotion', function ($q) use ($institutionId) {
+                $q->where('institution_id', $institutionId);
+            })
+            ->get();
+
+        foreach ($programDetails as $detail) {
+            $faculty = $detail->promotion->faculty;
+            if (!$faculty) continue;
+
+            // 3. Trouver les candidats éligibles
+            $candidates = $allTeachers->filter(function ($teacher) use ($faculty) {
+                return stripos($teacher->specialty, $faculty->title) !== false
+                    || stripos($faculty->title, $teacher->specialty) !== false;
+            });
+
+            if ($candidates->count() < 1) continue;
+
+            // 4. Sélectionner les candidats avec la charge la plus faible
+            // On trie par charge croissante
+            $sortedCandidates = $candidates->sortBy('current_load')->values();
+
+            $holder = $sortedCandidates[0];
+            $collaborator = $sortedCandidates->count() > 1 ? $sortedCandidates[1] : null;
+
+            // 5. Créer l'assignation
+            Assignment::create([
+                'holder_id' => $holder->id,
+                'collaborator_id' => $collaborator ? $collaborator->id : null,
+                'course_id' => $detail->course_id,
+                'academic_year_id' => $academicYearId,
+                'institution_id' => $institutionId,
+                'promotion_id' => $detail->promotion_id,
+                'observation' => 'Attribution automatique'
+            ]);
+
+            // 6. Incrémenter la charge locale
+            // On met à jour la référence dans la collection $allTeachers
+            // (Comme ce sont des objets, la modification se répercute si on a la même référence, 
+            // mais filter() créé une nouvelle collection. Cependant, les éléments sont les mêmes instances d'objets)
+
+            $holder->current_load++;
+            if ($collaborator) {
+                $collaborator->current_load++;
+            }
+
+            $count++;
+        }
+
+        return back()->with([
+            'flash' => [
+                'type' => 'success',
+                'message' => "Réinitialisation et attribution terminées : $count cours attribués."
+            ]
+        ]);
     }
 }

@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Check, ChevronsUpDown, Download, Edit, GraduationCap, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import { BrainCircuit, Check, ChevronsUpDown, Download, Edit, GraduationCap, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -389,7 +389,6 @@ export default function AssignmentManager({
         });
     };
 
-    // Fonction pour gérer l'import
     const handleImportSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!importFile) {
@@ -415,6 +414,37 @@ export default function AssignmentManager({
             },
             forceFormData: true,
         });
+    };
+
+    const handleAutoAssign = () => {
+        if (!can.edit) {
+            toast.error("Vous n'avez pas les permissions nécessaires");
+            return;
+        }
+
+        const yearId = currentAcademicYear !== 'all' ? currentAcademicYear : academic_years.length > 0 ? academic_years[0].id.toString() : null;
+
+        if (!yearId) {
+            toast.error("Veuillez d'abord configurer une année académique");
+            return;
+        }
+
+        if (
+            confirm(
+                "Voulez-vous lancer l'attribution automatique ? \nCette action va assigner les enseignants aux cours non attribués en se basant sur la correspondance Spécialité/Faculté.",
+            )
+        ) {
+            router.post(
+                route('assignments.auto-assign'),
+                {
+                    academic_year_id: yearId,
+                },
+                {
+                    onSuccess: () => toast.success('Attribution automatique terminée'),
+                    onError: () => toast.error("Erreur lors de l'attribution automatique"),
+                },
+            );
+        }
     };
 
     if (!can.access) {
@@ -453,6 +483,10 @@ export default function AssignmentManager({
                         )}
                         {can.edit && (
                             <>
+                                <Button onClick={handleAutoAssign} className="gap-2 bg-emerald-600 shadow-sm hover:bg-emerald-700">
+                                    <BrainCircuit size={16} />
+                                    Auto Assign
+                                </Button>
                                 <Button onClick={exportAssignments} className="gap-2 shadow-sm">
                                     <Download size={16} />
                                     Exporter Excel

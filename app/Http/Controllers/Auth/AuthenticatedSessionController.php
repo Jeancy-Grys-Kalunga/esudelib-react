@@ -1,5 +1,6 @@
 <?php
 
+
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
@@ -7,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -14,6 +16,7 @@ use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Jury;
 use Modules\Institution\Entities\Promotion;
 use Modules\Institution\Entities\AcademicYear;
+
 
 class AuthenticatedSessionController extends Controller
 {
@@ -79,7 +82,7 @@ class AuthenticatedSessionController extends Controller
         }
 
         // Vérifier le mot de passe
-        if (!Auth::attempt($credentials, $request->boolean('remember'))) {
+        if (!Hash::check($credentials['password'], $user->password)) {
             return back()->with([
                 'flash' => [
                     'type' => 'error',
@@ -88,13 +91,12 @@ class AuthenticatedSessionController extends Controller
             ])->withInput($request->except('password'));
         }
 
-        // Déconnecter immédiatement pour gérer la logique métier
-        Auth::logout();
+        // VALIDER LES PERMISSIONS AVANT L'AUTHENTIFICATION
 
         // Super Admin: Pas de vérification d'institution
         if ($user->hasRole('Super Admin')) {
             Auth::login($user, $request->boolean('remember'));
-            $request->session()->regenerate();
+
             return redirect()->intended(route('dashboard'))->with([
                 'flash' => [
                     'type' => 'success',
@@ -103,79 +105,74 @@ class AuthenticatedSessionController extends Controller
             ]);
         }
 
-        // Jury: Vérification des champs spécifiques
+        // Jury: Vérification des champs spécifiques AVANT authentification
         if ($request->boolean('is_jury')) {
-            return $this->handleJuryLogin($request, $user);
-        }
+            // Vérifier les champs obligatoires (Retiré institution_id car masqué en front)
+            if (!$request->academic_year_id || !$request->promotion_id) {
+                return back()->with([
+                    'flash' => [
+                        'type' => 'error',
+                        'message' => 'Pour les jurys, l\'année académique et la promotion sont obligatoires'
+                    ]
+                ])->withInput();
+            }
 
-        // Utilisateur normal: Vérification minimale
-        return $this->handleNormalUserLogin($request, $user);
-    }
+            // Récupérer le profil enseignant (avec fallback par email comme dans le projet de référence)
+            $teacher = $user->teacher ?? \Modules\Teacher\Entities\Teacher::where('email', $user->email)->first();
 
-    protected function handleJuryLogin(Request $request, User $user): RedirectResponse
-    {
-        // Vérification des champs obligatoires pour les jurys
-        if (!$request->institution_id || !$request->academic_year_id || !$request->promotion_id) {
-            return back()->with([
+            if (!$teacher) {
+                return back()->with([
+                    'flash' => [
+                        'type' => 'error',
+                        'message' => 'Aucun profil enseignant associé à ce compte.'
+                    ]
+                ])->withInput();
+            }
+
+            // Vérifier l'appartenance au jury
+            $juryQuery = Jury::where('academic_year_id', $request->academic_year_id)
+                ->where('promotion_id', $request->promotion_id)
+                ->where(function ($query) use ($teacher) {
+                    $query->where('president_id', $teacher->id)
+                        ->orWhere('secretary_id', $teacher->id)
+                        ->orWhere('member_id', $teacher->id);
+                });
+
+            // Si une institution est fournie, on l'utilise pour filtrer davantage
+            if ($request->institution_id) {
+                $juryQuery->where('institution_id', $request->institution_id);
+            }
+
+            $jury = $juryQuery->first();
+
+            if (!$jury) {
+                return back()->with([
+                    'flash' => [
+                        'type' => 'error',
+                        'message' => 'Vous ne faites pas partie du jury pour cette sélection'
+                    ]
+                ])->withInput();
+            }
+
+            // Tout est OK, authentifier
+            Auth::login($user, $request->boolean('remember'));
+            $request->session()->put('jury_context', [
+                'institution_id' => $jury->institution_id, // Utiliser l'id du jury trouvé
+                'academic_year_id' => $request->academic_year_id,
+                'promotion_id' => $request->promotion_id,
+                'jury_id' => $jury->id,
+                'teacher_id' => $teacher->id // Ajout pour usage ultérieur
+            ]);
+
+            return redirect()->intended(route('jury.dashboard'))->with([
                 'flash' => [
-                    'type' => 'error',
-                    'message' => 'Pour les jurys, l\'institution, l\'année académique et la promotion sont obligatoires'
+                    'type' => 'success',
+                    'message' => 'Bienvenue dans l\'espace Jury'
                 ]
-            ])->withInput();
+            ]);
         }
 
-        // Récupérer le profil enseignant de l'utilisateur
-        $teacher = $user->teacher;
-
-        if (!$teacher) {
-            return back()->with([
-                'flash' => [
-                    'type' => 'error',
-                    'message' => 'Aucun profil enseignant associé à ce compte.'
-                ]
-            ])->withInput();
-        }
-
-        // Vérification de l'appartenance au jury
-        $jury = Jury::where('institution_id', $request->institution_id)
-            ->where('academic_year_id', $request->academic_year_id)
-            ->where('promotion_id', $request->promotion_id)
-            ->where(function ($query) use ($teacher) {
-                $query->where('president_id', $teacher->id)
-                    ->orWhere('secretary_id', $teacher->id)
-                    ->orWhere('member_id', $teacher->id);
-            })
-            ->first();
-
-        if (!$jury) {
-            return back()->with([
-                'flash' => [
-                    'type' => 'error',
-                    'message' => 'Vous ne faites pas partie du jury pour cette sélection'
-                ]
-            ])->withInput();
-        }
-
-        Auth::login($user, $request->boolean('remember'));
-        $request->session()->put('jury_context', [
-            'institution_id' => $request->institution_id,
-            'academic_year_id' => $request->academic_year_id,
-            'promotion_id' => $request->promotion_id,
-            'jury_id' => $jury->id
-        ]);
-
-        $request->session()->regenerate();
-        return redirect()->intended(route('jury.dashboard'))->with([
-            'flash' => [
-                'type' => 'success',
-                'message' => 'Bienvenue dans l\'espace Jury'
-            ]
-        ]);
-    }
-
-    protected function handleNormalUserLogin(Request $request, User $user): RedirectResponse
-    {
-        // Vérification institution uniquement
+        // Utilisateur normal: Vérification institution AVANT authentification
         if (!$request->institution_id) {
             return back()->with([
                 'flash' => [
@@ -185,10 +182,10 @@ class AuthenticatedSessionController extends Controller
             ])->withInput();
         }
 
-        // Vérifier l'accès via la table pivot ou via le profil étudiant/enseignant
+        // Vérifier l'accès à l'institution
         $hasAccess = false;
 
-        // 1. Vérification via la table pivot (utilisateurs administratifs/standard)
+        // 1. Vérification via la table pivot
         if ($user->institutions()->where('institutions.id', $request->institution_id)->exists()) {
             $hasAccess = true;
         }
@@ -220,8 +217,9 @@ class AuthenticatedSessionController extends Controller
             ])->withInput();
         }
 
+        // Tout est OK, authentifier
         Auth::login($user, $request->boolean('remember'));
-        $request->session()->regenerate();
+
         return redirect()->intended(route('dashboard'))->with([
             'flash' => [
                 'type' => 'success',
@@ -229,6 +227,8 @@ class AuthenticatedSessionController extends Controller
             ]
         ]);
     }
+
+
 
     /**
      * Destroy an authenticated session.
@@ -240,11 +240,12 @@ class AuthenticatedSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/')->with([
+        // Force a full page reload to get fresh CSRF token
+        return redirect('/login')->with([
             'flash' => [
                 'type' => 'success',
                 'message' => 'Vous êtes déconnecté avec succès'
             ]
-        ]);
+        ])->header('X-Inertia-Location', url('/login'));
     }
 }

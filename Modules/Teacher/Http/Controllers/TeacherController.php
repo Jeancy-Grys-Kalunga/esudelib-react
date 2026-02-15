@@ -116,6 +116,7 @@ class TeacherController extends Controller
         ]);
     }
 
+
     public function store(StoreTeacherRequest $request)
     {
         if (! auth()->user()->hasPermissionTo('create_teachers')) {
@@ -141,6 +142,38 @@ class TeacherController extends Controller
                 'message' => 'Enseignant enregistré avec succès !',
             ],
         ]);
+    }
+
+    public function import(Request $request)
+    {
+        if (! auth()->user()->hasPermissionTo('create_teachers')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls',
+            'institution_id' => 'required|exists:institutions,id',
+        ]);
+
+        try {
+            Excel::import(new \App\Imports\TeacherImport($request->institution_id), $request->file('file'));
+
+            $summary = session('import_summary') ?? '';
+
+            return redirect()->back()->with([
+                'flash' => [
+                    'type'    => 'success',
+                    'message' => 'Importation terminée. ' . $summary,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return redirect()->back()->with([
+                'flash' => [
+                    'type'    => 'error',
+                    'message' => 'Erreur lors de l\'importation : ' . $e->getMessage(),
+                ],
+            ]);
+        }
     }
 
 
@@ -218,7 +251,6 @@ class TeacherController extends Controller
         ]);
     }
 
-
     /**
      * Affiche la liste des cours attribués à l'enseignant
      */
@@ -226,39 +258,48 @@ class TeacherController extends Controller
     {
         $user = auth()->user();
 
+        // Charge la relation teacher pour éviter le lazy loading
+        $user->load('teacher');
+
         // Vérifier si l'utilisateur a un enseignant associé
         if (!$user->teacher) {
             abort(403, "Vous n'êtes pas associé à un enseignant");
         }
 
-        // Récupérer les cours de l'enseignant avec les détails du programme et de la catégorie
-        $courses = Course::select(
-            'courses.id',
-            'courses.title',
-            'course_program_details.cm',
-            'course_program_details.td',
-            'course_program_details.tp',
-            'course_program_details.credits',
-            'course_categories.name as category_name',
-            'programs.name as program'
-        )
-            ->join('course_program_details', 'courses.id', '=', 'course_program_details.course_id')
-            ->join('course_categories', 'course_program_details.course_category_id', '=', 'course_categories.id')
-            ->join('programs', 'course_program_details.program_id', '=', 'programs.id')
-            ->whereIn('courses.id', $user->teacher->courses()->pluck('courses.id'))
+        // Récupérer tous les cours assignés à l'enseignant
+        $assignedCourseIds = $user->teacher->courses()->pluck('courses.id');
+
+        // Récupérer les détails des cours avec eager loading
+        $courses = Course::with(['courseProgramDetails.program', 'courseProgramDetails.category'])
+            ->whereIn('id', $assignedCourseIds)
             ->get()
             ->map(function ($course) {
+                // Utiliser la méthode helper pour trouver la bonne promotion assignée
+                $promotion = $this->getAssignedPromotion($course);
+
+                // Trouver le détail du programme correspondant à cette promotion
+                $detail = null;
+                if ($promotion) {
+                    $detail = $course->courseProgramDetails->where('promotion_id', $promotion->id)->first();
+                }
+
+                // Si on ne trouve pas (fallback), on prend le premier (comportement existant au cas où)
+                if (!$detail) {
+                    $detail = $course->courseProgramDetails->first();
+                }
+
                 return [
                     'id' => $course->id,
                     'title' => $course->title,
-                    'cm' => $course->cm,
-                    'td' => $course->td,
-                    'tp' => $course->tp,
-                    'credits' => $course->credits,
-                    'program' => $course->program,
-                    'category_name' => $course->category_name,
-                    'student_count' => Course::find($course->id)->students()->count(),
-                    'appeals_count' => Course::find($course->id)->appeals()->count(),
+                    'cm' => $detail ? $detail->cm : 0,
+                    'td' => $detail ? $detail->td : 0,
+                    'tp' => $detail ? $detail->tp : 0,
+                    'credits' => $detail ? $detail->credits : 0,
+                    'program' => $detail && $detail->program ? $detail->program->name : 'Non défini',
+                    'category_name' => $detail && $detail->category ? $detail->category->name : 'Non défini',
+                    'promotion' => $promotion ? $promotion->title : ($detail && $detail->promotion ? $detail->promotion->title : 'Non défini'),
+                    'student_count' => $course->students()->count(),
+                    'appeals_count' => $course->appeals()->count(),
                 ];
             });
 
@@ -266,7 +307,6 @@ class TeacherController extends Controller
             'courses' => $courses,
         ]);
     }
-
 
     public function exportStudents(Course $course)
     {
@@ -296,13 +336,12 @@ class TeacherController extends Controller
         }
 
         $institutionId = auth()->user()->teacher->institutions()->first()->id;
-        $courseProgramDetail = $course->courseProgramDetails()->first();
-        $promotion = $courseProgramDetail ? $courseProgramDetail->promotion : null;
+        $promotion = $this->getAssignedPromotion($course);
 
         return Inertia::render('teacher/submitGrades', [
             'course' => $course->only('id', 'title'),
             'academicYears' => AcademicYear::all(['id', 'title']),
-            'promotions' => $promotion ? ['id' => $promotion->id, 'title' => $promotion->title] : null,
+            'promotions' => $promotion ? [['id' => $promotion->id, 'title' => $promotion->title]] : [],
             'examSessions' => ExamSession::where('institution_id', $institutionId)
                 ->get(['id', 'title', 'status', 'acceptance_rate']),
         ]);
@@ -374,7 +413,7 @@ class TeacherController extends Controller
             ->map(function ($appeal) {
                 return [
                     'id' => $appeal->id,
-                    'object' => json_decode($appeal->objects), // Décoder les objets multiples
+                    'object' => json_decode($appeal->objects),
                     'status' => $appeal->status,
                     'created_at' => $appeal->created_at->format('d/m/Y'),
                     'student' => $appeal->student->name,
@@ -386,8 +425,8 @@ class TeacherController extends Controller
                 ];
             });
 
-        // Marquer les notifications comme lues
-        NotificationService::markAsReadForCourseAppeals($course->id);
+        // ✅ Résolution correcte du service
+        app(\App\Services\NotificationService::class)->markAsReadForCourseAppeals($course->id);
 
         return Inertia::render('teacher/appeals', [
             'appeals' => $appeals,
@@ -405,10 +444,9 @@ class TeacherController extends Controller
         }
 
         $institutionId = auth()->user()->teacher->institutions()->first()->id;
-        
-        // Récupérer la promotion associée au cours
-        $courseProgramDetail = $course->courseProgramDetails()->first();
-        $promotion = $courseProgramDetail ? $courseProgramDetail->promotion : null;
+
+        // Récupérer la promotion associée au cours (via l'assignation de l'enseignant)
+        $promotion = $this->getAssignedPromotion($course);
 
         return Inertia::render('teacher/online-editor', [
             'course' => $course->only('id', 'title', 'code'),
@@ -440,13 +478,13 @@ class TeacherController extends Controller
                 'errors' => $validator->errors()
             ], 422);
         }
-        
+
         // Récupérer la promotion du cours
-        $courseProgramDetail = $course->courseProgramDetails()->first();
-        if (!$courseProgramDetail) {
+        $promotion = $this->getAssignedPromotion($course);
+        if (!$promotion) {
             return response()->json(['error' => 'Ce cours n\'est associé à aucune promotion.'], 404);
         }
-        $promotionId = $courseProgramDetail->promotion_id;
+        $promotionId = $promotion->id;
 
         $academicYearId = $request->input('academic_year_id');
         $examSessionId = $request->input('exam_session_id');
@@ -486,11 +524,11 @@ class TeacherController extends Controller
         }
 
         // Récupérer la promotion du cours
-        $courseProgramDetail = $course->courseProgramDetails()->first();
-        if (!$courseProgramDetail) {
+        $promotion = $this->getAssignedPromotion($course);
+        if (!$promotion) {
             return response()->json(['error' => 'Ce cours n\'est associé à aucune promotion.'], 404);
         }
-        $promotionId = $courseProgramDetail->promotion_id;
+        $promotionId = $promotion->id;
 
         // Validation des données
         $validator = Validator::make($request->all(), [
@@ -519,7 +557,7 @@ class TeacherController extends Controller
             return back()->with([
                 'flash' => [
                     'type' => 'error',
-                'message' => 'La session d\'examen est fermée. Vous ne pouvez pas soumettre de notes.'
+                    'message' => 'La session d\'examen est fermée. Vous ne pouvez pas soumettre de notes.'
                 ],
             ]);
         }
@@ -531,11 +569,20 @@ class TeacherController extends Controller
         $updatedStudents = [];
 
         foreach ($request->grades as $grade) {
+            $studentId = $grade['student_id'];
+
+            // Rechercher la promotion réelle de l'étudiant via son inscription
+            $inscription = \Modules\RegistrationDesk\Entities\Inscription::where('student_id', $studentId)
+                ->where('academic_year_id', $request->academic_year_id)
+                ->first();
+
+            $targetPromotionId = $inscription ? $inscription->promotion_id : $promotionId;
+
             $existingNote = DB::table('notes')
                 ->where('course_id', $course->id)
-                ->where('student_id', $grade['student_id'])
+                ->where('student_id', $studentId)
                 ->where('academic_year_id', $request->academic_year_id)
-                ->where('promotion_id', $promotionId) // Utiliser la promotion du cours
+                ->where('promotion_id', $targetPromotionId) // Utiliser la promotion correcte
                 ->where('exam_session_id', $request->exam_session_id)
                 ->first();
 
@@ -557,9 +604,9 @@ class TeacherController extends Controller
                 // Création si nouvelle note
                 DB::table('notes')->insert(array_merge([
                     'course_id' => $course->id,
-                    'student_id' => $grade['student_id'],
+                    'student_id' => $studentId,
                     'academic_year_id' => $request->academic_year_id,
-                    'promotion_id' => $promotionId, // Utiliser la promotion du cours
+                    'promotion_id' => $targetPromotionId, // Utiliser la promotion correcte
                     'exam_session_id' => $request->exam_session_id,
                     'created_at' => now(),
                 ], $data));
@@ -584,9 +631,8 @@ class TeacherController extends Controller
 
         return response()->json([
             'type' => 'success',
-            'message' => 'Modifications enregistrées avec succès!',
-            'students' => $updatedStudents,
-            'success_rate' => round($successRate, 2)
+            'message' => 'Notes sauvegardées avec succès',
+            'students' => $updatedStudents
         ]);
     }
 
@@ -595,7 +641,14 @@ class TeacherController extends Controller
      */
     private function isTeacherAssignedToCourse(Course $course): bool
     {
-        return auth()->user()->teacher->courses()
+        $user = auth()->user();
+
+        // Charge la relation teacher si elle n'est pas déjà chargée
+        if (!$user->relationLoaded('teacher')) {
+            $user->load('teacher');
+        }
+
+        return $user->teacher && $user->teacher->courses()
             ->where('course_id', $course->id)
             ->exists();
     }
@@ -720,6 +773,27 @@ class TeacherController extends Controller
                 $teacher->addMedia(storage_path("app/public/temp/dropzone/$file"))
                     ->toMediaCollection('images')
             );
+    }
+
+    private function getAssignedPromotion(Course $course)
+    {
+        $teacher = auth()->user()->teacher;
+
+        // Chercher l'assignation (titulaire ou collaborateur)
+        $assignment = \Modules\Institution\Entities\Assignment::where('course_id', $course->id)
+            ->where(function ($query) use ($teacher) {
+                $query->where('holder_id', $teacher->id)
+                    ->orWhere('collaborator_id', $teacher->id);
+            })
+            ->first();
+
+        if ($assignment && $assignment->promotion) {
+            return $assignment->promotion;
+        }
+
+        // Fallback si pas de promotion explicite dans l'assignation (ancien comportement)
+        $detail = $course->courseProgramDetails()->first();
+        return $detail ? $detail->promotion : null;
     }
 
     private function getFlashMessages()

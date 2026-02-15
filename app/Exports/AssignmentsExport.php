@@ -30,16 +30,30 @@ class AssignmentsExport implements FromCollection, WithHeadings, WithMapping, Sh
         $semester = 'Non défini';
         $cm = $td = $tp = $credits = 0;
 
-        // Accéder aux détails si disponibles
+        // Check for course program details that match the assignment's promotion first
         if ($assignment->course && $assignment->course->courseProgramDetails->isNotEmpty()) {
-            $details = $assignment->course->courseProgramDetails->first();
 
-            $promotion = $details->promotion->title ?? 'Non défini';
-            $semester = $details->semestre->title ?? 'Non défini';
-            $cm = $details->cm ?? 0;
-            $td = $details->td ?? 0;
-            $tp = $details->tp ?? 0;
-            $credits = $details->credits ?? 0;
+            // Try to find the detail specifically for this assignment's promotion
+            $details = $assignment->course->courseProgramDetails->first(function ($detail) use ($assignment) {
+                return $detail->promotion_id == $assignment->promotion_id;
+            });
+
+            // Fallback to first if not found (though logic suggests it should be there if promotion_id matches)
+            if (!$details) {
+                $details = $assignment->course->courseProgramDetails->first();
+            }
+
+            if ($details) {
+                $promotion = $details->promotion->title ?? ($assignment->promotion ? $assignment->promotion->title : 'Non défini');
+                $semester = $details->semestre->title ?? 'Non défini';
+                $cm = $details->cm ?? 0;
+                $td = $details->td ?? 0;
+                $tp = $details->tp ?? 0;
+                $credits = $details->credits ?? 0;
+            }
+        } elseif ($assignment->promotion) {
+            // Fallback if no course details but promotion exists
+            $promotion = $assignment->promotion->title;
         }
 
         return [

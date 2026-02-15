@@ -10,14 +10,22 @@ use Modules\Institution\Entities\CourseProgramDetail;
 use Modules\Institution\Entities\Institution;
 use Modules\Institution\Entities\Palmares;
 use Modules\RegistrationDesk\Entities\Inscription;
-use Modules\Student\Database\factories\StudentFactory;
+use Modules\Student\Database\Factories\StudentFactory;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+
 
 
 class Student extends Model implements HasMedia
 {
     use HasFactory, InteractsWithMedia;
+
+    protected $table = 'students';
+
+    protected static function newFactory()
+    {
+        return StudentFactory::new();
+    }
 
     /**
      * The attributes that are mass assignable.
@@ -148,11 +156,11 @@ class Student extends Model implements HasMedia
             return 'AJ';
         } else {
             if ($average >= 18) return 'A';
-            if ($average >= 16) return 'B';
-            if ($average >= 14) return 'C';
-            if ($average >= 12) return 'D';
-            if ($average >= 10) return 'E';
-            if ($average >= 8) return 'F';
+            if ($average <  18 && $average >= 16) return 'B';
+            if ($average < 16 && $average >= 14) return 'C';
+            if ($average < 14 && $average >= 12) return 'D';
+            if ($average < 12 && $average >= 10) return 'E';
+            if ($average < 10 && $average >= 8) return 'F';
             return 'G';
         }
     }
@@ -160,23 +168,17 @@ class Student extends Model implements HasMedia
     /**
      * Calcule la mention
      */
-    public function calculateMention(string $decision, $notes): string
+    public function calculateMention(string $decision, $notes, float $average): string
     {
-        $allPassed = true;
-        foreach ($notes as $note) {
-            if ($note->cote !== null && $note->cote < 10) {
-                $allPassed = false;
-                break;
-            }
-        }
+        // Mapping des mentions basé sur la moyenne (LMD standard)
+        if ($average >= 18) return 'Excellent';
+        if ($average <  18 && $average >= 16) return 'Très bien';
+        if ($average < 16 && $average >= 14) return 'Bien';
+        if ($average < 14 && $average >= 12) return 'Assez bien';
+        if ($average < 12 && $average >= 10) return 'Passable';
+        if ($average < 10 && $average >= 8) return 'Insatisfaisant';
 
-        if ($decision === 'DEF') {
-            return 'DEF';
-        } elseif (in_array($decision, ['F', 'G', 'AJ'])) {
-            return 'AJ';
-        } else {
-            return $allPassed ? 'Admis' : 'Comp';
-        }
+        return 'Ajourné';
     }
 
     // Helper pour calculer les besoins et réserves
@@ -186,20 +188,9 @@ class Student extends Model implements HasMedia
         $need = 0;
 
         foreach ($notes as $note) {
-            $credits = $creditsMap[$note->course_id] ?? 0;
             if ($note->cote !== null) {
                 if ($note->cote > 10) {
-                    $reserve += ($note->cote - 10); // Note: Logique originale était sans pondération pour reserve/need dans le controller initial?
-                    // Attends, le controller initial avait:
-                    // $reserve += ($note->cote - 10); (Ligne 85) -> Pas de multiplication par crédits?
-                    // $sommeNotesPonderees += $note->cote * $credits; (Ligne 81)
-                    // Vérifions ApplyEqualization: $reserve += ($note->cote - 10) * $credits; (Ligne 488) logic globale.
-                    // C'est incohérent. Pour l'affichage "Réserve/Besoin", le contrôleur faisait une somme simple.
-                    // Mais pour la peréquation, il fait une somme pondérée.
-                    // Je vais garder la logique d'affichage simple pour l'instant pour ne pas changer l'UI,
-                    // ou devrais-je corriger? Le user a dit "les valeurs de décision et de mention ne sont pas correcte".
-                    // Il n'a pas mentionné reserve/need explicitement mais ça fait partie du tableau.
-                    // Je vais garder la logique simple (somme des points au dessus/dessous de 10) comme dans le controller original pour l'affichage gridData.
+                    $reserve += ($note->cote - 10);
                 } elseif ($note->cote < 10) {
                     $need += (10 - $note->cote);
                 }

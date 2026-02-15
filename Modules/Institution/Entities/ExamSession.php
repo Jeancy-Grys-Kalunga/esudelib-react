@@ -4,12 +4,16 @@ namespace Modules\Institution\Entities;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ExamSession extends Model
 {
     use HasFactory;
+
+    protected static function newFactory()
+    {
+        return \Modules\Institution\Database\Factories\ExamSessionFactory::new();
+    }
 
     /**
      * The attributes that are mass assignable.

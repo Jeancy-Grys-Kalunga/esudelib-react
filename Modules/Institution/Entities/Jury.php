@@ -12,6 +12,11 @@ class Jury extends Model
 {
     use HasFactory;
 
+    protected static function newFactory()
+    {
+        return \Modules\Institution\Database\Factories\JuryFactory::new();
+    }
+
     /**
      * The attributes that are mass assignable.
      */
