@@ -210,20 +210,59 @@ class JuryService
                 }]);
             }])->get();
 
+        // Pré-charger cm, td, tp depuis course_program_details pour cette promotion
+        $programDetails = DB::table('course_program_details')
+            ->where('promotion_id', $promotion->id)
+            ->select('course_id', 'cm', 'td', 'tp', 'credits')
+            ->get()
+            ->keyBy('course_id');
+
         $allCourses = $allTeachingUnits->flatMap(function ($unit) {
             return $unit->courses->map(function ($course) use ($unit) {
                 $course->unit_teaching_id = $unit->id;
                 return $course;
             });
-        })->each(function ($course) use ($coursesWithCredits) {
-            $course->credit = $coursesWithCredits[$course->id] ?? 0;
-        });
+        })->unique('id') // Dédupliquer par ID de cours
+            ->each(function ($course) use ($coursesWithCredits, $programDetails) {
+                $course->credit = $coursesWithCredits[$course->id] ?? 0;
+                $detail = $programDetails->get($course->id);
+                $course->cm = $detail ? ($detail->cm ?? 0) : 0;
+                $course->td = $detail ? ($detail->td ?? 0) : 0;
+                $course->tp = $detail ? ($detail->tp ?? 0) : 0;
+            });
+
+        // Ajouter les cours présents dans les notes des étudiants mais absents des UEs
+        $existingCourseIds = $allCourses->pluck('id')->toArray();
+        $coursesFromNotes = DB::table('notes')
+            ->where('academic_year_id', $context['academic_year_id'])
+            ->where('promotion_id', $context['promotion_id'])
+            ->whereNotIn('course_id', $existingCourseIds)
+            ->join('courses', 'notes.course_id', '=', 'courses.id')
+            ->select('courses.id', 'courses.title')
+            ->distinct()
+            ->get();
+
+        foreach ($coursesFromNotes as $c) {
+            $detail = $programDetails->get($c->id);
+            $allCourses->push((object) [
+                'id' => $c->id,
+                'title' => $c->title,
+                'unit_teaching_id' => null,
+                'credit' => $coursesWithCredits[$c->id] ?? 0,
+                'cm' => $detail ? ($detail->cm ?? 0) : 0,
+                'td' => $detail ? ($detail->td ?? 0) : 0,
+                'tp' => $detail ? ($detail->tp ?? 0) : 0,
+            ]);
+        }
 
         $gridData = [
             'courses' => $allCourses->map(fn($c) => [
                 'id' => $c->id,
                 'title' => $c->title,
-                'credit' => $c->credit
+                'credit' => $c->credit,
+                'cm' => $c->cm,
+                'td' => $c->td,
+                'tp' => $c->tp,
             ]),
             'students' => []
         ];
@@ -314,62 +353,123 @@ class JuryService
      */
     public function getStudentHistory(Student $student): array
     {
+        // Récupérer toutes les inscriptions de l'étudiant, ordonnées par année
         $inscriptions = Inscription::with(['academicYear', 'promotion'])
             ->where('student_id', $student->id)
             ->orderBy('academic_year_id', 'asc')
             ->get();
 
         $history = [];
-        $passedCourses = [];
+        $passedCourseIds = [];
         $complementaryCourses = [];
-        $processedCourses = [];
 
         foreach ($inscriptions as $inscription) {
             $academicYear = $inscription->academicYear;
             $promotion = $inscription->promotion;
 
-            $courses = DB::table('course_program_details')
+            if (!$academicYear || !$promotion) continue;
+
+            // Récupérer les notes de l'étudiant pour cette inscription (année + promotion)
+            $notes = Note::where('student_id', $student->id)
+                ->where('academic_year_id', $academicYear->id)
                 ->where('promotion_id', $promotion->id)
-                ->join('courses', 'course_program_details.course_id', '=', 'courses.id')
-                ->select('courses.id', 'courses.title', 'credits')
-                ->distinct()
+                ->with('course')
                 ->get();
 
-            $coursesWithNotes = [];
-            foreach ($courses as $course) {
-                $courseKey = $course->id . '-' . $academicYear->id;
+            // Si pas de notes pour cette inscription, récupérer les cours via course_program_details
+            if ($notes->isEmpty()) {
+                $courses = DB::table('course_program_details')
+                    ->where('promotion_id', $promotion->id)
+                    ->join('courses', 'course_program_details.course_id', '=', 'courses.id')
+                    ->select('courses.id', 'courses.title', 'course_program_details.cm', 'course_program_details.td', 'course_program_details.tp')
+                    ->distinct()
+                    ->get();
 
-                if (isset($processedCourses[$courseKey])) {
-                    continue;
+                $coursesWithNotes = $courses->map(function ($course) {
+                    // Calcul des crédits : (CM + TD + TP) / 15
+                    $credits = (($course->cm ?? 0) + ($course->td ?? 0) + ($course->tp ?? 0)) / 15;
+                    return [
+                        'id' => $course->id,
+                        'title' => $course->title,
+                        'credits' => round($credits, 2),
+                        'note' => null,
+                        'passed' => false,
+                    ];
+                })->toArray();
+            } else {
+                $coursesWithNotes = [];
+                $seenCourseIds = []; // Pour éviter les doublons
+
+                // Pré-charger les volumes horaires pour cette promotion et calculer (CM+TD+TP)/15
+                $programDetails = DB::table('course_program_details')
+                    ->where('promotion_id', $promotion->id)
+                    ->select('course_id', 'cm', 'td', 'tp')
+                    ->get()
+                    ->keyBy('course_id');
+
+                // Fallback : si aucun détail pour cette promotion, charger tous les détails
+                if ($programDetails->isEmpty()) {
+                    $programDetails = DB::table('course_program_details')
+                        ->select('course_id', 'cm', 'td', 'tp')
+                        ->get()
+                        ->keyBy('course_id');
                 }
 
-                $processedCourses[$courseKey] = true;
-
-                $note = Note::where('student_id', $student->id)
-                    ->where('academic_year_id', $academicYear->id)
-                    ->where('course_id', $course->id)
-                    ->first();
-
-                $passed = $note && $note->cote >= 10;
-                $courseData = [
-                    'id' => $course->id,
-                    'title' => $course->title,
-                    'credits' => $course->credits,
-                    'note' => $note ? $note->cote : null,
-                    'passed' => $passed,
-                ];
-
-                $coursesWithNotes[] = $courseData;
-
-                if ($passed) {
-                    $passedCourses[$course->id] = true;
-                    if (isset($complementaryCourses[$course->id])) {
-                        unset($complementaryCourses[$course->id]);
+                // Si un cours apparaît deux fois, garder la meilleure note (la plus haute)
+                $bestNotes = [];
+                foreach ($notes as $note) {
+                    if (!$note->course) continue;
+                    $cid = $note->course_id;
+                    if (!isset($bestNotes[$cid]) || ($note->cote !== null && ($bestNotes[$cid]->cote === null || $note->cote > $bestNotes[$cid]->cote))) {
+                        $bestNotes[$cid] = $note;
                     }
                 }
 
-                if (!$passed && !isset($passedCourses[$course->id]) && !isset($complementaryCourses[$course->id])) {
-                    $complementaryCourses[$course->id] = $courseData;
+                foreach ($bestNotes as $note) {
+                    // Calcul des crédits : (CM + TD + TP) / 15
+                    $detail = $programDetails->get($note->course_id);
+
+                    if ($detail) {
+                        $cm = $detail->cm ?? 0;
+                        $td = $detail->td ?? 0;
+                        $tp = $detail->tp ?? 0;
+
+                        // Si pas de volumes horaires définis, utiliser les valeurs par défaut
+                        if ($cm == 0 && $td == 0 && $tp == 0) {
+                            $cm = 30;
+                            $td = 15;
+                            $tp = 15;
+                            // Mettre à jour la ligne dans la base avec les valeurs par défaut
+                            DB::table('course_program_details')
+                                ->where('course_id', $note->course_id)
+                                ->where('promotion_id', $promotion->id)
+                                ->update(['cm' => $cm, 'td' => $td, 'tp' => $tp, 'credits' => round(($cm + $td + $tp) / 15, 2)]);
+                        }
+
+                        $credits = round(($cm + $td + $tp) / 15, 2);
+                    } else {
+                        // Pas de détail du tout : valeurs par défaut
+                        $credits = round((30 + 15 + 15) / 15, 2); // = 4
+                    }
+
+                    $passed = $note->cote !== null && $note->cote >= 10;
+
+                    $courseData = [
+                        'id' => $note->course->id,
+                        'title' => $note->course->title,
+                        'credits' => (float) $credits,
+                        'note' => $note->cote,
+                        'passed' => $passed,
+                    ];
+
+                    $coursesWithNotes[] = $courseData;
+
+                    if ($passed) {
+                        $passedCourseIds[$note->course_id] = true;
+                        unset($complementaryCourses[$note->course_id]);
+                    } elseif (!isset($passedCourseIds[$note->course_id]) && !isset($complementaryCourses[$note->course_id])) {
+                        $complementaryCourses[$note->course_id] = $courseData;
+                    }
                 }
             }
 
