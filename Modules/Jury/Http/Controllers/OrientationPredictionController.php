@@ -188,6 +188,49 @@ class OrientationPredictionController extends Controller
     }
 
     /**
+     * Sauvegarde les variables prédictives personnalisées pour un étudiant
+     */
+    public function savePredictiveVariables(Request $request, $studentId)
+    {
+        try {
+            $validated = $request->validate([
+                'provenance' => 'required|string',
+                'intention' => 'required|string',
+            ]);
+
+            $student = Student::findOrFail($studentId);
+
+            // Mettre à jour ou créer l'entrée de prédiction avec les variables manuelles
+            $prediction = MasterPrediction::updateOrCreate(
+                ['student_id' => $student->id],
+                [
+                    'provenance' => $validated['provenance'],
+                    'intention_expressed' => $validated['intention'],
+                    // On ne réinitialise pas le reste pour garder l'état si déjà prédit
+                ]
+            );
+
+            // Relancer la prédiction automatiquement pour voir l'impact
+            $result = $this->predictionService->predictForStudent($student);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Variables mises à jour et nouvelle prédiction générée',
+                'data' => $result
+            ]);
+        } catch (Exception $e) {
+            Log::error('Erreur savePredictiveVariables pour l\'étudiant ' . $studentId . ': ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+            return response()->json([
+                'success' => false,
+                'error' => 'Erreur lors de la sauvegarde : ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Génère le dataset d'entraînement
      */
     public function generateDataset()

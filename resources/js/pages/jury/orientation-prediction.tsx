@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -13,16 +14,17 @@ import axios, { AxiosError } from 'axios';
 import {
     AlertTriangle,
     ArrowRight,
-    Award,
     BarChart3,
     BookOpen,
     BrainCircuit,
     Check,
     Cpu,
     Download,
+    Edit2,
     FileText,
     GraduationCap,
     Info,
+    Loader2,
     RefreshCw,
     Sparkles,
     Target,
@@ -49,6 +51,8 @@ interface MasterPrediction {
     predicted_master: string;
     confidence_score: number;
     predicted_at: string;
+    provenance?: string; // Added for predictive variables
+    intention_expressed?: string; // Added for predictive variables
     prediction_details?: {
         all_probabilities: Record<string, number>;
         top_3_programs: Array<[string, number]>;
@@ -101,17 +105,28 @@ interface PredictionData {
     top_3_programs: [string, number][];
     all_probabilities: Record<string, number>;
     predicted_at: string;
+    provenance?: string;
+    intention_expressed?: string;
     explanation?: PredictionExplanation;
 }
 
 interface PredictionResponse {
     success: boolean;
-    student: {
+    student?: {
         id: number;
         name: string;
         matricule: string;
     };
-    prediction: PredictionData;
+    prediction?: PredictionData;
+    data?: {
+        success: boolean;
+        student: {
+            id: number;
+            name: string;
+            matricule: string;
+        };
+        prediction: PredictionData;
+    };
 }
 
 interface OrientationPredictionProps {
@@ -134,7 +149,7 @@ interface ModelStatus {
 
 export default function OrientationPrediction({ academicYear, promotion, students, stats }: OrientationPredictionProps) {
     const [predictions, setPredictions] = useState<Record<number, PredictionResponse>>({});
-    const [loading, setLoading] = useState<Record<number, boolean>>({});
+    const [loadingPredictions, setLoadingPredictions] = useState<Record<number, boolean>>({}); // Renamed from 'loading'
     const [activeStudent, setActiveStudent] = useState<number | null>(null);
     const [isTraining, setIsTraining] = useState(false);
     const [isBatchPredicting, setIsBatchPredicting] = useState(false);
@@ -144,6 +159,17 @@ export default function OrientationPrediction({ academicYear, promotion, student
     const [exporting, setExporting] = useState(false);
     const [trainingProgress, setTrainingProgress] = useState(0);
     const [trainingMessage, setTrainingMessage] = useState('');
+    const [showTrainConfirm, setShowTrainConfirm] = useState(false);
+    const [showBatchConfirm, setShowBatchConfirm] = useState(false);
+
+    // État pour l'édition des variables
+    const [showEditVariables, setShowEditVariables] = useState(false);
+    const [editingStudentId, setEditingStudentId] = useState<number | null>(null);
+    const [editForm, setEditForm] = useState({
+        provenance: '',
+        intention: '',
+    });
+    const [isSavingVariables, setIsSavingVariables] = useState(false);
 
     // Vérifier le statut du modèle au chargement
     useEffect(() => {
@@ -166,15 +192,17 @@ export default function OrientationPrediction({ academicYear, promotion, student
     };
 
     const predictOrientation = async (studentId: number) => {
-        setLoading((prev) => ({ ...prev, [studentId]: true }));
+        setLoadingPredictions((prev) => ({ ...prev, [studentId]: true }));
         setActiveStudent(studentId);
 
         try {
-            const response = await axios.get(`/jury/predictions/students/${studentId}/predict`);
+            const response = await axios.post(`/jury/predictions/students/${studentId}/predict`);
             if (response.data.success) {
+                // Toujours stocker le contenu de .data pour avoir une structure uniforme
+                const predictionResult = response.data.data;
                 setPredictions((prev) => ({
                     ...prev,
-                    [studentId]: response.data,
+                    [studentId]: predictionResult,
                 }));
                 toast.success('Prédiction générée avec succès!');
             } else {
@@ -185,45 +213,47 @@ export default function OrientationPrediction({ academicYear, promotion, student
             toast.error(error.response?.data?.error || 'Erreur lors de la prédiction');
             console.error('Prediction error:', error);
         } finally {
-            setLoading((prev) => ({ ...prev, [studentId]: false }));
+            setLoadingPredictions((prev) => ({ ...prev, [studentId]: false }));
         }
     };
 
     const trainModel = async () => {
-        if (!window.confirm('Voulez-vous vraiment entraîner le modèle? Cela peut prendre plusieurs minutes.')) {
-            return;
-        }
-
+        setShowTrainConfirm(false);
         setIsTraining(true);
         setTrainingProgress(0);
         setTrainingMessage("Initialisation de l'entraînement...");
 
-        // Simuler une progression
+        // Simuler une progression lente
         const progressInterval = setInterval(() => {
             setTrainingProgress((prev) => {
-                if (prev >= 90) {
-                    clearInterval(progressInterval);
-                    return prev;
-                }
-                return prev + 5;
+                if (prev >= 90) return prev;
+                return prev + 2;
             });
-        }, 1000);
+        }, 2000);
 
         try {
-            const response = await axios.post('/jury/predictions/train-model');
+            // Timeout long (3 minutes) pour laisser le temps à l'entraînement
+            const response = await axios.post(
+                '/jury/predictions/train-model',
+                {},
+                {
+                    timeout: 180000,
+                },
+            );
 
             clearInterval(progressInterval);
             setTrainingProgress(100);
             setTrainingMessage('Entraînement terminé!');
 
             if (response.data.success) {
-                const accuracy = (response.data.data.accuracy * 100).toFixed(2);
-                toast.success(`Modèle XGBoost entraîné avec succès! Précision: ${accuracy}%`);
-
-                // Mettre à jour le statut du modèle
+                const data = response.data.data;
+                if (data?.background) {
+                    toast.info('Entraînement lancé en arrière-plan. Le modèle sera disponible dans quelques minutes.');
+                } else {
+                    const accuracy = ((data?.accuracy ?? 0) * 100).toFixed(2);
+                    toast.success(`Modèle XGBoost entraîné avec succès! Précision: ${accuracy}%`);
+                }
                 await checkModelStatus();
-
-                // Recharger les prédictions
                 router.reload({ only: ['students'] });
             } else {
                 toast.error(response.data.error || "Erreur lors de l'entraînement");
@@ -231,7 +261,12 @@ export default function OrientationPrediction({ academicYear, promotion, student
         } catch (err) {
             clearInterval(progressInterval);
             const error = err as AxiosError<{ error: string }>;
-            toast.error(error.response?.data?.error || "Erreur lors de l'entraînement du modèle");
+            if ((error as { code?: string })?.code === 'ECONNABORTED') {
+                toast.warning("L'entraînement est en cours mais prend plus de temps que prévu. Attendez quelques minutes et réessayez.");
+                await checkModelStatus();
+            } else {
+                toast.error(error.response?.data?.error || "Erreur lors de l'entraînement du modèle");
+            }
             console.error('Training error:', error);
         } finally {
             setTimeout(() => {
@@ -243,13 +278,16 @@ export default function OrientationPrediction({ academicYear, promotion, student
     };
 
     const predictBatch = async () => {
-        if (!window.confirm('Voulez-vous générer des prédictions pour tous les étudiants? Cela peut prendre quelques minutes.')) {
-            return;
-        }
-
+        setShowBatchConfirm(false);
         setIsBatchPredicting(true);
         try {
-            const response = await axios.post('/jury/predictions/predict-batch');
+            const response = await axios.post(
+                '/jury/predictions/predict-batch',
+                {},
+                {
+                    timeout: 180000, // 3 minutes
+                },
+            );
             if (response.data.success) {
                 const { successful, failed, total } = response.data.data;
                 toast.success(`Prédictions générées: ${successful}/${total} réussies`);
@@ -262,10 +300,16 @@ export default function OrientationPrediction({ academicYear, promotion, student
             }
         } catch (err) {
             const error = err as AxiosError<{ error: string }>;
-            toast.error(error.response?.data?.error || 'Erreur lors de la prédiction en lot');
+            if ((error as { code?: string })?.code === 'ECONNABORTED') {
+                toast.warning("L'analyse prend plus de temps que prévu. Rechargez la page dans quelques minutes.");
+            } else {
+                toast.error(error.response?.data?.error || 'Erreur lors de la prédiction en lot');
+            }
             console.error('Batch prediction error:', error);
         } finally {
             setIsBatchPredicting(false);
+            // Rafraîchir les données pour voir les résultats
+            router.reload({ only: ['students', 'stats'] });
         }
     };
 
@@ -348,6 +392,52 @@ export default function OrientationPrediction({ academicYear, promotion, student
         return colors[index];
     };
 
+    // Fonctions de gestion pour l'édition des variables
+    const openEditVariables = (student: Student) => {
+        const prediction = student.master_prediction;
+        setEditingStudentId(student.id);
+        setEditForm({
+            provenance: prediction?.provenance || '',
+            intention: prediction?.intention_expressed || '',
+        });
+        setShowEditVariables(true);
+    };
+
+    const savePredictiveVariables = async () => {
+        if (!editingStudentId) return;
+
+        setIsSavingVariables(true);
+        try {
+            const response = await axios.post(`/jury/predictions/students/${editingStudentId}/update-variables`, editForm);
+
+            if (response.data.success) {
+                toast.success('Variables mises à jour et prédiction actualisée');
+
+                // Mettre à jour localement les prédictions si nécessaire ou rafraîchir
+                // Assuming the API returns the updated student prediction data
+                if (response.data.data) {
+                    setPredictions((prev) => ({
+                        ...prev,
+                        [editingStudentId]: response.data.data,
+                    }));
+                    // Ouvrir/Actualiser automatiquement la vue détaillée après modification
+                    setActiveStudent(editingStudentId);
+                    // Rafraîchir la liste principale pour mettre à jour les badges dans le tableau
+                    router.reload({ only: ['students'] });
+                }
+
+                setShowEditVariables(false);
+            } else {
+                toast.error(response.data.error || 'Erreur lors de la mise à jour des variables');
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error('Erreur lors de la sauvegarde des variables');
+        } finally {
+            setIsSavingVariables(false);
+        }
+    };
+
     const getConfidenceColor = (confidence: number) => {
         if (confidence >= 75) return 'text-green-600';
         if (confidence >= 60) return 'text-yellow-600';
@@ -406,10 +496,15 @@ export default function OrientationPrediction({ academicYear, promotion, student
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                            <Button onClick={trainModel} disabled={isTraining} variant="outline" className="flex items-center gap-2">
+                            <Button
+                                onClick={() => setShowTrainConfirm(true)}
+                                disabled={isTraining}
+                                variant="outline"
+                                className="flex items-center gap-2"
+                            >
                                 {isTraining ? (
                                     <>
-                                        <RefreshCw className="h-4 w-4 animate-spin" />
+                                        <Loader2 className="h-4 w-4 animate-spin" />
                                         <span>Entraînement... {trainingProgress}%</span>
                                     </>
                                 ) : (
@@ -420,13 +515,13 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                 )}
                             </Button>
                             <Button
-                                onClick={predictBatch}
+                                onClick={() => setShowBatchConfirm(true)}
                                 disabled={isBatchPredicting || !modelStatus?.model_exists}
                                 className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600"
                             >
                                 {isBatchPredicting ? (
                                     <>
-                                        <RefreshCw className="h-4 w-4 animate-spin" />
+                                        <Loader2 className="h-4 w-4 animate-spin" />
                                         Analyse en cours...
                                     </>
                                 ) : (
@@ -442,7 +537,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                 disabled={exporting}
                                 className="flex items-center gap-2"
                             >
-                                {exporting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                                 Exporter tout
                             </Button>
                         </div>
@@ -556,16 +651,16 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="text-center">
-                                                        <div className="flex items-center justify-center gap-2">
+                                                        <div className="flex flex-col gap-2">
                                                             <Button
                                                                 onClick={() => predictOrientation(student.id)}
-                                                                disabled={loading[student.id] || !modelStatus?.model_exists}
+                                                                disabled={loadingPredictions[student.id]}
                                                                 size="sm"
                                                                 className="flex items-center gap-2"
                                                             >
-                                                                {loading[student.id] ? (
+                                                                {loadingPredictions[student.id] ? (
                                                                     <>
-                                                                        <RefreshCw className="h-4 w-4 animate-spin" />
+                                                                        <Loader2 className="h-4 w-4 animate-spin" />
                                                                         Analyse...
                                                                     </>
                                                                 ) : (
@@ -574,6 +669,16 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                                                         Analyser
                                                                     </>
                                                                 )}
+                                                            </Button>
+
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => openEditVariables(student)}
+                                                                className="flex items-center gap-2 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                                                            >
+                                                                <Edit2 className="h-4 w-4" />
+                                                                Modifier variables
                                                             </Button>
                                                             {student.master_prediction && (
                                                                 <Button
@@ -605,14 +710,8 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                                 <Target className="h-6 w-6 text-indigo-600" />
                                                 Analyse Détaillée -{' '}
                                                 {(() => {
-                                                    const rawData = predictions[activeStudent];
-                                                    const predData =
-                                                        rawData && rawData.data && rawData.data.prediction
-                                                            ? rawData.data
-                                                            : rawData && rawData.prediction
-                                                              ? rawData
-                                                              : null;
-                                                    return predData?.student?.name || 'Étudiant Inconnu';
+                                                    const predData = predictions[activeStudent];
+                                                    return predData?.student?.name || 'Étudiant';
                                                 })()}
                                             </CardTitle>
                                             <CardDescription>
@@ -632,27 +731,16 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                 <CardContent className="p-6">
                                     {/* Prédiction principale */}
                                     <div className="mb-8 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-white">
-                                        {/* Debug Log hidden in production but useful here */}
-                                        <div className="hidden">
-                                            {console.log('Active Prediction Data:', predictions[activeStudent])}
-                                            {console.log('Student Name:', predictions[activeStudent]?.student?.name)}
-                                            {console.log('Predicted Master:', predictions[activeStudent]?.prediction?.predicted_master)}
-                                        </div>
+                                        {/* Contenu de la prédiction */}
 
                                         {(() => {
-                                            // Helper to safely extract data regardless of nesting
-                                            const rawData = predictions[activeStudent];
-                                            const predData =
-                                                rawData && rawData.data && rawData.data.prediction
-                                                    ? rawData.data
-                                                    : rawData && rawData.prediction
-                                                      ? rawData
-                                                      : null;
+                                            const predData = predictions[activeStudent];
+                                            const pred = predData?.prediction || predData;
 
-                                            // Fallback values
-                                            const predictedMaster = predData?.prediction?.predicted_master || 'N/A';
-                                            const confidence = predData?.prediction?.confidence_score || 0;
-                                            const predictedAt = predData?.prediction?.predicted_at;
+                                            // Valeurs de secours
+                                            const predictedMaster = pred?.predicted_master || 'N/A';
+                                            const confidence = pred?.confidence_score || 0;
+                                            const predictedAt = pred?.predicted_at;
 
                                             return (
                                                 <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -686,70 +774,67 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                             Top 3 des Filières Compatibles
                                         </h3>
                                         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                                            {(predictions[activeStudent]?.prediction?.top_3_programs || []).map(([program, probability], index) => {
-                                                // Trouver la raison spécifique dans l'explication
-                                                let reason = '';
-                                                const explanation = predictions[activeStudent]?.prediction?.explanation;
+                                            {(() => {
+                                                const predResult = predictions[activeStudent];
+                                                const pred = predResult?.prediction || predResult;
+                                                const top3 = pred?.top_3_programs || [];
 
-                                                if (index === 0 && explanation?.recommendation) {
-                                                    // Extraire la raison entre parenthèses de la recommandation si possible
-                                                    const match = explanation.recommendation.match(/\((.*?)\)$/);
-                                                    reason = match ? match[1] : explanation.recommendation.split(':')[1] || '';
-                                                } else if (explanation?.alternative_options) {
-                                                    const alt = explanation.alternative_options.find((opt: any) => opt.program === program);
-                                                    reason = alt?.reason || '';
-                                                }
+                                                if (!Array.isArray(top3))
+                                                    return (
+                                                        <div className="col-span-3 py-4 text-center text-gray-400">
+                                                            Aucun programme alternatif disponible
+                                                        </div>
+                                                    );
 
-                                                return (
-                                                    <Card
-                                                        key={program}
-                                                        className={`border-2 ${index === 0 ? 'border-indigo-500 shadow-lg' : 'border-gray-200'}`}
-                                                    >
-                                                        <CardHeader className="pb-3">
-                                                            <div className="flex items-center justify-between">
-                                                                <Badge className={index === 0 ? 'bg-indigo-600' : 'bg-gray-500'}>#{index + 1}</Badge>
-                                                                {index === 0 && <Award className="h-5 w-5 text-yellow-500" />}
-                                                            </div>
-                                                        </CardHeader>
-                                                        <CardContent>
-                                                            <div className="mb-2 text-lg font-semibold">{program}</div>
-                                                            <div className="flex items-center gap-2">
-                                                                <Progress value={probability} className="h-2 flex-1" />
-                                                                <span className={`text-sm font-medium ${getConfidenceColor(probability)}`}>
-                                                                    {probability.toFixed(1)}%
-                                                                </span>
-                                                            </div>
+                                                return top3.map(([program, probability], index) => {
+                                                    // Trouver la raison spécifique dans l'explication
+                                                    let reason = '';
+                                                    const explanation = pred?.explanation;
 
-                                                            {reason && (
-                                                                <div className="mt-3 rounded bg-gray-50 p-2 text-xs text-gray-600 italic dark:bg-gray-800 dark:text-gray-400">
-                                                                    "{reason.replace(/[()]/g, '')}"
+                                                    if (index === 0 && explanation?.recommendation) {
+                                                        // Extraire la raison entre parenthèses de la recommandation si possible
+                                                        const match = explanation.recommendation.match(/\(([^)]+)\)/);
+                                                        if (match) reason = match[1];
+                                                    } else if (explanation?.alternative_options) {
+                                                        const opt = explanation.alternative_options.find((o: any) => o.program === program);
+                                                        if (opt) reason = opt.reason;
+                                                    }
+
+                                                    return (
+                                                        <Card key={index} className="overflow-hidden border-indigo-100 bg-indigo-50/30">
+                                                            <CardContent className="p-4">
+                                                                <div className="mb-2 line-clamp-2 min-h-[2.5rem] text-sm font-medium text-indigo-900">
+                                                                    {program}
                                                                 </div>
-                                                            )}
+                                                                <div className="flex items-center gap-2">
+                                                                    <Progress value={probability} className="h-2 flex-1" />
+                                                                    <span className="text-xs font-bold text-indigo-700">
+                                                                        {probability.toFixed(0)}%
+                                                                    </span>
+                                                                </div>
+                                                                {reason && (
+                                                                    <div className="mt-2 flex items-start gap-1 text-[10px] text-indigo-600/70">
+                                                                        <Info className="mt-0.5 h-2 w-2 flex-shrink-0" />
+                                                                        <span className="line-clamp-2">{reason}</span>
+                                                                    </div>
+                                                                )}
 
-                                                            <div className="mt-3 text-xs text-gray-500">
-                                                                Pourcentage d'adaptation:{' '}
-                                                                {(
-                                                                    (probability / (predictions[activeStudent]?.prediction?.confidence_score || 1)) *
-                                                                    100
-                                                                ).toFixed(0)}
-                                                                %
-                                                            </div>
-                                                        </CardContent>
-                                                    </Card>
-                                                );
-                                            })}
+                                                                <div className="mt-3 text-xs text-gray-500">
+                                                                    Pourcentage d'adaptation:{' '}
+                                                                    {((probability / (pred?.confidence_score || 1)) * 100).toFixed(0)}%
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+                                                    );
+                                                });
+                                            })()}
                                         </div>
                                     </div>
 
                                     {/* Explication détaillée */}
                                     {(() => {
-                                        const rawData = predictions[activeStudent];
-                                        const predData =
-                                            rawData && rawData.data && rawData.data.prediction
-                                                ? rawData.data
-                                                : rawData && rawData.prediction
-                                                  ? rawData
-                                                  : null;
+                                        const rawData = activeStudent ? predictions[activeStudent] : null;
+                                        const predData = rawData?.data || rawData;
                                         const explanation = predData?.prediction?.explanation;
 
                                         if (!explanation) return null;
@@ -771,23 +856,31 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                                     </div>
 
                                                     {/* Facteurs de support */}
-                                                    {(explanation.supporting_factors?.length || 0) > 0 && (
-                                                        <div className="rounded-lg border border-gray-200 bg-white p-4 dark:bg-gray-900">
-                                                            <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
-                                                                Facteurs Déterminants
-                                                            </h4>
-                                                            <ul className="space-y-2">
-                                                                {(explanation.supporting_factors || []).map((factor: string, index: number) => (
-                                                                    <li key={index} className="flex items-start gap-2">
-                                                                        <div className="mt-1 rounded-full bg-green-500 p-1">
-                                                                            <Check className="h-3 w-3 text-white" />
-                                                                        </div>
-                                                                        <span className="text-gray-700 dark:text-gray-300">{factor}</span>
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
+                                                    {(() => {
+                                                        const predResult = predictions[activeStudent];
+                                                        const pred = predResult?.prediction || predResult;
+                                                        const factors = pred?.explanation?.supporting_factors || [];
+
+                                                        if (!factors || factors.length === 0) return null;
+
+                                                        return (
+                                                            <div className="rounded-lg border border-gray-200 bg-white p-4 dark:bg-gray-900">
+                                                                <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
+                                                                    Facteurs Déterminants
+                                                                </h4>
+                                                                <ul className="space-y-2">
+                                                                    {factors.map((factor: string, index: number) => (
+                                                                        <li key={index} className="flex items-start gap-2">
+                                                                            <div className="mt-1 rounded-full bg-green-500 p-1">
+                                                                                <Check className="h-3 w-3 text-white" />
+                                                                            </div>
+                                                                            <span className="text-gray-700 dark:text-gray-300">{factor}</span>
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        );
+                                                    })()}
 
                                                     {/* Recommandation */}
                                                     <div className="rounded-lg border-l-4 border-green-500 bg-green-50 p-4 dark:bg-green-950">
@@ -803,34 +896,42 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                                     </div>
 
                                                     {/* Options alternatives */}
-                                                    {(explanation.alternative_options?.length || 0) > 0 && (
-                                                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900">
-                                                            <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
-                                                                Options Alternatives
-                                                            </h4>
-                                                            <div className="space-y-2">
-                                                                {(explanation.alternative_options || []).map((option: any, index: number) => (
-                                                                    <div
-                                                                        key={index}
-                                                                        className="flex items-center justify-between rounded-md bg-white p-3 dark:bg-gray-800"
-                                                                    >
-                                                                        <div>
-                                                                            <span className="font-medium">{option.program}</span>
-                                                                            {option.reason && (
-                                                                                <p className="mt-1 text-xs text-gray-500">{option.reason}</p>
-                                                                            )}
+                                                    {(() => {
+                                                        const predResult = predictions[activeStudent];
+                                                        const pred = predResult?.prediction || predResult;
+                                                        const alternatives = pred?.explanation?.alternative_options || [];
+
+                                                        if (!alternatives || alternatives.length === 0) return null;
+
+                                                        return (
+                                                            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900">
+                                                                <h4 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
+                                                                    Options Alternatives
+                                                                </h4>
+                                                                <div className="space-y-2">
+                                                                    {alternatives.map((option: any, index: number) => (
+                                                                        <div
+                                                                            key={index}
+                                                                            className="flex items-center justify-between rounded-md bg-white p-3 dark:bg-gray-800"
+                                                                        >
+                                                                            <div>
+                                                                                <span className="font-medium">{option?.program || 'Programme'}</span>
+                                                                                {option?.reason && (
+                                                                                    <p className="mt-1 text-xs text-gray-500">{option.reason}</p>
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Progress value={option?.probability || 0} className="h-2 w-24" />
+                                                                                <span className="text-sm font-medium text-gray-600">
+                                                                                    {(option?.probability || 0).toFixed(1)}%
+                                                                                </span>
+                                                                            </div>
                                                                         </div>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <Progress value={option.probability} className="h-2 w-24" />
-                                                                            <span className="text-sm font-medium text-gray-600">
-                                                                                {option.probability.toFixed(1)}%
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
+                                                                    ))}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )}
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         );
@@ -868,13 +969,8 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                             <span className="mx-2">•</span>
                                             <span className="font-medium">Date:</span>{' '}
                                             {(() => {
-                                                const rawData = predictions[activeStudent];
-                                                const predData =
-                                                    rawData && rawData.data && rawData.data.prediction
-                                                        ? rawData.data
-                                                        : rawData && rawData.prediction
-                                                          ? rawData
-                                                          : null;
+                                                const rawData = activeStudent ? predictions[activeStudent] : null;
+                                                const predData = rawData?.data || rawData;
                                                 const date = predData?.prediction?.predicted_at;
                                                 return date ? new Date(date).toLocaleString('fr-FR') : '-';
                                             })()}
@@ -1187,7 +1283,7 @@ export default function OrientationPrediction({ academicYear, promotion, student
                 )}
 
                 {/* Squelette de chargement pour la prédiction */}
-                {activeStudent !== null && loading[activeStudent] && (
+                {activeStudent !== null && loadingPredictions[activeStudent] && (
                     <Card className="border-t-4 border-indigo-500">
                         <CardHeader>
                             <Skeleton className="h-8 w-96" />
@@ -1231,6 +1327,106 @@ export default function OrientationPrediction({ academicYear, promotion, student
                         </div>
                     </div>
                 )}
+                {/* Dialogs de confirmation */}
+                <Dialog open={showTrainConfirm} onOpenChange={setShowTrainConfirm}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Entraîner le modèle XGBoost</DialogTitle>
+                            <DialogDescription>
+                                Cette action va entraîner un nouveau modèle sur les données historiques (~40,000 enregistrements). Cela peut prendre
+                                entre 1 et 3 minutes. Continuer ?
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter className="gap-2 sm:gap-0">
+                            <Button variant="outline" onClick={() => setShowTrainConfirm(false)}>
+                                Annuler
+                            </Button>
+                            <Button onClick={trainModel} className="bg-indigo-600 hover:bg-indigo-700">
+                                Confirmer l'entraînement
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Dialog d'édition des variables */}
+                <Dialog open={showEditVariables} onOpenChange={setShowEditVariables}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>Variables Prédictives Personnalisées</DialogTitle>
+                            <DialogDescription>Modifiez ces variables pour tester l'impact sur la prédiction du modèle.</DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Provenance (Région originelle)</label>
+                                <select
+                                    className="w-full rounded-md border border-gray-200 p-2 text-sm dark:bg-gray-800"
+                                    value={editForm.provenance}
+                                    onChange={(e) => setEditForm({ ...editForm, provenance: e.target.value })}
+                                >
+                                    <option value="">-- Sélectionner une région --</option>
+                                    <option value="Tanganyika">Tanganyika</option>
+                                    <option value="Grand Kasaï">Grand Kasaï</option>
+                                    <option value="Haut-Katanga">Haut-Katanga</option>
+                                    <option value="Haut-Lomami">Haut-Lomami</option>
+                                    <option value="Lualaba">Lualaba</option>
+                                </select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Intention (Programme de Master souhaité)</label>
+                                <select
+                                    className="w-full rounded-md border border-gray-200 p-2 text-sm dark:bg-gray-800"
+                                    value={editForm.intention}
+                                    onChange={(e) => setEditForm({ ...editForm, intention: e.target.value })}
+                                >
+                                    <option value="">-- Sélectionner un master --</option>
+                                    <option value="Génie Logiciel">Génie Logiciel</option>
+                                    <option value="Intelligence Artificielle">Intelligence Artificielle</option>
+                                    <option value="Réseaux et Télécommunication">Réseaux et Télécommunication</option>
+                                    <option value="Informatique de Gestion">Informatique de Gestion</option>
+                                    <option value="Marketing">Marketing</option>
+                                    <option value="Banque et Assurance">Banque et Assurance</option>
+                                    <option value="Comptabilité et Finance">Comptabilité et Finance</option>
+                                    <option value="Fiscalité">Fiscalité</option>
+                                </select>
+                                <p className="text-xs text-gray-400 italic">
+                                    Note: Le genre et l'établissement sont liés à l'identité fixe de l'étudiant.
+                                </p>
+                            </div>
+                        </div>
+
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setShowEditVariables(false)}>
+                                Annuler
+                            </Button>
+                            <Button onClick={savePredictiveVariables} disabled={isSavingVariables}>
+                                {isSavingVariables ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Sauvegarder et Analyser
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={showBatchConfirm} onOpenChange={setShowBatchConfirm}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Analyse groupée des étudiants</DialogTitle>
+                            <DialogDescription>
+                                Voulez-vous générer des prédictions pour tous les étudiants de cette promotion ? Cette opération peut durer quelques
+                                minutes.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter className="gap-2 sm:gap-0">
+                            <Button variant="outline" onClick={() => setShowBatchConfirm(false)}>
+                                Annuler
+                            </Button>
+                            <Button onClick={predictBatch} className="bg-purple-600 hover:bg-purple-700">
+                                Lancer l'analyse
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         </AppLayout>
     );
