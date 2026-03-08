@@ -1134,7 +1134,7 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                             <Button
                                 variant="outline"
                                 className="flex items-center gap-2 border-indigo-500 text-indigo-600 hover:bg-indigo-50"
-                                onClick={() => (window.location.href = route('jury.orientation-predictions'))}
+                                onClick={() => (window.location.href = route('jury.prediction.interface'))}
                             >
                                 <BrainCircuit className="h-4 w-4" />
                                 Analyse Prédictive Master

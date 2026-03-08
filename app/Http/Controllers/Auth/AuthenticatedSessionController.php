@@ -164,7 +164,7 @@ class AuthenticatedSessionController extends Controller
                 'teacher_id' => $teacher->id // Ajout pour usage ultérieur
             ]);
 
-            return redirect()->intended(route('jury.dashboard'))->with([
+            return redirect()->route('jury.dashboard')->with([
                 'flash' => [
                     'type' => 'success',
                     'message' => 'Bienvenue dans l\'espace Jury'

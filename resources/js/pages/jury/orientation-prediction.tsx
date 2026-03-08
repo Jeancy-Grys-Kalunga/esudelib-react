@@ -303,18 +303,49 @@ export default function OrientationPrediction({ academicYear, promotion, student
     };
 
     const getOrientationColor = (orientation: string) => {
-        const colors: Record<string, string> = {
-            Informatique: 'bg-blue-100 text-blue-800 border-blue-300',
-            'Génie Civil': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-            Électromécanique: 'bg-orange-100 text-orange-800 border-orange-300',
-            Médecine: 'bg-red-100 text-red-800 border-red-300',
+        if (!orientation) return 'bg-gray-100 text-gray-800 border-gray-300';
+
+        // Fallbacks for common cases just in case
+        const commonColors: Record<string, string> = {
+            'Informatique de Gestion': 'bg-blue-100 text-blue-800 border-blue-300',
+            'Sciences de Données': 'bg-indigo-100 text-indigo-800 border-indigo-300',
+            'Intelligence Artificielle': 'bg-violet-100 text-violet-800 border-violet-300',
+            'Réseaux et Télécommunication': 'bg-sky-100 text-sky-800 border-sky-300',
+            'Génie Logiciel': 'bg-cyan-100 text-cyan-800 border-cyan-300',
+            'Gestion des Ressources Humaines': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+            'Comptabilité et Finance': 'bg-green-100 text-green-800 border-green-300',
+            Marketing: 'bg-orange-100 text-orange-800 border-orange-300',
             Droit: 'bg-purple-100 text-purple-800 border-purple-300',
-            Économie: 'bg-green-100 text-green-800 border-green-300',
-            Gestion: 'bg-teal-100 text-teal-800 border-teal-300',
-            'Sciences Politiques': 'bg-indigo-100 text-indigo-800 border-indigo-300',
+            Médecine: 'bg-red-100 text-red-800 border-red-300',
         };
 
-        return colors[orientation] || 'bg-gray-100 text-gray-800 border-gray-300';
+        if (commonColors[orientation]) return commonColors[orientation];
+
+        // Generate consistent color based on string hash
+        const colors = [
+            'bg-blue-100 text-blue-800 border-blue-300',
+            'bg-yellow-100 text-yellow-800 border-yellow-300',
+            'bg-orange-100 text-orange-800 border-orange-300',
+            'bg-red-100 text-red-800 border-red-300',
+            'bg-purple-100 text-purple-800 border-purple-300',
+            'bg-emerald-100 text-emerald-800 border-emerald-300',
+            'bg-teal-100 text-teal-800 border-teal-300',
+            'bg-indigo-100 text-indigo-800 border-indigo-300',
+            'bg-pink-100 text-pink-800 border-pink-300',
+            'bg-rose-100 text-rose-800 border-rose-300',
+            'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300',
+            'bg-sky-100 text-sky-800 border-sky-300',
+            'bg-lime-100 text-lime-800 border-lime-300',
+        ];
+
+        let hash = 0;
+        for (let i = 0; i < orientation.length; i++) {
+            hash = orientation.charCodeAt(i) + ((hash << 5) - hash);
+        }
+
+        // Ensure positive index
+        const index = Math.abs(hash) % colors.length;
+        return colors[index];
     };
 
     const getConfidenceColor = (confidence: number) => {

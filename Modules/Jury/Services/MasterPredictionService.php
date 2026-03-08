@@ -309,8 +309,22 @@ class MasterPredictionService
 
     private function extractIntention($student)
     {
-        if (isset($student->intention_master) && !empty($student->intention_master)) {
-            return $student->intention_master;
+        $validIntentions = ["Réseaux", "Histoire", "Didactique", "Sciences Commerciales et Administratives", "Banque et Assurance", "Chimie-Physique", "Sciences de Données", "Fiscalité, Douanes et Accises", "Comptabilité et Finances", "Sciences de Transport", "Démographie Appliquée", "Informatique et Technologie", "Éducation Physique et Gestion Sportive", "Statistique", "Biologie-Chimie", "Gestion", "Sécurité Informatique", "Assistance de Direction", "Géographie et Environnement", "Maths Avancées", "Anglais-Culture Africaine", "Secrétariat de Direction", "Informatique Appliquée à la Gestion", "Fiscalité, Douane et Accises", "Intelligence Artificielle", "Marketing", "Génie Logiciel", "Informatique de Gestion", "Droit des Affaires", "Psychologie", "Sciences Actuarielles", "Chimie", "Gestion des Ressources Humaines", "Hôtellerie et Tourisme", "Physique", "Réseaux et Télécommunication", "Statistique Appliquée", "Biologie", "Français-Langues Africaines", "Histoire et Sciences Sociales", "Python", "Sciences Agrovétérinaires", "Finance", "Pédagogie", "Comptabilité", "Mathématiques-Informatique", "Gestion des Institutions Scolaires", "Français-Latin", "Design et Multimédia", "Comptabilité et Finance", "Littérature"];
+
+        $intent = $student->intention_master ?? '';
+        if (!empty($intent)) {
+            if (in_array($intent, $validIntentions)) return $intent;
+
+            // Map common legacy expressions intelligently
+            $intentStr = strtolower($intent);
+            if (str_contains($intentStr, 'informatique')) return 'Informatique de Gestion';
+            if (str_contains($intentStr, 'finance') || str_contains($intentStr, 'compta')) return 'Comptabilité et Finance';
+            if (str_contains($intentStr, 'droit') || str_contains($intentStr, 'juri')) return 'Droit des Affaires';
+            if (str_contains($intentStr, 'gestion') || str_contains($intentStr, 'manage')) return 'Gestion';
+            if (str_contains($intentStr, 'santé') || str_contains($intentStr, 'médical') || str_contains($intentStr, 'médecine') || str_contains($intentStr, 'infirmier')) return 'Biologie-Chimie';
+            if (str_contains($intentStr, 'éco')) return 'Sciences Commerciales et Administratives';
+            if (str_contains($intentStr, 'civil') || str_contains($intentStr, 'archi')) return 'Mathématiques-Informatique';
+            if (str_contains($intentStr, 'électro') || str_contains($intentStr, 'méca')) return 'Physique';
         }
 
         // Déterminer à partir des meilleures notes
@@ -319,36 +333,56 @@ class MasterPredictionService
             ->whereNotNull('cote')
             ->get();
 
+        if ($notes->isEmpty()) return 'Informatique de Gestion'; // Absolute ultimate fallback
+
         $domainMapping = [
-            'Informatique' => ['informatique', 'programmation', 'algorithme', 'base de données', 'réseau'],
-            'Génie Civil' => ['génie civil', 'construction', 'bâtiment', 'structure'],
-            'Électromécanique' => ['électromécanique', 'électricité', 'mécanique', 'automatisme'],
-            'Gestion' => ['gestion', 'comptabilité', 'finance', 'marketing', 'management'],
-            'Droit' => ['droit', 'juridique', 'législation'],
-            'Économie' => ['économie', 'macroéconomie', 'microéconomie'],
-            'Médecine' => ['médecine', 'santé', 'anatomie', 'physiologie'],
-            'Sciences Politiques' => ['politique', 'sociologie', 'philosophie']
+            'Informatique de Gestion' => ['informatique', 'programmation', 'algorithme', 'base de données'],
+            'Réseaux et Télécommunication' => ['réseau', 'télécom', 'internet'],
+            'Génie Logiciel' => ['logiciel', 'développement', 'web', 'application'],
+            'Sciences de Données' => ['données', 'data', 'analyse'],
+            'Comptabilité et Finance' => ['comptabilité', 'finance', 'audit', 'économie'],
+            'Marketing' => ['marketing', 'vente', 'commerce'],
+            'Gestion des Ressources Humaines' => ['ressources humaines', 'rh', 'personnel', 'gestion'],
+            'Droit des Affaires' => ['droit', 'juridique', 'législation'],
+            'Chimie-Physique' => ['chimie', 'physique', 'sciences'],
+            'Biologie-Chimie' => ['biologie', 'svt', 'nature', 'santé', 'médecine', 'anatomie'],
+            'Mathématiques-Informatique' => ['mathématiques', 'algèbre', 'analyse math', 'logique']
         ];
 
         $domainScores = array_fill_keys(array_keys($domainMapping), 0);
+        $maxCote = 0;
+        $bestCourseGlobal = null;
 
         foreach ($notes as $note) {
             $courseTitle = strtolower($note->course->title ?? '');
-            $cote = $note->cote;
+            $cote = floatval($note->cote);
+            if ($cote > $maxCote) {
+                $maxCote = $cote;
+            }
 
             foreach ($domainMapping as $domain => $keywords) {
                 foreach ($keywords as $keyword) {
-                    if (str_contains($courseTitle, $keyword)) {
+                    if (str_contains($courseTitle, strtolower($keyword))) {
                         $domainScores[$domain] += $cote;
+                        // Add a tiny fraction based on the course ID or string length to break true ties
+                        $domainScores[$domain] += (strlen($courseTitle) * 0.001);
                         break;
                     }
                 }
             }
         }
 
-        // Retourner le domaine avec le score le plus élevé
         arsort($domainScores);
-        return array_key_first($domainScores) ?? 'Informatique';
+        $topDomain = array_key_first($domainScores);
+
+        if ($domainScores[$topDomain] > 0) {
+            return $topDomain;
+        }
+
+        // If absolute 0 match, return one of the dominant classes pseudo-randomly based on ID to ensure variety
+        $itFallbacks = ['Informatique de Gestion', 'Réseaux et Télécommunication', 'Génie Logiciel', 'Comptabilité et Finance', 'Gestion'];
+        $index = $student->id % count($itFallbacks);
+        return $itFallbacks[$index];
     }
 
     private function extractOptionalCourses($student)
@@ -365,21 +399,23 @@ class MasterPredictionService
 
     private function extractProvenanceRegion($student)
     {
+        $validRegions = ["Tanganyika", "Grand Kasaï", "Haut-Katanga", "Haut-Lomami", "Lualaba"];
+
         if (isset($student->region_origin) && !empty($student->region_origin)) {
-            return $student->region_origin;
+            $region = $student->region_origin;
+            if (in_array($region, $validRegions)) return $region;
         }
 
         if (isset($student->birth_place) && !empty($student->birth_place)) {
             $place = strtolower($student->birth_place);
             $regions = [
-                'kinshasa' => 'Kinshasa',
-                'lubumbashi' => 'Katanga',
-                'goma' => 'Nord-Kivu',
-                'bukavu' => 'Sud-Kivu',
-                'kisangani' => 'Tshopo',
-                'mbuji-mayi' => 'Kasaï Oriental',
-                'kananga' => 'Kasaï Central',
-                'matadi' => 'Kongo Central'
+                'lubumbashi' => 'Haut-Katanga',
+                'likasi' => 'Haut-Katanga',
+                'kolwezi' => 'Lualaba',
+                'kamina' => 'Haut-Lomami',
+                'kalemie' => 'Tanganyika',
+                'mbuji-mayi' => 'Grand Kasaï',
+                'kananga' => 'Grand Kasaï'
             ];
 
             foreach ($regions as $keyword => $region) {
@@ -389,16 +425,19 @@ class MasterPredictionService
             }
         }
 
-        return 'Kinshasa';
+        return 'Haut-Katanga'; // Fallback to majority class
     }
 
     private function extractEtablissement($student)
     {
         if (isset($student->institution_origin) && !empty($student->institution_origin)) {
-            return $student->institution_origin;
+            $inst = strtoupper($student->institution_origin);
+            if (str_contains($inst, 'ISC')) return 'ISC';
+            if (str_contains($inst, 'ISS')) return 'ISS';
+            if (str_contains($inst, 'ISP')) return 'ISP';
         }
 
-        return 'ESU-DELIB';
+        return 'ISP'; // Fallback to a valid training data category
     }
 
     /**
