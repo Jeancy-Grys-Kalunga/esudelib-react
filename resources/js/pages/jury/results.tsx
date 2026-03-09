@@ -680,14 +680,20 @@ const AcademicHistoryModal = ({
                                                 <div className="flex justify-between">
                                                     <span>Total crédits validés:</span>
                                                     <span className="text-green-600">
-                                                        {historyData.history.reduce((total: number, year: any) => {
-                                                            return (
-                                                                total +
+                                                        {(() => {
+                                                            // Dédoublonner les cours validés par ID de cours (éviter de compter 2x le même cours)
+                                                            const passedMap: Record<number, number> = {};
+                                                            historyData.history.forEach((year: any) => {
                                                                 year.courses
                                                                     .filter((c: any) => c.passed)
-                                                                    .reduce((sum: number, course: any) => sum + parseFloat(course.credits), 0)
-                                                            );
-                                                        }, 0)}
+                                                                    .forEach((c: any) => {
+                                                                        passedMap[c.id] = parseFloat(c.credits) || 0;
+                                                                    });
+                                                            });
+                                                            return Object.values(passedMap)
+                                                                .reduce((sum: number, cr: number) => sum + cr, 0)
+                                                                .toFixed(2);
+                                                        })()}
                                                     </span>
                                                 </div>
                                             </td>
@@ -695,9 +701,11 @@ const AcademicHistoryModal = ({
                                                 <div className="flex justify-between">
                                                     <span>Total crédits complémentaires:</span>
                                                     <span className="text-amber-600">
-                                                        {historyData.complementary_courses.reduce((total: number, course: any) => {
-                                                            return total + parseFloat(course.credits);
-                                                        }, 0)}
+                                                        {historyData.complementary_courses
+                                                            .reduce((total: number, course: any) => {
+                                                                return total + (parseFloat(course.credits) || 0);
+                                                            }, 0)
+                                                            .toFixed(2)}
                                                     </span>
                                                 </div>
                                             </td>
@@ -1134,7 +1142,7 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                             <Button
                                 variant="outline"
                                 className="flex items-center gap-2 border-indigo-500 text-indigo-600 hover:bg-indigo-50"
-                                onClick={() => (window.location.href = route('jury.orientation-predictions'))}
+                                onClick={() => (window.location.href = route('jury.prediction.interface'))}
                             >
                                 <BrainCircuit className="h-4 w-4" />
                                 Analyse Prédictive Master
@@ -1244,39 +1252,62 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                                         </div>
                                     </div>
 
-                                    <ResultsTable
-                                        courses={student.notes.map((note) => ({
-                                            id: note.course_id,
-                                            title: note.course?.title || 'Cours inconnu',
-                                            credit: note.course?.credit || 0,
-                                        }))}
-                                        students={[
-                                            {
-                                                id: student.id,
-                                                name: student.name,
-                                                matricule: student.matricule || '',
-                                                average: student.average,
-                                                reserve: student.reserve,
-                                                need: student.need,
-                                                decision: student.decision,
-                                                mention: student.mention,
-                                                notes: student.notes.reduce(
-                                                    (acc, note) => {
-                                                        acc[note.course_id] = {
-                                                            id: note.id,
-                                                            value: note.cote,
-                                                        };
-                                                        return acc;
+                                    {(() => {
+                                        // Dédupliquer les notes par course_id (garder la meilleure note)
+                                        const bestNotesMap: Record<number, NoteData> = {};
+                                        const seenTitles = new Set<number>();
+
+                                        student.notes.forEach((note: any) => {
+                                            if (!note || note.course_id == null) return;
+                                            const cid = Number(note.course_id);
+                                            const existing = bestNotesMap[cid];
+                                            if (!existing || (note.cote != null && (existing.value == null || note.cote > (existing.value ?? -1)))) {
+                                                bestNotesMap[cid] = { id: note.id, value: note.cote };
+                                            }
+                                            seenTitles.add(cid);
+                                        });
+
+                                        // Construire les cours depuis allCourses (contient cm/td/tp) en filtrant par notes de l'étudiant
+                                        const seenIdsList = Array.from(seenTitles);
+                                        const coursesForGrid = seenIdsList.map((courseId) => {
+                                            const fromAll = allCourses.find((c) => c.id === courseId);
+                                            // Fallback: cherche dans les notes pour le titre
+                                            const noteObj = student.notes.find((n: any) => Number(n.course_id) === courseId);
+                                            return {
+                                                id: courseId,
+                                                title: fromAll?.title ?? noteObj?.course?.title ?? 'Cours inconnu',
+                                                credit: fromAll?.credit ?? 0,
+                                                cm: fromAll?.cm ?? 0,
+                                                td: fromAll?.td ?? 0,
+                                                tp: fromAll?.tp ?? 0,
+                                                program_detail_id: fromAll?.program_detail_id ?? null,
+                                                unit_teaching_id: fromAll?.unit_teaching_id ?? undefined,
+                                            };
+                                        });
+
+                                        return (
+                                            <ResultsTable
+                                                courses={coursesForGrid}
+                                                students={[
+                                                    {
+                                                        id: student.id,
+                                                        name: student.name,
+                                                        matricule: student.matricule || '',
+                                                        average: student.average,
+                                                        reserve: student.reserve,
+                                                        need: student.need,
+                                                        decision: student.decision,
+                                                        mention: student.mention,
+                                                        notes: bestNotesMap,
                                                     },
-                                                    {} as Record<number, NoteData>,
-                                                ),
-                                            },
-                                        ]}
-                                        onChange={handleGradeChange}
-                                        showActions={true}
-                                        onMassEdit={handleMassEdit}
-                                        isSaving={isSaving}
-                                    />
+                                                ]}
+                                                onChange={handleGradeChange}
+                                                showActions={true}
+                                                onMassEdit={handleMassEdit}
+                                                isSaving={isSaving}
+                                            />
+                                        );
+                                    })()}
                                 </TabsContent>
                             ))}
                         </Tabs>

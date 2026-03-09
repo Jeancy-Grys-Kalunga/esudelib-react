@@ -10,4 +10,5 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('subscriptions/import', [SubscriptionController::class, 'import'])->name('subscriptions.import');
     Route::post('subscriptions/import-general', [SubscriptionController::class, 'importGeneral'])->name('subscriptions.import-general');
     Route::get('subscriptions/import-progress/{id}', [SubscriptionController::class, 'checkImportProgress'])->name('subscriptions.import-progress');
+    Route::post('subscriptions/equivalence-check', [SubscriptionController::class, 'getEquivalence'])->name('subscriptions.equivalence-check');
 });

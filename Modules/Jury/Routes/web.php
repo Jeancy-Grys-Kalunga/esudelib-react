@@ -45,12 +45,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/model-status', 'getModelStatus')->name('jury.prediction.model-status');
 
             // Prédictions
-            Route::get('/students/{student_id}/predict', 'predictOrientation')->name('jury.prediction.student');
+            Route::post('/students/{student_id}/predict', 'predictOrientation')->name('jury.prediction.student');
             Route::get('/students/{student_id}/get-prediction', 'getPrediction')->name('jury.get-prediction');
             Route::post('/predict-batch', 'predictBatch')->name('jury.prediction.batch');
-            Route::post('/generate-dataset', 'generateDataset')->name('jury.generate-dataset');
-
-            // Téléchargements et rapports
+            Route::post('/students/{student_id}/update-variables', 'savePredictiveVariables')->name('jury.prediction.update-variables');
             Route::get('/export/{student_id}', 'exportPredictionReport')->name('jury.export-prediction');
             Route::get('/export-all', 'exportAllPredictions')->name('jury.export-all-predictions');
         });

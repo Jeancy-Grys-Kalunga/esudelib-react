@@ -27,17 +27,19 @@ use Modules\Institution\Entities\CourseProgramDetail;
 use Modules\Student\Imports\GeneralStudentsImport;
 // use Modules\Student\Jobs\ProcessGeneralImportJob; // Unused
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 
 
 class SubscriptionController extends Controller
 {
     public function index(Request $request)
     {
-        if (!auth()->user()->hasPermissionTo('access_inscriptions')) {
+        /** @var User $user */
+        $user = auth()->user();
+        if (!$user->hasPermissionTo('access_inscriptions')) {
             abort(403, 'Action non autorisée');
         }
 
-        $user = auth()->user();
         $permissions = $user->hasRole('Super Admin')
             ? Permission::pluck('name')->toArray()
             : $user->getAllPermissions()->pluck('name')->toArray();
@@ -83,7 +85,7 @@ class SubscriptionController extends Controller
         )->get(['id', 'name']);
 
         $academicYears = AcademicYear::all(['id', 'title']);
-        $promotions = Promotion::all(['id', 'title']);
+        $promotions = Promotion::all(['id', 'title', 'institution_id']);
 
         return Inertia::render('inscription/index', [
             'inscriptions' => $inscriptions,
@@ -97,6 +99,7 @@ class SubscriptionController extends Controller
 
     public function create()
     {
+        /** @var User $user */
         $user = auth()->user();
 
         $institutions = Institution::when(
@@ -105,7 +108,7 @@ class SubscriptionController extends Controller
         )->get(['id', 'name']);
 
         $academicYears = AcademicYear::all(['id', 'title']);
-        $promotions = Promotion::all(['id', 'title']);
+        $promotions = Promotion::all(['id', 'title', 'institution_id']);
 
         return Inertia::render('inscription::inscriptions/Form', [
             'institutions' => $institutions,
@@ -116,7 +119,9 @@ class SubscriptionController extends Controller
 
     public function store(StoreInscriptionRequest $request)
     {
-        if (!auth()->user()->hasPermissionTo('create_inscriptions')) {
+        /** @var User $user */
+        $user = auth()->user();
+        if (!$user->hasPermissionTo('create_inscriptions')) {
             abort(403, 'Action non autorisée');
         }
 
@@ -149,15 +154,20 @@ class SubscriptionController extends Controller
 
             // Vérification d'équivalence si étudiant transféré
             if ($request->is_transfer) {
-                $equivalences = $this->checkCourseEquivalence(
+                $equivalenceResults = $this->checkCourseEquivalence(
                     $request->old_institution_id,
                     $request->old_promotion_id,
                     $request->institution_id,
                     $request->promotion_id
                 );
 
-                // Stocker les équivalences en session pour affichage
-                session()->flash('equivalences', $equivalences);
+                // Stocker les équivalences en session pour affichage (compatibilité legacy)
+                session()->flash('flash', [
+                    'type' => 'success',
+                    'message' => 'Inscription enregistrée avec succès !',
+                    'equivalences' => $equivalenceResults['equivalences'],
+                    'stats' => $equivalenceResults['stats'],
+                ]);
             }
 
             return redirect()->route('subscriptions.index')->with([
@@ -169,13 +179,46 @@ class SubscriptionController extends Controller
         });
     }
 
+    /**
+     * Méthode pour charger les équivalences via AJAX
+     */
+    public function getEquivalence(Request $request)
+    {
+        $request->validate([
+            'old_institution_id' => 'required',
+            'old_promotion_id' => 'required',
+            'new_institution_id' => 'required',
+            'new_promotion_id' => 'required',
+        ]);
+
+        try {
+            $equivalenceResults = $this->checkCourseEquivalence(
+                $request->old_institution_id,
+                $request->old_promotion_id,
+                $request->new_institution_id,
+                $request->new_promotion_id
+            );
+
+            return response()->json([
+                'success' => true,
+                'equivalences' => $equivalenceResults['equivalences'],
+                'stats' => $equivalenceResults['stats']
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors du calcul d\'équivalence : ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function edit(Inscription $inscription)
     {
-        if (!auth()->user()->hasPermissionTo('edit_inscriptions')) {
+        /** @var User $user */
+        $user = auth()->user();
+        if (!$user->hasPermissionTo('edit_inscriptions')) {
             abort(403, 'Action non autorisée');
         }
-
-        $user = auth()->user();
 
         $institutions = Institution::when(
             $user->hasRole('Bureau Inscription'),
@@ -183,7 +226,7 @@ class SubscriptionController extends Controller
         )->get(['id', 'name']);
 
         $academicYears = AcademicYear::all(['id', 'title']);
-        $promotions = Promotion::all(['id', 'title']);
+        $promotions = Promotion::all(['id', 'title', 'institution_id']);
 
         return Inertia::render('inscription::inscriptions/Form', [
             'inscription' => $inscription->load(['student', 'academicYear', 'institution', 'promotion']),
@@ -195,7 +238,9 @@ class SubscriptionController extends Controller
 
     public function update(RequestsUpdateInscriptionRequest $request, Inscription $inscription)
     {
-        if (!auth()->user()->hasPermissionTo('edit_inscriptions')) {
+        /** @var User $user */
+        $user = auth()->user();
+        if (!$user->hasPermissionTo('edit_inscriptions')) {
             abort(403, 'Action non autorisée');
         }
 
@@ -218,8 +263,10 @@ class SubscriptionController extends Controller
             ]);
 
             // Mise à jour de la table pivot institution_user
-            if ($student->user) {
-                $student->user->institutions()->sync([$request->institution_id]);
+            /** @var User|null $user */
+            $user = $student->user;
+            if ($user) {
+                $user->institutions()->sync([$request->institution_id]);
             }
 
             return redirect()->route('subscriptions.index')->with([
@@ -233,7 +280,9 @@ class SubscriptionController extends Controller
 
     public function destroy(Inscription $inscription)
     {
-        if (!auth()->user()->hasPermissionTo('delete_inscriptions')) {
+        /** @var User $user */
+        $user = auth()->user();
+        if (!$user->hasPermissionTo('delete_inscriptions')) {
             abort(403, 'Action non autorisée');
         }
 
@@ -241,8 +290,10 @@ class SubscriptionController extends Controller
             $student = $inscription->student;
 
             // Supprimer le compte utilisateur associé
-            if ($student->user) {
-                $student->user->delete();
+            /** @var User|null $user */
+            $user = $student->user;
+            if ($user) {
+                $user->delete();
             }
 
             // Supprimer l'inscription et l'étudiant
@@ -260,7 +311,9 @@ class SubscriptionController extends Controller
 
     public function import(Request $request)
     {
-        if (!auth()->user()->hasPermissionTo('import_inscriptions')) {
+        /** @var User $user */
+        $user = auth()->user();
+        if (!$user->hasPermissionTo('import_inscriptions')) {
             abort(403, 'Action non autorisée');
         }
 
@@ -287,7 +340,9 @@ class SubscriptionController extends Controller
 
     public function importGeneral(Request $request)
     {
-        if (!auth()->user()->hasPermissionTo('import_inscriptions')) {
+        /** @var User $user */
+        $user = auth()->user();
+        if (!$user->hasPermissionTo('import_inscriptions')) {
             abort(403, 'Action non autorisée');
         }
 
@@ -302,11 +357,6 @@ class SubscriptionController extends Controller
                 'error' => 'Aucune année académique trouvée.'
             ], 404);
         }
-
-        // Store file temporarily or pass directly
-        // Excel::import works with the uploaded file object directly, no need to store manually if not queuing
-        // But for consistency/logging we might want to keep the file? User didn't specify.
-        // Let's use the uploaded file directly to keep it simple and robust.
 
         set_time_limit(0);
         ini_set('memory_limit', '-1');
@@ -377,6 +427,7 @@ class SubscriptionController extends Controller
             'message' => session('flash')['message'] ?? null,
             'type' => session('flash')['type'] ?? null,
             'equivalences' => session('flash')['equivalences'] ?? null,
+            'stats' => session('flash')['stats'] ?? null,
         ] : null;
     }
 
@@ -391,55 +442,129 @@ class SubscriptionController extends Controller
      */
     private function checkCourseEquivalence($oldInstitutionId, $oldPromotionId, $newInstitutionId, $newPromotionId)
     {
-        // Récupérer les programmes des deux institutions
-        $oldProgram = Program::where('institution_id', $oldInstitutionId)
+        // Récupérer les détails des cours pour les deux promotions avec les relations nécessaires
+        // On ajoute promotion.faculty pour avoir un fallback si le programme est manquant
+        $oldCourses = CourseProgramDetail::with(['course', 'program', 'promotion.faculty'])
             ->where('promotion_id', $oldPromotionId)
-            ->first();
+            ->get();
 
-        $newProgram = Program::where('institution_id', $newInstitutionId)
+        $newCourses = CourseProgramDetail::with(['course', 'program', 'promotion.faculty'])
             ->where('promotion_id', $newPromotionId)
-            ->first();
+            ->get();
 
-        if (!$oldProgram || !$newProgram) {
-            return [];
+        if ($oldCourses->isEmpty() || $newCourses->isEmpty()) {
+            return [
+                'equivalences' => [],
+                'stats' => [
+                    'total_source' => $oldCourses->count(),
+                    'total_target' => $newCourses->count(),
+                    'matched_count' => 0,
+                    'adaptation_percentage' => 0
+                ]
+            ];
         }
 
-        // Récupérer les cours des deux programmes
-        $oldCourses = CourseProgramDetail::with('course')
-            ->where('program_id', $oldProgram->id)
-            ->get();
-
-        $newCourses = CourseProgramDetail::with('course')
-            ->where('program_id', $newProgram->id)
-            ->get();
-
-        // Trouver les équivalences
         $equivalences = [];
         $matchedCourseIds = [];
+        $totalTargetCourses = $newCourses->count();
 
-        foreach ($oldCourses as $oldCourse) {
-            foreach ($newCourses as $newCourse) {
-                // Comparaison par titre de cours (peut être amélioré avec des codes uniques)
+        foreach ($oldCourses as $oldDetail) {
+            $oldVolume = $oldDetail->cm + $oldDetail->td + $oldDetail->tp;
+            $oldCredits = $oldDetail->credits > 0 ? $oldDetail->credits : ($oldVolume / 15);
+
+            $oldNameRaw = $oldDetail->course->title ?? 'Cours Inconnu';
+            $oldNameNormalized = $this->normalizeString($oldNameRaw);
+
+            // Système de fallback robuste pour le nom du programme
+            $oldProgramName = $oldDetail->program->title
+                ?? $oldDetail->promotion->faculty->name
+                ?? $oldDetail->promotion->title
+                ?? 'N/A';
+
+            foreach ($newCourses as $newDetail) {
+                // Éviter les doublons de correspondance dans la cible
+                if (in_array($newDetail->id, $matchedCourseIds)) continue;
+
+                $newNameRaw = $newDetail->course->title ?? 'Cours Inconnu';
+                $newNameNormalized = $this->normalizeString($newNameRaw);
+
+                // Système de fallback robuste pour le nom du programme
+                $newProgramName = $newDetail->program->title
+                    ?? $newDetail->promotion->faculty->name
+                    ?? $newDetail->promotion->title
+                    ?? 'N/A';
+
+                // Algorithme de similarité
                 $similarity = 0;
-                similar_text(
-                    strtolower($oldCourse->course->name),
-                    strtolower($newCourse->course->name),
-                    $similarity
-                );
+                similar_text($oldNameNormalized, $newNameNormalized, $similarity);
 
-                if ($similarity > 80 && !in_array($newCourse->course_id, $matchedCourseIds)) {
+                // Seuil de correspondance de 80%
+                if ($similarity >= 80) {
+                    $newVolume = $newDetail->cm + $newDetail->td + $newDetail->tp;
+                    $newCredits = $newDetail->credits > 0 ? $newDetail->credits : ($newVolume / 15);
+
                     $equivalences[] = [
-                        'old_course' => $oldCourse->course->name,
-                        'new_course' => $newCourse->course->name,
-                        'match_percentage' => $similarity
+                        'old_course' => $oldNameRaw,
+                        'old_program' => $oldProgramName,
+                        'old_volume' => $oldVolume,
+                        'old_credits' => round($oldCredits, 2),
+                        'new_course' => $newNameRaw,
+                        'new_program' => $newProgramName,
+                        'new_volume' => $newVolume,
+                        'new_credits' => round($newCredits, 2),
+                        'match_percentage' => round($similarity, 2)
                     ];
 
-                    $matchedCourseIds[] = $newCourse->course_id;
+                    $matchedCourseIds[] = $newDetail->id;
                     break;
                 }
             }
         }
 
-        return $equivalences;
+        // Calcul du score d'adaptation global
+        $matchedCount = count($equivalences);
+        $adaptationPercentage = ($totalTargetCourses > 0)
+            ? round(($matchedCount / $totalTargetCourses) * 100, 2)
+            : 0;
+
+        return [
+            'equivalences' => $equivalences,
+            'stats' => [
+                'total_source' => $oldCourses->count(),
+                'total_target' => $totalTargetCourses,
+                'matched_count' => $matchedCount,
+                'adaptation_percentage' => $adaptationPercentage
+            ]
+        ];
+    }
+
+    private function normalizeString($string)
+    {
+        if (empty($string)) return '';
+
+        // Conversion en minuscules
+        $string = mb_strtolower($string, 'UTF-8');
+
+        // Suppression des accents
+        if (class_exists('Transliterator')) {
+            $transliterator = \Transliterator::create('Any-Latin; Latin-ASCII');
+            if ($transliterator) {
+                $string = $transliterator->transliterate($string);
+            }
+        } else {
+            // Fallback si l'extension intl n'est pas dispo
+            $search = ['à', 'á', 'â', 'ã', 'ä', 'å', 'ç', 'è', 'é', 'ê', 'ë', 'ì', 'í', 'î', 'ï', 'ñ', 'ò', 'ó', 'ô', 'õ', 'ö', 'ø', 'ù', 'ú', 'û', 'ü', 'ý', 'ÿ'];
+            $replace = ['a', 'a', 'a', 'a', 'a', 'a', 'c', 'e', 'e', 'e', 'e', 'i', 'i', 'i', 'i', 'n', 'o', 'o', 'o', 'o', 'o', 'o', 'u', 'u', 'u', 'u', 'y', 'y'];
+            $string = str_replace($search, $replace, $string);
+        }
+
+        // Suppression de la ponctuation et des caractères spéciaux
+        $string = preg_replace('/[^\w\s]/u', ' ', $string);
+
+        // Suppression des espaces multiples et trim
+        $string = preg_replace('/\s+/', ' ', $string);
+        $string = trim($string);
+
+        return $string;
     }
 }

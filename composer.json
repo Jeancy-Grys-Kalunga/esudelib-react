@@ -75,6 +75,14 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
+        ],
+        "test:coverage": [
+            "@php artisan config:clear --ansi",
+            "@php artisan test --coverage"
+        ],
+        "test:coverage:phpdbg": [
+            "@php artisan config:clear --ansi",
+            "phpdbg -qrr vendor/bin/phpunit --coverage-text"
         ]
     },
     "extra": {

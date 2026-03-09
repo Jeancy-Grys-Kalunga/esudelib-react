@@ -46,7 +46,7 @@ const GuestLayout: React.FC<GuestLayoutProps> = ({ children }) => {
                             </Link>
                             <Link
                                 href={route('register')}
-                                className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition duration-300 hover:bg-blue-700"
+                                className="rounded-lg bg-blue-300 px-4 py-2 font-medium text-white transition duration-300 hover:bg-blue-700"
                             >
                                 Inscription
                             </Link>
