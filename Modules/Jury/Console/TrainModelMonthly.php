@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Console\Commands;
+namespace Modules\Jury\Console;
 
 use Modules\Jury\Services\MasterPredictionService;
 use Illuminate\Console\Command;
