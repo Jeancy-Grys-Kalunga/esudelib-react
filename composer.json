@@ -21,6 +21,7 @@
         "rubix/ml": "*",
         "spatie/laravel-medialibrary": "^11.12",
         "spatie/laravel-permission": "^6.18",
+        "symfony/polyfill-iconv": "^1.37",
         "tightenco/ziggy": "^2.4",
         "twilio/sdk": "^8.6",
         "vonage/client": "^4.2"
