@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\Institution\Database\Seeders;
+namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Modules\Institution\Entities\CourseCategory;
