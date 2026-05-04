@@ -45,6 +45,8 @@ class JuryServiceProvider extends ServiceProvider
     {
         $this->commands([
             \Modules\Jury\Console\GenerateMasterDataset::class,
+            \Modules\Jury\Console\CleanTempFiles::class,
+            \Modules\Jury\Console\TrainModelMonthly::class,
         ]);
     }
 
