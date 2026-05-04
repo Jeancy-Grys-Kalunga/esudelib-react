@@ -3,11 +3,6 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Modules\Currency\Database\Seeders\CurrencyDatabaseSeeder;
-use Modules\Institution\Database\Seeders\CourseCategoriesSeeder;
-use Modules\Setting\Database\Seeders\SettingDatabaseSeeder;
-use Modules\User\Database\Seeders\PermissionsTableSeeder;
-
 class DatabaseSeeder extends Seeder
 {
     /**
