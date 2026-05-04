@@ -143,7 +143,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
 
     return (
         <div className={`flex min-h-screen bg-white transition-opacity duration-1000 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}>
-            <Head title="Connexion - E-CURSU LMD" />
+            <Head title="Connexion - E-CURSUS LMD" />
 
             {/* Left panel - Branding (Hidden on mobile) */}
             <div className="relative hidden w-full flex-col justify-between overflow-hidden lg:flex lg:w-1/2 xl:w-[55%]">
@@ -181,7 +181,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                                 <GraduationCapIcon className="relative z-10 h-8 w-8 text-white drop-shadow-md" />
                             </div>
                             <span className="bg-clip-text text-3xl font-black tracking-tight text-white drop-shadow-sm transition-colors group-hover:text-blue-100">
-                                E-CURSU LMD
+                                E-CURSUSs LMD
                             </span>
                         </Link>
                     </div>
@@ -238,7 +238,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#0a0f2c] text-white shadow-2xl shadow-blue-900/20">
                             <GraduationCapIcon className="h-8 w-8" />
                         </div>
-                        <span className="text-3xl font-black tracking-tight text-slate-900">E-CURSU</span>
+                        <span className="text-3xl font-black tracking-tight text-slate-900">E-CURSUSs</span>
                     </div>
 
                     <div className="mb-10 text-center lg:text-left">

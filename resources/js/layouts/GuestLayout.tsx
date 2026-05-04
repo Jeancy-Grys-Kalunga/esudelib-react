@@ -21,7 +21,7 @@ const GuestLayout: React.FC<GuestLayoutProps> = ({ children }) => {
                         <div className="flex items-center">
                             <Link href="/" className="flex items-center text-xl font-bold text-gray-900">
                                 <span className="mr-2 rounded bg-blue-600 px-2 py-1 text-white">EC</span>
-                                E-Cursus LMD
+                                E-CURSUS LMD
                             </Link>
                         </div>
 
@@ -63,7 +63,7 @@ const GuestLayout: React.FC<GuestLayoutProps> = ({ children }) => {
                 <div className="container mx-auto px-4">
                     <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
                         <div>
-                            <h3 className="mb-4 text-xl font-bold">E-Cursus LMD</h3>
+                            <h3 className="mb-4 text-xl font-bold">E-CURSUSss LMD</h3>
                             <p className="text-gray-400">
                                 Plateforme moderne de gestion des délibérations pour les établissements d'enseignement supérieur.
                             </p>
