@@ -213,7 +213,7 @@ class ProgramController extends Controller
                 'name' => $program->name,
                 'institution' => $program->institution?->name,
             ],
-            'promotions' => Promotion::all(['id', 'title as name']),
+            'promotions' => Promotion::where('institution_id', $program->institution_id)->get(['id', 'title as name']),
             'units' => UnitsTeaching::all(['id', 'title as name']),
             'categories' => CourseCategory::all(['id', 'name']),
             'courses' => Course::all(['id', 'title as name']),
@@ -324,7 +324,7 @@ class ProgramController extends Controller
                     ];
                 })
             ],
-            'promotions' => Promotion::all(['id', 'title as name']),
+            'promotions' => Promotion::where('institution_id', $program->institution_id)->get(['id', 'title as name']),
             'units' => UnitsTeaching::all(['id', 'title as name']),
             'categories' => CourseCategory::all(['id', 'name']),
             'courses' => Course::all(['id', 'title as name']),

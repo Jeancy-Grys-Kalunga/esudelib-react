@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::table('units_teachings', function (Blueprint $table) {
             $table->unsignedBigInteger('promotion_id')->nullable()->change();
+            $table->unsignedBigInteger('course_id')->nullable()->change();
         });
     }
 
@@ -23,6 +24,7 @@ return new class extends Migration
     {
         Schema::table('units_teachings', function (Blueprint $table) {
             $table->unsignedBigInteger('promotion_id')->nullable(false)->change();
+            $table->unsignedBigInteger('course_id')->nullable(false)->change();
         });
     }
 };
