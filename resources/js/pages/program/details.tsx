@@ -401,6 +401,11 @@ export default function ProgramDetailsForm({
         try {
             const response = await axios.post(route('units-teachings.storeQuick'), {
                 title: newUnitName
+            }, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
             });
 
             const newUnit = response.data.unit;

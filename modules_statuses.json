@@ -10,7 +10,7 @@
     "Setting": true,
     "Upload": true,
     "User": true,
-    "Currency": true,
+    "Currency": false,
     "Calendar": true,
-    "UmlViewer": true
+    "UmlViewer": false
 }
