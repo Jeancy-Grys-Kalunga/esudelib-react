@@ -184,16 +184,8 @@ export default function ProgramDetailsForm({
         setData('course_details', courseDetails);
     }, [courseDetails]);
 
-    // Calculer les cours disponibles (non utilisés)
-    const availableCourses = useMemo(() => {
-        const usedCourseIds = new Set(
-            courseDetails.map(detail => detail.course_id)
-        );
-        
-        return courses.filter(
-            course => !usedCourseIds.has(course.id.toString())
-        );
-    }, [courses, courseDetails]);
+    // Les cours sont toujours disponibles pour être associés à d'autres promotions
+    const availableCourses = courses;
 
     // Fonction de calcul des crédits
     const calculateCredits = (cm: string | number, td: string | number, tp: string | number): string => {
@@ -242,6 +234,19 @@ export default function ProgramDetailsForm({
             });
         });
 
+        // Validation d'unicité de la paire (cours, promotion)
+        const combinations = new Set<string>();
+        courseDetails.forEach((detail, index) => {
+            if (detail.course_id && detail.promotion_id) {
+                const combo = `${detail.course_id}_${detail.promotion_id}`;
+                if (combinations.has(combo)) {
+                    newErrors[`${index}_course_id`] = 'Ce cours est déjà associé à cette promotion';
+                    newErrors[`${index}_promotion_id`] = 'Cette promotion est déjà associée à ce cours';
+                }
+                combinations.add(combo);
+            }
+        });
+
         setFieldErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -263,10 +268,6 @@ export default function ProgramDetailsForm({
     }, [flash]);
 
     const addCourseDetail = () => {
-        if (availableCourses.length === 0) {
-            toast.warning('Tous les cours sont déjà ajoutés');
-            return;
-        }
 
         setCourseDetails([
             ...courseDetails,
@@ -408,7 +409,6 @@ export default function ProgramDetailsForm({
                                 variant="outline" 
                                 size="sm" 
                                 className="flex items-center gap-1"
-                                disabled={availableCourses.length === 0}
                             >
                                 <Plus className="h-4 w-4" />
                                 Ajouter un cours
@@ -600,7 +600,6 @@ export default function ProgramDetailsForm({
                                                     onClick={addCourseDetail}
                                                     variant="outline"
                                                     className="flex items-center gap-1"
-                                                    disabled={availableCourses.length === 0}
                                                 >
                                                     <Plus className="h-4 w-4" />
                                                     Ajouter un autre cours
