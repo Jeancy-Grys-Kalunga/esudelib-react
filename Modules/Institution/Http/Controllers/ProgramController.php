@@ -304,31 +304,33 @@ class ProgramController extends Controller
                 'id' => $program->id,
                 'name' => $program->name,
                 'institution' => $program->institution?->name,
-                'course_details' => $program->courseDetails->map(function ($detail) {
+                'course_details' => $program->courseDetails->groupBy(function ($detail) {
+                    return $detail->course_id . '-' . $detail->units_teaching_id . '-' . $detail->course_category_id . '-' . $detail->semestre_id . '-' . $detail->cm . '-' . $detail->td . '-' . $detail->tp;
+                })->map(function ($group) {
+                    $first = $group->first();
                     return [
-                        'id' => $detail->id,
-                        'course_id' => $detail->course_id,
-                        'course' => $detail->course?->title,
-                        'promotion_id' => $detail->promotion_id,
-                        'promotion' => $detail->promotion?->title,
-                        'units_teaching_id' => $detail->units_teaching_id,
-                        'units_teaching' => $detail->unitsTeaching?->title,
-                        'course_category_id' => $detail->course_category_id,
-                        'course_category' => $detail->category?->name,
-                        'semestre_id' => $detail->semestre_id, // Ajouté
-                        'semestre' => $detail->semestre?->title, // Ajouté
-                        'cm' => $detail->cm,
-                        'td' => $detail->td,
-                        'tp' => $detail->tp,
-                        'credits' => $detail->credits,
+                        'ids' => $group->pluck('id')->toArray(),
+                        'course_id' => (string)$first->course_id,
+                        'course' => $first->course?->title,
+                        'promotion_ids' => $group->pluck('promotion_id')->map(fn($id) => (string)$id)->toArray(),
+                        'units_teaching_id' => $first->units_teaching_id ? (string)$first->units_teaching_id : null,
+                        'units_teaching' => $first->unitsTeaching?->title,
+                        'course_category_id' => $first->course_category_id ? (string)$first->course_category_id : null,
+                        'course_category' => $first->category?->name,
+                        'semestre_id' => (string)$first->semestre_id,
+                        'semestre' => $first->semestre?->title,
+                        'cm' => (string)$first->cm,
+                        'td' => (string)$first->td,
+                        'tp' => (string)$first->tp,
+                        'credits' => (string)$first->credits,
                     ];
-                })
+                })->values()->toArray()
             ],
             'promotions' => Promotion::where('institution_id', $program->institution_id)->get(['id', 'title as name']),
             'units' => UnitsTeaching::all(['id', 'title as name']),
             'categories' => CourseCategory::all(['id', 'name']),
             'courses' => Course::all(['id', 'title as name']),
-            'semestres' => Semestre::all(['id', 'title']), // Ajouté
+            'semestres' => Semestre::all(['id', 'title']),
         ]);
     }
 
@@ -348,47 +350,44 @@ class ProgramController extends Controller
 
             $validated = $request->validate([
                 'course_details' => 'required|array|min:1',
-                'course_details.*.id' => 'sometimes|exists:course_program_details,id',
+                'course_details.*.ids' => 'sometimes|array',
+                'course_details.*.ids.*' => 'exists:course_program_details,id',
                 'course_details.*.course_id' => 'required|exists:courses,id',
-                'course_details.*.promotion_id' => 'required|exists:promotions,id',
+                'course_details.*.promotion_ids' => 'required|array|min:1',
+                'course_details.*.promotion_ids.*' => 'exists:promotions,id',
                 'course_details.*.units_teaching_id' => 'nullable|exists:units_teachings,id',
                 'course_details.*.course_category_id' => 'nullable|exists:course_categories,id',
-                'course_details.*.semestre_id' => 'required|exists:semestres,id', // Ajouté
+                'course_details.*.semestre_id' => 'required|exists:semestres,id',
                 'course_details.*.cm' => 'required|numeric|min:0',
                 'course_details.*.td' => 'required|numeric|min:0',
                 'course_details.*.tp' => 'required|numeric|min:0',
                 'course_details.*.credits' => 'required|numeric|min:0',
             ]);
 
-            $existingIds = [];
-            foreach ($validated['course_details'] as $detail) {
-                $data = [
-                    'course_id' => $detail['course_id'],
-                    'promotion_id' => $detail['promotion_id'],
-                    'units_teaching_id' => $detail['units_teaching_id'],
-                    'course_category_id' => $detail['course_category_id'],
-                    'semestre_id' => $detail['semestre_id'], // Ajouté
-                    'cm' => (float)$detail['cm'],
-                    'td' => (float)$detail['td'],
-                    'tp' => (float)$detail['tp'],
-                    'credits' => (float)$detail['credits'],
-                ];
+            // Suppression de tous les anciens détails
+            CourseProgramDetail::where('program_id', $program->id)->delete();
 
-                if (isset($detail['id']) && $detail['id']) {
-                    // Mise à jour du détail existant
-                    CourseProgramDetail::where('id', $detail['id'])->update($data);
-                    $existingIds[] = $detail['id'];
-                } else {
-                    // Création d'un nouveau détail
-                    $newDetail = CourseProgramDetail::create(array_merge($data, ['program_id' => $program->id]));
-                    $existingIds[] = $newDetail->id;
+            $details = [];
+            foreach ($validated['course_details'] as $detail) {
+                foreach ($detail['promotion_ids'] as $promotion_id) {
+                    $details[] = [
+                        'program_id' => $program->id,
+                        'course_id' => $detail['course_id'],
+                        'promotion_id' => $promotion_id,
+                        'units_teaching_id' => $detail['units_teaching_id'] ?? null,
+                        'course_category_id' => $detail['course_category_id'] ?? null,
+                        'semestre_id' => $detail['semestre_id'],
+                        'cm' => (float)$detail['cm'],
+                        'td' => (float)$detail['td'],
+                        'tp' => (float)$detail['tp'],
+                        'credits' => (float)$detail['credits'],
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
                 }
             }
 
-            // Supprimer les détails qui ne sont plus dans la liste
-            CourseProgramDetail::where('program_id', $program->id)
-                ->whereNotIn('id', $existingIds)
-                ->delete();
+            CourseProgramDetail::insert($details);
 
             DB::commit();
 
