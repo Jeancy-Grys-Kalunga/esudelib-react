@@ -12,12 +12,14 @@ return new class extends Migration
      */
    public function up()
     {
-        Schema::table('assignments', function (Blueprint $table) {
-            $table->foreignId('institution_id')
-                ->after('id')
-                ->constrained((new Institution)->getTable())
-                ->onDelete('cascade');
-        });
+        if (!Schema::hasColumn('assignments', 'institution_id')) {
+            Schema::table('assignments', function (Blueprint $table) {
+                $table->foreignId('institution_id')
+                    ->after('id')
+                    ->constrained((new Institution)->getTable())
+                    ->onDelete('cascade');
+            });
+        }
     }
 
     /**
