@@ -5,7 +5,8 @@ import { toast } from 'react-toastify';
 
 import { Button } from '@/components/ui/button';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle } from '@/components/ui/dialog';
+import axios from 'axios';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -148,6 +149,10 @@ export default function ProgramDetailsForm({
     semestres, // Ajouté
     flash 
 }: ProgramDetailsPageProps) {
+    const [localUnits, setLocalUnits] = useState<UnitsTeaching[]>(units);
+    const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
+    const [newUnitName, setNewUnitName] = useState('');
+    const [isCreatingUnit, setIsCreatingUnit] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [courseDetails, setCourseDetails] = useState<CourseDetail[]>(
         program.course_details?.length
@@ -385,6 +390,31 @@ export default function ProgramDetailsForm({
         }
     };
 
+    const handleCreateUnit = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!newUnitName.trim()) {
+            toast.error('Le nom de l\'unité est obligatoire');
+            return;
+        }
+
+        setIsCreatingUnit(true);
+        try {
+            const response = await axios.post(route('units-teachings.storeQuick'), {
+                title: newUnitName
+            });
+
+            const newUnit = response.data.unit;
+            setLocalUnits([...localUnits, newUnit]);
+            toast.success(response.data.message);
+            setIsUnitModalOpen(false);
+            setNewUnitName('');
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Erreur lors de la création de l\'unité');
+        } finally {
+            setIsCreatingUnit(false);
+        }
+    };
+
     return (
         <AppLayout>
             <Head title={`Détails du programme - ${program.name}`} />
@@ -477,21 +507,32 @@ export default function ProgramDetailsForm({
                                     {/* Unité */}
                                     <div className="space-y-2">
                                         <Label htmlFor={`units_teaching_id_${index}`}>Unité *</Label>
-                                        <Select
-                                            value={detail.units_teaching_id}
-                                            onValueChange={(value) => updateCourseDetail(index, 'units_teaching_id', value)}
-                                        >
-                                            <SelectTrigger className="focus:ring-primary-500 w-full min-w-0 border-gray-300 focus:ring-2">
-                                                <SelectValue placeholder="Sélectionnez une unité" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {units.map((unit) => (
-                                                    <SelectItem key={unit.id} value={unit.id.toString()}>
-                                                        {unit.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                        <div className="flex gap-2">
+                                            <Select
+                                                value={detail.units_teaching_id}
+                                                onValueChange={(value) => updateCourseDetail(index, 'units_teaching_id', value)}
+                                            >
+                                                <SelectTrigger className="focus:ring-primary-500 w-full min-w-0 border-gray-300 focus:ring-2">
+                                                    <SelectValue placeholder="Sélectionnez une unité" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {localUnits.map((unit) => (
+                                                        <SelectItem key={unit.id} value={unit.id.toString()}>
+                                                            {unit.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button 
+                                                type="button" 
+                                                variant="outline" 
+                                                size="icon"
+                                                className="shrink-0"
+                                                onClick={() => setIsUnitModalOpen(true)}
+                                            >
+                                                <Plus className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                         {fieldErrors[`${index}_units_teaching_id`] && (
                                             <p className="text-sm text-red-500">{fieldErrors[`${index}_units_teaching_id`]}</p>
                                         )}
@@ -649,6 +690,38 @@ export default function ProgramDetailsForm({
                     </div>
                 </form>
             </div>
+
+            {/* Modal de création d'unité d'enseignement */}
+            <Dialog open={isUnitModalOpen} onOpenChange={setIsUnitModalOpen}>
+                <DialogContent>
+                    <form onSubmit={handleCreateUnit}>
+                        <DialogHeader>
+                            <DialogTitle>Nouvelle unité d'enseignement</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="unitName">Nom de l'unité *</Label>
+                                <Input
+                                    id="unitName"
+                                    value={newUnitName}
+                                    onChange={(e) => setNewUnitName(e.target.value)}
+                                    placeholder="Ex: Informatique, Mathématiques..."
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setIsUnitModalOpen(false)}>
+                                Annuler
+                            </Button>
+                            <Button type="submit" disabled={isCreatingUnit || !newUnitName.trim()}>
+                                {isCreatingUnit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Enregistrer
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }

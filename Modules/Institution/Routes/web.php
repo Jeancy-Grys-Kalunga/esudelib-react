@@ -27,6 +27,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('promotions/import', [PromotionController::class, 'import'])->name('promotions.import');
 
     Route::resource('units-teachings', UnitsTeachingController::class)->names('units-teachings');
+    Route::post('units-teachings/quick', [UnitsTeachingController::class, 'storeQuick'])->name('units-teachings.storeQuick');
 
     Route::resource('courses', CourseController::class)->names('courses');
     Route::post('courses/import', [CourseController::class, 'import'])->name('courses.import');
