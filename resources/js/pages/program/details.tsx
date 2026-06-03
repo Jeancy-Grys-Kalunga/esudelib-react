@@ -69,27 +69,33 @@ interface ProgramDetailsPageProps extends PageProps {
     semestres: Semestre[]; // Ajouté
 }
 
-const CourseSelector = ({
-    allCourses,
-    availableCourses,
+const SearchableSelect = ({
+    items,
+    availableItems,
     value,
     onChange,
+    placeholder = 'Sélectionnez une option',
+    emptyMessage = 'Aucune option trouvée.',
+    searchPlaceholder = 'Rechercher...',
     error,
 }: {
-    allCourses: Course[];
-    availableCourses: Course[];
+    items: { id: number | string; name: string }[];
+    availableItems: { id: number | string; name: string }[];
     value: string;
     onChange: (value: string) => void;
+    placeholder?: string;
+    emptyMessage?: string;
+    searchPlaceholder?: string;
     error?: string | null;
 }) => {
     const [open, setOpen] = useState(false);
 
-    const currentCourse = allCourses.find((c) => c.id.toString() === value);
-    const displayCourses = useMemo(() => {
-        if (!currentCourse) return availableCourses;
-        if (availableCourses.some((c) => c.id === currentCourse.id)) return availableCourses;
-        return [currentCourse, ...availableCourses];
-    }, [availableCourses, currentCourse]);
+    const currentItem = items.find((c) => c.id.toString() === value);
+    const displayItems = useMemo(() => {
+        if (!currentItem) return availableItems;
+        if (availableItems.some((c) => c.id.toString() === currentItem.id.toString())) return availableItems;
+        return [currentItem, ...availableItems];
+    }, [availableItems, currentItem]);
 
     return (
         <div className="flex flex-col gap-1 w-full">
@@ -102,27 +108,27 @@ const CourseSelector = ({
                 type="button"
             >
                 <span className="truncate">
-                    {value ? currentCourse?.name : (availableCourses.length ? 'Sélectionnez un cours' : 'Aucun cours disponible')}
+                    {value ? currentItem?.name : (availableItems.length ? placeholder : 'Aucune option disponible')}
                 </span>
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
             <CommandDialog open={open} onOpenChange={setOpen}>
-                <DialogTitle className="sr-only">Rechercher un cours</DialogTitle>
-                <CommandInput placeholder="Rechercher un cours..." />
+                <DialogTitle className="sr-only">{searchPlaceholder}</DialogTitle>
+                <CommandInput placeholder={searchPlaceholder} />
                 <CommandList>
-                    <CommandEmpty>Aucun cours trouvé.</CommandEmpty>
+                    <CommandEmpty>{emptyMessage}</CommandEmpty>
                     <CommandGroup>
-                        {displayCourses.map((course) => (
+                        {displayItems.map((item) => (
                             <CommandItem
-                                key={course.id}
-                                value={course.name}
+                                key={item.id}
+                                value={item.name}
                                 onSelect={() => {
-                                    onChange(course.id.toString());
+                                    onChange(item.id.toString());
                                     setOpen(false);
                                 }}
                             >
-                                <Check className={cn('mr-2 h-4 w-4 shrink-0', value === course.id.toString() ? 'opacity-100' : 'opacity-0')} />
-                                <span className="truncate">{course.name}</span>
+                                <Check className={cn('mr-2 h-4 w-4 shrink-0', value === item.id.toString() ? 'opacity-100' : 'opacity-0')} />
+                                <span className="truncate">{item.name}</span>
                             </CommandItem>
                         ))}
                     </CommandGroup>
@@ -441,11 +447,14 @@ export default function ProgramDetailsForm({
                                     {/* Cours */}
                                     <div className="col-span-1 space-y-2 lg:col-span-2">
                                         <Label htmlFor={`course_id_${index}`}>Cours *</Label>
-                                        <CourseSelector
-                                            allCourses={courses}
-                                            availableCourses={availableCourses}
+                                        <SearchableSelect
+                                            items={courses}
+                                            availableItems={availableCourses}
                                             value={detail.course_id}
                                             onChange={(value) => updateCourseDetail(index, 'course_id', value)}
+                                            placeholder="Sélectionnez un cours"
+                                            emptyMessage="Aucun cours trouvé."
+                                            searchPlaceholder="Rechercher un cours..."
                                             error={fieldErrors[`${index}_course_id`]}
                                         />
                                     </div>
@@ -453,24 +462,16 @@ export default function ProgramDetailsForm({
                                     {/* Promotion */}
                                     <div className="space-y-2">
                                         <Label htmlFor={`promotion_id_${index}`}>Promotion *</Label>
-                                        <Select
+                                        <SearchableSelect
+                                            items={promotions}
+                                            availableItems={promotions}
                                             value={detail.promotion_id}
-                                            onValueChange={(value) => updateCourseDetail(index, 'promotion_id', value)}
-                                        >
-                                            <SelectTrigger className="focus:ring-primary-500 w-full min-w-0 border-gray-300 focus:ring-2">
-                                                <SelectValue placeholder="Sélectionnez une promotion" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {promotions.map((promotion) => (
-                                                    <SelectItem key={promotion.id} value={promotion.id.toString()}>
-                                                        {promotion.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {fieldErrors[`${index}_promotion_id`] && (
-                                            <p className="text-sm text-red-500">{fieldErrors[`${index}_promotion_id`]}</p>
-                                        )}
+                                            onChange={(value) => updateCourseDetail(index, 'promotion_id', value)}
+                                            placeholder="Sélectionnez une promotion"
+                                            emptyMessage="Aucune promotion trouvée."
+                                            searchPlaceholder="Rechercher une promotion..."
+                                            error={fieldErrors[`${index}_promotion_id`]}
+                                        />
                                     </div>
 
                                     {/* Unité */}
