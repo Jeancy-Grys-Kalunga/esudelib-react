@@ -110,6 +110,29 @@ class UnitsTeachingController extends Controller
         ]);
     }
 
+    public function storeQuick(Request $request)
+    {
+        if (!auth()->user()->hasPermissionTo('create_unit_teachings')) {
+            abort(403, 'Action non autorisée');
+        }
+
+        $request->validate([
+            'title' => 'required|string|max:255',
+        ]);
+
+        $unit = UnitsTeaching::create([
+            'title' => $request->title,
+        ]);
+
+        return response()->json([
+            'message' => 'Unité créée avec succès',
+            'unit' => [
+                'id' => $unit->id,
+                'name' => $unit->title,
+            ]
+        ]);
+    }
+
     public function update(UpdateUnitTeachingRequest $request, UnitsTeaching $unit)
     {
         if (!auth()->user()->hasPermissionTo('edit_unit_teachings')) {
