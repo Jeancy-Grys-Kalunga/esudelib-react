@@ -63,7 +63,7 @@ const GuestLayout: React.FC<GuestLayoutProps> = ({ children }) => {
                 <div className="container mx-auto px-4">
                     <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
                         <div>
-                            <h3 className="mb-4 text-xl font-bold">E-CURSUSss LMD</h3>
+                            <h3 className="mb-4 text-xl font-bold">E-CURSUSs LMD</h3>
                             <p className="text-gray-400">
                                 Plateforme moderne de gestion des délibérations pour les établissements d'enseignement supérieur.
                             </p>
