@@ -158,7 +158,7 @@ export default function Home() {
                                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-blue-400/20 to-transparent opacity-50"></div>
                                 <GraduationCapIcon className="relative z-10 h-8 w-8 text-white drop-shadow-md" />
                             </div>
-                            <span className="bg-clip-text text-3xl font-black tracking-tight text-white drop-shadow-sm">E-CURSUSs LMD</span>
+                            <span className="bg-clip-text text-3xl font-black tracking-tight text-white drop-shadow-sm">E-CURSUS LMD</span>
                         </div>
 
                         {/* Main Content */}
@@ -240,7 +240,7 @@ export default function Home() {
                             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#0a0f2c] text-white shadow-2xl shadow-blue-900/20">
                                 <GraduationCapIcon className="h-8 w-8" />
                             </div>
-                            <span className="text-3xl font-black tracking-tight text-slate-900">E-CURSUSs</span>
+                            <span className="text-3xl font-black tracking-tight text-slate-900">E-CURSUS</span>
                         </div>
 
                         <div className="space-y-4 text-center lg:text-left">

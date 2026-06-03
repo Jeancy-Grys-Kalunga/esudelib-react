@@ -1,13 +1,16 @@
 import { Head, useForm } from '@inertiajs/react';
-import { Edit, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Edit, Loader2, Plus, Trash2 } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
 import { Button } from '@/components/ui/button';
+import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils';
 import { PageProps } from '@/types';
 
 // Types pour les données
@@ -65,6 +68,70 @@ interface ProgramDetailsPageProps extends PageProps {
     categories: CourseCategory[];
     semestres: Semestre[]; // Ajouté
 }
+
+const CourseSelector = ({
+    allCourses,
+    availableCourses,
+    value,
+    onChange,
+    error,
+}: {
+    allCourses: Course[];
+    availableCourses: Course[];
+    value: string;
+    onChange: (value: string) => void;
+    error?: string | null;
+}) => {
+    const [open, setOpen] = useState(false);
+
+    const currentCourse = allCourses.find((c) => c.id.toString() === value);
+    const displayCourses = useMemo(() => {
+        if (!currentCourse) return availableCourses;
+        if (availableCourses.some((c) => c.id === currentCourse.id)) return availableCourses;
+        return [currentCourse, ...availableCourses];
+    }, [availableCourses, currentCourse]);
+
+    return (
+        <div className="flex flex-col gap-1 w-full">
+            <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                className={cn('w-full max-w-full justify-between font-normal min-w-0', !value && 'text-muted-foreground')}
+                onClick={() => setOpen(true)}
+                type="button"
+            >
+                <span className="truncate">
+                    {value ? currentCourse?.name : (availableCourses.length ? 'Sélectionnez un cours' : 'Aucun cours disponible')}
+                </span>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+            <CommandDialog open={open} onOpenChange={setOpen}>
+                <DialogTitle className="sr-only">Rechercher un cours</DialogTitle>
+                <CommandInput placeholder="Rechercher un cours..." />
+                <CommandList>
+                    <CommandEmpty>Aucun cours trouvé.</CommandEmpty>
+                    <CommandGroup>
+                        {displayCourses.map((course) => (
+                            <CommandItem
+                                key={course.id}
+                                value={course.name}
+                                onSelect={() => {
+                                    onChange(course.id.toString());
+                                    setOpen(false);
+                                }}
+                            >
+                                <Check className={cn('mr-2 h-4 w-4 shrink-0', value === course.id.toString() ? 'opacity-100' : 'opacity-0')} />
+                                <span className="truncate">{course.name}</span>
+                            </CommandItem>
+                        ))}
+                    </CommandGroup>
+                </CommandList>
+            </CommandDialog>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+        </div>
+    );
+};
 
 export default function ProgramDetailsForm({ 
     program, 
@@ -374,31 +441,13 @@ export default function ProgramDetailsForm({
                                     {/* Cours */}
                                     <div className="col-span-1 space-y-2 lg:col-span-2">
                                         <Label htmlFor={`course_id_${index}`}>Cours *</Label>
-                                        <Select 
-                                            value={detail.course_id} 
-                                            onValueChange={(value) => updateCourseDetail(index, 'course_id', value)}
-                                        >
-                                            <SelectTrigger className="focus:ring-primary-500 w-full max-w-full min-w-0 truncate border-gray-300 focus:ring-2">
-                                                <SelectValue 
-                                                    placeholder={availableCourses.length ? "Sélectionnez un cours" : "Aucun cours disponible"} 
-                                                    className="truncate" 
-                                                />
-                                            </SelectTrigger>
-                                            <SelectContent className="max-h-72 w-[350px] md:w-[420px]">
-                                                {availableCourses.map((course) => (
-                                                    <SelectItem
-                                                        key={course.id}
-                                                        value={course.id.toString()}
-                                                        className="px-3 py-2 break-words whitespace-normal"
-                                                    >
-                                                        <span className="block truncate">{course.name}</span>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {fieldErrors[`${index}_course_id`] && (
-                                            <p className="text-sm text-red-500">{fieldErrors[`${index}_course_id`]}</p>
-                                        )}
+                                        <CourseSelector
+                                            allCourses={courses}
+                                            availableCourses={availableCourses}
+                                            value={detail.course_id}
+                                            onChange={(value) => updateCourseDetail(index, 'course_id', value)}
+                                            error={fieldErrors[`${index}_course_id`]}
+                                        />
                                     </div>
 
                                     {/* Promotion */}

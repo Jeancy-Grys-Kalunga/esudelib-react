@@ -181,7 +181,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                                 <GraduationCapIcon className="relative z-10 h-8 w-8 text-white drop-shadow-md" />
                             </div>
                             <span className="bg-clip-text text-3xl font-black tracking-tight text-white drop-shadow-sm transition-colors group-hover:text-blue-100">
-                                E-CURSUSs LMD
+                                E-CURSUS LMD
                             </span>
                         </Link>
                     </div>
@@ -238,7 +238,7 @@ export default function Login({ status, canResetPassword, institutions = [], fla
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#0a0f2c] text-white shadow-2xl shadow-blue-900/20">
                             <GraduationCapIcon className="h-8 w-8" />
                         </div>
-                        <span className="text-3xl font-black tracking-tight text-slate-900">E-CURSUSs</span>
+                        <span className="text-3xl font-black tracking-tight text-slate-900">E-CURSUS</span>
                     </div>
 
                     <div className="mb-10 text-center lg:text-left">
