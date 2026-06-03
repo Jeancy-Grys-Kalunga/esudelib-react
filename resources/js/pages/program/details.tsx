@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { PageProps } from '@/types';
+import { MultiSelect } from '@/components/multi-select';
 
 // Types pour les données
 type Course = {
@@ -41,9 +42,10 @@ type Semestre = {
 };
 
 type CourseDetail = {
+    ids?: number[];
     id?: number;
     course_id: string;
-    promotion_id: string;
+    promotion_ids: string[];
     units_teaching_id: string;
     course_category_id: string;
     semestre_id: string; // Ajouté
@@ -163,12 +165,13 @@ export default function ProgramDetailsForm({
                   td: detail.td.toString(),
                   tp: detail.tp.toString(),
                   credits: detail.credits.toString(),
+                  promotion_ids: detail.promotion_ids || [], // Ensure it's an array
               }))
             : Array(3)
                   .fill(null)
                   .map(() => ({
                       course_id: courses.length > 0 ? courses[0].id.toString() : '',
-                      promotion_id: promotions.length > 0 ? promotions[0].id.toString() : '',
+                      promotion_ids: [],
                       units_teaching_id: units.length > 0 ? units[0].id.toString() : '',
                       course_category_id: categories.length > 0 ? categories[0].id.toString() : '',
                       semestre_id: semestres.length > 0 ? semestres[0].id.toString() : '', // Ajouté
@@ -217,7 +220,6 @@ export default function ProgramDetailsForm({
         courseDetails.forEach((detail, index) => {
             const requiredFields: Array<keyof CourseDetail> = [
                 'course_id', 
-                'promotion_id', 
                 'units_teaching_id', 
                 'course_category_id',
                 'semestre_id' // Ajouté
@@ -228,6 +230,10 @@ export default function ProgramDetailsForm({
                     newErrors[`${index}_${field}`] = 'Ce champ est obligatoire';
                 }
             });
+
+            if (!detail.promotion_ids || detail.promotion_ids.length === 0) {
+                newErrors[`${index}_promotion_ids`] = 'Ce champ est obligatoire';
+            }
 
             // Validation des champs numériques
             const numericFields: Array<'cm' | 'td' | 'tp' | 'credits'> = ['cm', 'td', 'tp', 'credits'];
@@ -242,13 +248,15 @@ export default function ProgramDetailsForm({
         // Validation d'unicité de la paire (cours, promotion)
         const combinations = new Set<string>();
         courseDetails.forEach((detail, index) => {
-            if (detail.course_id && detail.promotion_id) {
-                const combo = `${detail.course_id}_${detail.promotion_id}`;
-                if (combinations.has(combo)) {
-                    newErrors[`${index}_course_id`] = 'Ce cours est déjà associé à cette promotion';
-                    newErrors[`${index}_promotion_id`] = 'Cette promotion est déjà associée à ce cours';
-                }
-                combinations.add(combo);
+            if (detail.course_id && detail.promotion_ids && detail.promotion_ids.length > 0) {
+                detail.promotion_ids.forEach((promo_id) => {
+                    const combo = `${detail.course_id}_${promo_id}`;
+                    if (combinations.has(combo)) {
+                        newErrors[`${index}_course_id`] = 'Ce cours est déjà associé à l\'une des promotions sélectionnées';
+                        newErrors[`${index}_promotion_ids`] = 'Une promotion sélectionnée est déjà associée à ce cours';
+                    }
+                    combinations.add(combo);
+                });
             }
         });
 
@@ -278,7 +286,7 @@ export default function ProgramDetailsForm({
             ...courseDetails,
             {
                 course_id: availableCourses.length > 0 ? availableCourses[0].id.toString() : '',
-                promotion_id: promotions.length > 0 ? promotions[0].id.toString() : '',
+                promotion_ids: [],
                 units_teaching_id: units.length > 0 ? units[0].id.toString() : '',
                 course_category_id: categories.length > 0 ? categories[0].id.toString() : '',
                 semestre_id: semestres.length > 0 ? semestres[0].id.toString() : '', // Ajouté
@@ -298,7 +306,7 @@ export default function ProgramDetailsForm({
         }
     };
 
-    const updateCourseDetail = (index: number, field: keyof CourseDetail, value: string | number) => {
+    const updateCourseDetail = (index: number, field: keyof CourseDetail, value: any) => {
         const newDetails = [...courseDetails];
         const updatedDetail = { ...newDetails[index], [field]: value };
 
@@ -496,17 +504,16 @@ export default function ProgramDetailsForm({
 
                                     {/* Promotion */}
                                     <div className="space-y-2">
-                                        <Label htmlFor={`promotion_id_${index}`}>Promotion *</Label>
-                                        <SearchableSelect
-                                            items={promotions}
-                                            availableItems={promotions}
-                                            value={detail.promotion_id}
-                                            onChange={(value) => updateCourseDetail(index, 'promotion_id', value)}
-                                            placeholder="Sélectionnez une promotion"
-                                            emptyMessage="Aucune promotion trouvée."
-                                            searchPlaceholder="Rechercher une promotion..."
-                                            error={fieldErrors[`${index}_promotion_id`]}
+                                        <Label htmlFor={`promotion_ids_${index}`}>Promotions *</Label>
+                                        <MultiSelect
+                                            options={promotions.map(p => ({ value: p.id.toString(), label: p.name }))}
+                                            selected={detail.promotion_ids || []}
+                                            onChange={(value) => updateCourseDetail(index, 'promotion_ids', value)}
+                                            placeholder="Sélectionnez les promotions"
                                         />
+                                        {fieldErrors[`${index}_promotion_ids`] && (
+                                            <p className="text-sm text-red-500">{fieldErrors[`${index}_promotion_ids`]}</p>
+                                        )}
                                     </div>
 
                                     {/* Unité */}
