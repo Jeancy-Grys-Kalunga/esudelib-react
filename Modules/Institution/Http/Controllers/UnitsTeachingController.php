@@ -120,17 +120,23 @@ class UnitsTeachingController extends Controller
             'title' => 'required|string|max:255',
         ]);
 
-        $unit = UnitsTeaching::create([
-            'title' => $request->title,
-        ]);
+        try {
+            $unit = UnitsTeaching::create([
+                'title' => $request->title,
+            ]);
 
-        return response()->json([
-            'message' => 'Unité créée avec succès',
-            'unit' => [
-                'id' => $unit->id,
-                'name' => $unit->title,
-            ]
-        ]);
+            return response()->json([
+                'message' => 'Unité créée avec succès',
+                'unit' => [
+                    'id' => $unit->id,
+                    'name' => $unit->title,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Erreur SQL: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function update(UpdateUnitTeachingRequest $request, UnitsTeaching $unit)
