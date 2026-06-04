@@ -1,16 +1,22 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { BrainCircuit, Check, ChevronsUpDown, Download, Edit, GraduationCap, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import { 
+    BrainCircuit, Check, ChevronsUpDown, Download, Edit, 
+    GraduationCap, Loader2, Plus, Search, Trash2, Upload, 
+    X, Users, BookOpen, Clock, FileText 
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { Label } from '@radix-ui/react-label';
@@ -182,6 +188,20 @@ export default function AssignmentManager({
         assignments: [] as AssignmentFormData[],
     });
 
+    // Statistiques
+    const stats = useMemo(() => {
+        const uniqueCourses = new Set(allAssignments.map(a => a.course_id)).size;
+        const uniqueTeachers = new Set([
+            ...allAssignments.map(a => a.holder_id),
+            ...allAssignments.filter(a => a.collaborator_id).map(a => a.collaborator_id)
+        ]).size;
+        return {
+            total: allAssignments.length,
+            courses: uniqueCourses,
+            teachers: uniqueTeachers
+        };
+    }, [allAssignments]);
+
     // Filtrage combiné
     useEffect(() => {
         let results = [...allAssignments];
@@ -251,7 +271,7 @@ export default function AssignmentManager({
                     holder_id: assignment.holder_id.toString(),
                     collaborator_id: assignment.collaborator_id?.toString() || 'none',
                     observation: assignment.observation || '',
-                    promotion_id: assignment.promotion_id.toString(),
+                    promotion_id: assignment.promotion_id ? assignment.promotion_id.toString() : '',
                 },
             ]);
         } else {
@@ -383,7 +403,6 @@ export default function AssignmentManager({
     // Fonction pour exporter les données
     const exportAssignments = () => {
         router.get(route('assignments.export'), {
-            // On peut passer des paramètres de filtrage si nécessaire
             academic_year: currentAcademicYear !== 'all' ? currentAcademicYear : undefined,
             search: searchTerm,
         });
@@ -447,13 +466,20 @@ export default function AssignmentManager({
         }
     };
 
+    const getInitials = (name: string) => {
+        return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    };
+
     if (!can.access) {
         return (
             <AppLayout>
                 <Head title="Accès refusé" />
-                <div className="container mx-auto py-6 text-center">
-                    <h1 className="text-2xl font-bold text-red-500">Accès refusé</h1>
-                    <p className="mt-4">Vous n'avez pas les permissions nécessaires pour accéder à cette page.</p>
+                <div className="container mx-auto flex min-h-[60vh] flex-col items-center justify-center py-6 text-center">
+                    <div className="mb-6 rounded-full bg-red-100 p-6 dark:bg-red-900/30">
+                        <X className="h-12 w-12 text-red-600 dark:text-red-400" />
+                    </div>
+                    <h1 className="text-3xl font-bold tracking-tight text-red-600 dark:text-red-400">Accès refusé</h1>
+                    <p className="mt-4 text-muted-foreground text-lg">Vous n'avez pas les permissions nécessaires pour accéder à cette page.</p>
                 </div>
             </AppLayout>
         );
@@ -462,56 +488,92 @@ export default function AssignmentManager({
     return (
         <AppLayout>
             <Head title="Gestion des Attributions" />
-            <div className="container mx-auto space-y-6 py-6">
-                <div className="flex flex-col gap-4">
+            <div className="container mx-auto space-y-8 py-8 px-4 sm:px-6 lg:px-8">
+                {/* Header Section */}
+                <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Gestion des Attributions</h1>
-                        <p className="text-muted-foreground">{filteredAssignments.length} attributions enregistrées</p>
+                        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Attributions des Cours</h1>
+                        <p className="text-muted-foreground mt-2">Gérez les charges horaires et l'affectation des enseignants aux cours.</p>
                     </div>
-                    <div className="flex flex-col gap-3 sm:flex-row">
+                    
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap items-center gap-3">
                         {can.create && (
-                            <Button onClick={() => openModal('single')} className="gap-2 shadow-sm">
+                            <Button onClick={() => openModal('single')} className="gap-2 shadow-sm rounded-full">
                                 <Plus size={16} />
-                                Nouvelle Attribution
+                                Nouvelle
                             </Button>
                         )}
                         {can.edit && (
-                            <Button onClick={() => openModal('bulk')} className="gap-2 bg-indigo-600 shadow-sm hover:bg-indigo-700">
+                            <Button onClick={() => openModal('bulk')} variant="secondary" className="gap-2 shadow-sm rounded-full">
                                 <Plus size={16} />
-                                Ajouter en masse
+                                Ajout Multiple
                             </Button>
                         )}
                         {can.edit && (
                             <>
-                                <Button onClick={handleAutoAssign} className="gap-2 bg-emerald-600 shadow-sm hover:bg-emerald-700">
+                                <Button onClick={handleAutoAssign} className="gap-2 bg-emerald-600 shadow-sm hover:bg-emerald-700 rounded-full text-white">
                                     <BrainCircuit size={16} />
                                     Auto Assign
                                 </Button>
-                                <Button onClick={exportAssignments} className="gap-2 shadow-sm">
+                                <Button variant="outline" onClick={exportAssignments} className="gap-2 shadow-sm rounded-full">
                                     <Download size={16} />
-                                    Exporter Excel
+                                    Exporter
                                 </Button>
-                                <Button onClick={() => setIsImportModalOpen(true)} className="gap-2 shadow-sm">
+                                <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="gap-2 shadow-sm rounded-full">
                                     <Upload size={16} />
-                                    Importer Excel
+                                    Importer
                                 </Button>
                             </>
                         )}
-                        <Button variant="outline" onClick={resetFilters} className="gap-2 shadow-sm">
-                            <X size={16} />
-                            Réinitialiser
-                        </Button>
                     </div>
                 </div>
 
-                <Card className="shadow-sm">
-                    <CardContent>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                            <div className="relative">
+                {/* KPI Cards */}
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    <Card className="shadow-sm border-l-4 border-l-primary/60 transition-all hover:shadow-md">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Total Attributions</CardTitle>
+                            <FileText className="h-5 w-5 text-primary/60" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold tracking-tight">{stats.total}</div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {filteredAssignments.length === allAssignments.length ? 'Toutes confondues' : `${filteredAssignments.length} filtrées`}
+                            </p>
+                        </CardContent>
+                    </Card>
+                    <Card className="shadow-sm border-l-4 border-l-emerald-500/60 transition-all hover:shadow-md">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Cours Couverts</CardTitle>
+                            <BookOpen className="h-5 w-5 text-emerald-500/60" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold tracking-tight">{stats.courses}</div>
+                            <p className="text-xs text-muted-foreground mt-1">Cours avec enseignant</p>
+                        </CardContent>
+                    </Card>
+                    <Card className="shadow-sm border-l-4 border-l-blue-500/60 transition-all hover:shadow-md">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Enseignants Impliqués</CardTitle>
+                            <Users className="h-5 w-5 text-blue-500/60" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold tracking-tight">{stats.teachers}</div>
+                            <p className="text-xs text-muted-foreground mt-1">Actifs cette année</p>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Filters */}
+                <Card className="shadow-sm bg-gray-50/50 dark:bg-gray-900/50 border-none">
+                    <CardContent className="p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                            <div className="relative flex-1">
                                 <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                                 <Input
-                                    placeholder="Rechercher une attribution..."
-                                    className="pl-10"
+                                    placeholder="Rechercher par cours, enseignant ou promotion..."
+                                    className="pl-10 h-11 bg-white dark:bg-gray-950 border-gray-200 shadow-sm rounded-full"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
@@ -519,92 +581,151 @@ export default function AssignmentManager({
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="absolute top-1/2 right-2 h-6 w-6 -translate-y-1/2"
+                                        className="absolute top-1/2 right-2 h-7 w-7 -translate-y-1/2 rounded-full hover:bg-gray-100"
                                         onClick={() => setSearchTerm('')}
                                     >
                                         <X className="h-4 w-4" />
                                     </Button>
                                 )}
                             </div>
-                            <Select value={currentAcademicYear} onValueChange={setCurrentAcademicYear}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Toutes les années" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Toutes les années</SelectItem>
-                                    {academic_years.map((year) => (
-                                        <SelectItem key={year.id} value={year.id.toString()}>
-                                            {year.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <div className="flex items-center gap-3">
+                                <Select value={currentAcademicYear} onValueChange={setCurrentAcademicYear}>
+                                    <SelectTrigger className="w-full sm:w-[220px] h-11 bg-white dark:bg-gray-950 border-gray-200 shadow-sm rounded-full">
+                                        <SelectValue placeholder="Toutes les années" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Toutes les années</SelectItem>
+                                        {academic_years.map((year) => (
+                                            <SelectItem key={year.id} value={year.id.toString()}>
+                                                {year.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Button variant="ghost" size="icon" onClick={resetFilters} className="h-11 w-11 rounded-full text-muted-foreground hover:text-foreground" title="Réinitialiser les filtres">
+                                    <X className="h-5 w-5" />
+                                </Button>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="shadow-sm">
-                    <CardContent>
-                        {filteredAssignments.length > 0 ? (
-                            <div className="space-y-4">
-                                <div className="overflow-hidden rounded-md border">
-                                    <Table>
-                                        <TableHeader className="bg-gray-50 dark:bg-gray-800">
-                                            <TableRow>
-                                                <TableHead>Promotion</TableHead>
-                                                <TableHead>Nom du cours</TableHead>
-                                                <TableHead>Semestre</TableHead>
-                                                <TableHead>CM</TableHead>
-                                                <TableHead>TP</TableHead>
-                                                <TableHead>TD</TableHead>
-                                                <TableHead>Crédits</TableHead>
-                                                <TableHead>Titulaire</TableHead>
-                                                <TableHead>Collaborateur</TableHead>
-                                                <TableHead className="text-right">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {paginatedAssignments.map((assignment) => (
-                                                <TableRow key={assignment.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                    <TableCell>{assignment.promotion}</TableCell>
-                                                    <TableCell>{assignment.course}</TableCell>
-                                                    <TableCell>{assignment.semester}</TableCell>
-                                                    <TableCell>{assignment.cm}</TableCell>
-                                                    <TableCell>{assignment.tp}</TableCell>
-                                                    <TableCell>{assignment.td}</TableCell>
-                                                    <TableCell>{assignment.credits}</TableCell>
-                                                    <TableCell>{assignment.holder}</TableCell>
-                                                    <TableCell>{assignment.collaborator || '-'}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <div className="flex justify-end gap-2">
-                                                            {can.edit && (
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="icon"
-                                                                    onClick={() => openModal('single', assignment)}
-                                                                    className="h-8 w-8"
-                                                                >
-                                                                    <Edit className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            )}
-                                                            {can.delete && (
-                                                                <Button
-                                                                    variant="destructive"
-                                                                    size="icon"
-                                                                    onClick={() => openDeleteModal(assignment)}
-                                                                    className="h-8 w-8"
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            )}
+                {/* Main Table */}
+                <Card className="shadow-sm border-gray-200 dark:border-gray-800 overflow-hidden">
+                    {filteredAssignments.length > 0 ? (
+                        <div className="flex flex-col">
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader className="bg-gray-100/80 dark:bg-gray-900/80 border-b">
+                                        <TableRow className="hover:bg-transparent">
+                                            <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Promotion / Semestre</TableHead>
+                                            <TableHead className="font-semibold text-gray-700 dark:text-gray-300 min-w-[200px]">Cours</TableHead>
+                                            <TableHead className="font-semibold text-gray-700 dark:text-gray-300 text-center">Crédits (V.H.)</TableHead>
+                                            <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Équipe Pédagogique</TableHead>
+                                            <TableHead className="text-right font-semibold text-gray-700 dark:text-gray-300">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {paginatedAssignments.map((assignment) => (
+                                            <TableRow key={assignment.id} className="group hover:bg-primary/5 transition-colors duration-200">
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-1.5 items-start">
+                                                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 font-medium whitespace-nowrap">
+                                                            {assignment.promotion}
+                                                        </Badge>
+                                                        <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{assignment.semester}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="font-medium text-gray-900 dark:text-gray-100 line-clamp-2">
+                                                        {assignment.course}
+                                                    </div>
+                                                    {assignment.observation && (
+                                                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1 italic">
+                                                            "{assignment.observation}"
+                                                        </p>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col items-center justify-center">
+                                                        <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 font-bold mb-1">
+                                                            {assignment.credits} cr
+                                                        </Badge>
+                                                        <div className="flex gap-2 text-[11px] text-muted-foreground font-medium">
+                                                            <span title="Cours Magistral">CM: {assignment.cm}</span>
+                                                            <span title="Travaux Dirigés">TD: {assignment.td}</span>
+                                                            <span title="Travaux Pratiques">TP: {assignment.tp}</span>
                                                         </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-2">
+                                                        {/* Titulaire */}
+                                                        <div className="flex items-center gap-2">
+                                                            <Avatar className="h-6 w-6 border border-gray-200 shadow-sm">
+                                                                <AvatarFallback className="bg-indigo-100 text-indigo-700 text-[10px] font-bold">
+                                                                    {getInitials(assignment.holder)}
+                                                                </AvatarFallback>
+                                                            </Avatar>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-sm font-medium leading-none">{assignment.holder}</span>
+                                                                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">Titulaire</span>
+                                                            </div>
+                                                        </div>
+                                                        {/* Collaborateur */}
+                                                        {assignment.collaborator && assignment.collaborator !== 'Aucun' && (
+                                                            <div className="flex items-center gap-2 ml-4">
+                                                                <Avatar className="h-5 w-5 border border-gray-200 shadow-sm">
+                                                                    <AvatarFallback className="bg-gray-100 text-gray-600 text-[9px]">
+                                                                        {getInitials(assignment.collaborator)}
+                                                                    </AvatarFallback>
+                                                                </Avatar>
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-xs text-muted-foreground leading-none">{assignment.collaborator}</span>
+                                                                    <span className="text-[9px] text-gray-500">Collaborateur</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right align-middle">
+                                                    <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {can.edit && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => openModal('single', assignment)}
+                                                                className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/30"
+                                                                title="Modifier"
+                                                            >
+                                                                <Edit className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                        {can.delete && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => openDeleteModal(assignment)}
+                                                                className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30"
+                                                                title="Supprimer"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                            
+                            {/* Pagination */}
+                            <div className="flex items-center justify-between border-t px-4 py-3 bg-gray-50/50 dark:bg-gray-900/30">
+                                <div className="text-sm text-muted-foreground">
+                                    Affichage de <span className="font-medium text-foreground">{(currentPage - 1) * itemsPerPage + 1}</span> à <span className="font-medium text-foreground">{Math.min(currentPage * itemsPerPage, filteredAssignments.length)}</span> sur <span className="font-medium text-foreground">{filteredAssignments.length}</span> résultats
                                 </div>
-                                <Pagination>
+                                <Pagination className="justify-end w-auto mx-0">
                                     <PaginationContent>
                                         <PaginationItem>
                                             <PaginationPrevious
@@ -613,11 +734,16 @@ export default function AssignmentManager({
                                                     e.preventDefault();
                                                     if (currentPage > 1) setCurrentPage(currentPage - 1);
                                                 }}
-                                                className={currentPage === 1 ? 'pointer-events-none opacity-50' : ''}
+                                                className={cn("rounded-full", currentPage === 1 && 'pointer-events-none opacity-50')}
                                             />
                                         </PaginationItem>
-                                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                            .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1)
+                                            .map((page, index, array) => (
                                             <PaginationItem key={page}>
+                                                {index > 0 && page - array[index - 1] > 1 && (
+                                                    <span className="px-2 text-muted-foreground">...</span>
+                                                )}
                                                 <PaginationLink
                                                     href="#"
                                                     onClick={(e) => {
@@ -625,6 +751,7 @@ export default function AssignmentManager({
                                                         setCurrentPage(page);
                                                     }}
                                                     isActive={page === currentPage}
+                                                    className={cn("rounded-full h-8 w-8", page === currentPage && "bg-primary text-primary-foreground")}
                                                 >
                                                     {page}
                                                 </PaginationLink>
@@ -637,243 +764,249 @@ export default function AssignmentManager({
                                                     e.preventDefault();
                                                     if (currentPage < totalPages) setCurrentPage(currentPage + 1);
                                                 }}
-                                                className={currentPage === totalPages ? 'pointer-events-none opacity-50' : ''}
+                                                className={cn("rounded-full", currentPage === totalPages && 'pointer-events-none opacity-50')}
                                             />
                                         </PaginationItem>
                                     </PaginationContent>
                                 </Pagination>
                             </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-                                    <GraduationCap className="h-10 w-10 text-gray-400" />
-                                </div>
-                                <h3 className="mb-2 text-lg font-medium">Aucune attribution trouvée</h3>
-                                <p className="text-muted-foreground mb-4 text-sm">
-                                    {can.create ? 'Commencez par créer une nouvelle attribution.' : 'Aucune donnée disponible.'}
-                                </p>
-                                {can.create && (
-                                    <Button onClick={() => openModal('single')} className="gap-2">
-                                        <Plus size={16} />
-                                        Ajouter une attribution
-                                    </Button>
-                                )}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-24 text-center">
+                            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/20 shadow-inner">
+                                <GraduationCap className="h-10 w-10 text-blue-500" />
                             </div>
-                        )}
-                    </CardContent>
+                            <h3 className="mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white">Aucune attribution trouvée</h3>
+                            <p className="text-muted-foreground mb-8 max-w-sm text-base">
+                                {can.create ? "Commencez par assigner un cours à un enseignant pour structurer l'année académique." : 'Aucune donnée correspondante disponible.'}
+                            </p>
+                            {can.create && (
+                                <Button onClick={() => openModal('single')} className="gap-2 rounded-full h-11 px-6 shadow-md hover:shadow-lg transition-shadow">
+                                    <Plus size={18} />
+                                    Créer une attribution
+                                </Button>
+                            )}
+                        </div>
+                    )}
                 </Card>
 
+                {/* Create/Edit Modal */}
                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl md:max-w-4xl lg:max-w-6xl">
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2 text-xl">
-                                <GraduationCap className="h-5 w-5" />
+                    <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col sm:max-w-3xl md:max-w-5xl p-0 border-0 shadow-2xl rounded-xl">
+                        <DialogHeader className="bg-gray-50 dark:bg-gray-900 px-6 py-5 border-b">
+                            <DialogTitle className="flex items-center gap-3 text-xl font-bold">
+                                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                    <GraduationCap className="h-5 w-5" />
+                                </div>
                                 {isBulkMode
                                     ? "Ajout Multiple d'Attributions"
                                     : bulkAssignments[0]?.id
                                       ? 'Modifier Attribution'
                                       : 'Nouvelle Attribution'}
                             </DialogTitle>
-                            <DialogDescription>
-                                {isBulkMode ? 'Ajoutez plusieurs attributions en une seule opération' : "Configurez les détails de l'attribution"}
+                            <DialogDescription className="mt-1.5 text-base">
+                                {isBulkMode ? "Configurez plusieurs affectations pédagogiques simultanément." : "Définissez les détails de l'affectation pédagogique pour ce cours."}
                             </DialogDescription>
                         </DialogHeader>
 
-                        {errors.assignments && typeof errors.assignments === 'string' && (
-                            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 shadow dark:border-red-700 dark:bg-red-900/20">
-                                <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">Erreurs de validation</h3>
-                                <p className="mt-2 text-sm text-red-700 dark:text-red-300">{errors.assignments}</p>
-                            </div>
-                        )}
-
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="rounded-lg bg-gray-50 p-4">
-                                <div className="mb-4 flex items-center justify-between">
-                                    <h3 className="font-medium">
-                                        {bulkAssignments.length} {bulkAssignments.length > 1 ? 'attributions' : 'attribution'}
-                                    </h3>
-                                    <Button type="button" onClick={handleAddAssignment} variant="outline" size="sm">
-                                        <Plus className="mr-1 h-4 w-4" />
-                                        Ajouter une ligne
-                                    </Button>
+                        <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-gray-950">
+                            {errors.assignments && typeof errors.assignments === 'string' && (
+                                <div className="mb-6 rounded-lg border-l-4 border-red-500 bg-red-50 p-4 shadow-sm dark:bg-red-900/20">
+                                    <h3 className="text-sm font-bold text-red-800 dark:text-red-200">Erreurs de validation</h3>
+                                    <p className="mt-1 text-sm text-red-700 dark:text-red-300">{errors.assignments}</p>
                                 </div>
+                            )}
 
-                                <div className="overflow-hidden rounded-lg border">
-                                    <Table>
-                                        <TableHeader className="bg-gray-100">
-                                            <TableRow>
-                                                <TableHead className="w-[180px]">Cours *</TableHead>
-                                                <TableHead className="w-[150px]">Promotion *</TableHead>
-                                                <TableHead className="w-[150px]">Année académique *</TableHead>
-                                                <TableHead className="w-[180px]">Titulaire *</TableHead>
-                                                <TableHead className="w-[180px]">Collaborateur</TableHead>
-                                                <TableHead>Observation</TableHead>
-                                                <TableHead className="w-[50px]">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {bulkAssignments.map((assignment, index) => (
-                                                <TableRow key={index}>
-                                                    <TableCell>
-                                                        <CourseSelector
-                                                            courses={courses}
-                                                            value={assignment.course_id}
-                                                            onChange={(value) => handleAssignmentChange(index, 'course_id', value)}
-                                                            error={getFieldError(index, 'course_id')}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Select
-                                                            value={assignment.promotion_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'promotion_id', value)}
-                                                            disabled={!assignment.course_id}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue
-                                                                    placeholder={
-                                                                        assignment.course_id
-                                                                            ? 'Sélectionnez une promotion'
-                                                                            : "Sélectionnez d'abord un cours"
-                                                                    }
-                                                                />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {courses
-                                                                    .find((c) => c.id.toString() === assignment.course_id)
-                                                                    ?.promotions?.map((promo) => (
-                                                                        <SelectItem key={promo.id} value={promo.id.toString()}>
-                                                                            {promo.name}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {getFieldError(index, 'promotion_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'promotion_id')}</p>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Select
-                                                            value={assignment.academic_year_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'academic_year_id', value)}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Sélectionnez une année" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {academic_years.map((year) => (
-                                                                    <SelectItem key={year.id} value={year.id.toString()}>
-                                                                        {year.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {getFieldError(index, 'academic_year_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'academic_year_id')}</p>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Select
-                                                            value={assignment.holder_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'holder_id', value)}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Sélectionnez un titulaire" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {teachers.map((teacher) => (
-                                                                    <SelectItem key={teacher.id} value={teacher.id.toString()}>
-                                                                        {teacher.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {getFieldError(index, 'holder_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'holder_id')}</p>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Select
-                                                            value={assignment.collaborator_id}
-                                                            onValueChange={(value) => handleAssignmentChange(index, 'collaborator_id', value)}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Sélectionnez un collaborateur" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="none">Aucun collaborateur</SelectItem>
-                                                                {getFilteredCollaborators(index).map((teacher) => (
-                                                                    <SelectItem key={teacher.id} value={teacher.id.toString()}>
-                                                                        {teacher.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        {getFieldError(index, 'collaborator_id') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'collaborator_id')}</p>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Input
-                                                            value={assignment.observation}
-                                                            onChange={(e) => handleAssignmentChange(index, 'observation', e.target.value)}
-                                                            placeholder="Observation"
-                                                        />
-                                                        {getFieldError(index, 'observation') && (
-                                                            <p className="mt-1 text-xs text-red-500">{getFieldError(index, 'observation')}</p>
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="text-center">
-                                                        <Button
-                                                            type="button"
-                                                            variant="destructive"
-                                                            size="icon"
-                                                            className="h-7 w-7"
-                                                            onClick={() => handleRemoveAssignment(index)}
-                                                            disabled={bulkAssignments.length <= 1}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </TableCell>
+                            <form id="assignment-form" onSubmit={handleSubmit} className="space-y-6">
+                                {isBulkMode && (
+                                    <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-900/50">
+                                        <div className="flex items-center gap-2">
+                                            <Check className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                            <h3 className="font-semibold text-blue-900 dark:text-blue-100">
+                                                {bulkAssignments.length} {bulkAssignments.length > 1 ? 'Lignes à insérer' : 'Ligne à insérer'}
+                                            </h3>
+                                        </div>
+                                        <Button type="button" onClick={handleAddAssignment} variant="outline" size="sm" className="bg-white hover:bg-gray-50 h-9">
+                                            <Plus className="mr-1.5 h-4 w-4" />
+                                            Ajouter une ligne
+                                        </Button>
+                                    </div>
+                                )}
+
+                                <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-900/30 overflow-hidden shadow-sm">
+                                    <div className="overflow-x-auto">
+                                        <Table>
+                                            <TableHeader className="bg-gray-100 dark:bg-gray-800/80">
+                                                <TableRow className="hover:bg-transparent">
+                                                    <TableHead className="w-[200px] font-semibold">Cours <span className="text-red-500">*</span></TableHead>
+                                                    <TableHead className="w-[180px] font-semibold">Promotion <span className="text-red-500">*</span></TableHead>
+                                                    <TableHead className="w-[180px] font-semibold">Titulaire <span className="text-red-500">*</span></TableHead>
+                                                    <TableHead className="w-[180px] font-semibold">Collaborateur</TableHead>
+                                                    <TableHead className="min-w-[150px] font-semibold">Observation</TableHead>
+                                                    {isBulkMode && <TableHead className="w-[60px] text-center"></TableHead>}
                                                 </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {bulkAssignments.map((assignment, index) => (
+                                                    <TableRow key={index} className="group hover:bg-white dark:hover:bg-gray-900 transition-colors">
+                                                        <TableCell className="align-top pt-4">
+                                                            <CourseSelector
+                                                                courses={courses}
+                                                                value={assignment.course_id}
+                                                                onChange={(value) => handleAssignmentChange(index, 'course_id', value)}
+                                                                error={getFieldError(index, 'course_id')}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell className="align-top pt-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                <Select
+                                                                    value={assignment.promotion_id}
+                                                                    onValueChange={(value) => handleAssignmentChange(index, 'promotion_id', value)}
+                                                                    disabled={!assignment.course_id}
+                                                                >
+                                                                    <SelectTrigger className={cn("bg-white dark:bg-gray-950", getFieldError(index, 'promotion_id') && "border-red-500")}>
+                                                                        <SelectValue
+                                                                            placeholder={
+                                                                                assignment.course_id
+                                                                                    ? 'Sélect. promotion'
+                                                                                    : "Choisir cours d'abord"
+                                                                            }
+                                                                        />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {courses
+                                                                            .find((c) => c.id.toString() === assignment.course_id)
+                                                                            ?.promotions?.map((promo) => (
+                                                                                <SelectItem key={promo.id} value={promo.id.toString()}>
+                                                                                    {promo.name}
+                                                                                </SelectItem>
+                                                                            ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                {getFieldError(index, 'promotion_id') && (
+                                                                    <p className="text-[10px] text-red-500 leading-tight">{getFieldError(index, 'promotion_id')}</p>
+                                                                )}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="align-top pt-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                <Select
+                                                                    value={assignment.holder_id}
+                                                                    onValueChange={(value) => handleAssignmentChange(index, 'holder_id', value)}
+                                                                >
+                                                                    <SelectTrigger className={cn("bg-white dark:bg-gray-950", getFieldError(index, 'holder_id') && "border-red-500")}>
+                                                                        <SelectValue placeholder="Sélect. titulaire" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {teachers.map((teacher) => (
+                                                                            <SelectItem key={teacher.id} value={teacher.id.toString()}>
+                                                                                {teacher.name}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                {getFieldError(index, 'holder_id') && (
+                                                                    <p className="text-[10px] text-red-500 leading-tight">{getFieldError(index, 'holder_id')}</p>
+                                                                )}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="align-top pt-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                <Select
+                                                                    value={assignment.collaborator_id}
+                                                                    onValueChange={(value) => handleAssignmentChange(index, 'collaborator_id', value)}
+                                                                >
+                                                                    <SelectTrigger className="bg-white dark:bg-gray-950">
+                                                                        <SelectValue placeholder="Aucun" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="none" className="text-muted-foreground italic">Aucun collaborateur</SelectItem>
+                                                                        {getFilteredCollaborators(index).map((teacher) => (
+                                                                            <SelectItem key={teacher.id} value={teacher.id.toString()}>
+                                                                                {teacher.name}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                {getFieldError(index, 'collaborator_id') && (
+                                                                    <p className="text-[10px] text-red-500 leading-tight">{getFieldError(index, 'collaborator_id')}</p>
+                                                                )}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="align-top pt-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                <Input
+                                                                    className="bg-white dark:bg-gray-950 placeholder:italic"
+                                                                    value={assignment.observation}
+                                                                    onChange={(e) => handleAssignmentChange(index, 'observation', e.target.value)}
+                                                                    placeholder="Note faculative..."
+                                                                />
+                                                                {getFieldError(index, 'observation') && (
+                                                                    <p className="text-[10px] text-red-500 leading-tight">{getFieldError(index, 'observation')}</p>
+                                                                )}
+                                                            </div>
+                                                        </TableCell>
+                                                        {isBulkMode && (
+                                                            <TableCell className="align-top pt-4 text-center">
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-9 w-9 text-red-500 hover:bg-red-50 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    onClick={() => handleRemoveAssignment(index)}
+                                                                    disabled={bulkAssignments.length <= 1}
+                                                                    title="Supprimer la ligne"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </TableCell>
+                                                        )}
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </div>
-                            </div>
+                            </form>
+                        </div>
 
-                            <DialogFooter className="mt-4">
-                                <div className="flex w-full justify-between">
-                                    <Button type="button" variant="outline" onClick={closeModal} disabled={isSubmitting}>
-                                        Annuler
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                        className="relative flex min-w-[180px] items-center justify-center gap-2"
-                                    >
-                                        {isSubmitting ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                <span>Traitement...</span>
-                                            </>
-                                        ) : bulkAssignments[0]?.id ? (
-                                            <>
-                                                <Edit className="h-4 w-4" />
-                                                Mettre à jour
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Plus className="h-4 w-4" />
-                                                {isBulkMode ? 'Enregistrer les attributions' : "Créer l'attribution"}
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
-                            </DialogFooter>
-                        </form>
+                        <DialogFooter className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-t gap-3 sm:justify-between">
+                            <div className="text-sm text-muted-foreground hidden sm:block">
+                                Les champs marqués d'un <span className="text-red-500">*</span> sont obligatoires.
+                            </div>
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
+                                <Button type="button" variant="outline" onClick={closeModal} disabled={isSubmitting} className="flex-1 sm:flex-none">
+                                    Annuler
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    form="assignment-form"
+                                    disabled={isSubmitting}
+                                    className="flex-1 sm:flex-none min-w-[160px] gap-2 rounded-full shadow-md"
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            <span>Enregistrement...</span>
+                                        </>
+                                    ) : bulkAssignments[0]?.id ? (
+                                        <>
+                                            <Edit className="h-4 w-4" />
+                                            Mettre à jour
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check className="h-4 w-4" />
+                                            {isBulkMode ? 'Tout Enregistrer' : "Confirmer la création"}
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
 
+                {/* Delete Confirmation Modal */}
                 <Dialog
                     open={isDeleteModalOpen}
                     onOpenChange={(open) => {
@@ -884,14 +1017,19 @@ export default function AssignmentManager({
                         }
                     }}
                 >
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle className="text-xl">Confirmer la suppression</DialogTitle>
-                            <DialogDescription>
-                                Êtes-vous sûr de vouloir supprimer cette attribution ? Cette action est irréversible.
+                    <DialogContent className="sm:max-w-[425px] p-0 overflow-hidden border-0 shadow-2xl rounded-xl">
+                        <div className="bg-red-50 dark:bg-red-900/20 p-6 flex flex-col items-center text-center border-b border-red-100 dark:border-red-900/50">
+                            <div className="h-16 w-16 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center mb-4 shadow-sm">
+                                <Trash2 className="h-8 w-8 text-red-600 dark:text-red-400" />
+                            </div>
+                            <DialogTitle className="text-2xl text-red-700 dark:text-red-400 font-bold mb-2">Suppression définitive</DialogTitle>
+                            <DialogDescription className="text-red-900/70 dark:text-red-200/70 text-base">
+                                Êtes-vous sûr de vouloir supprimer l'attribution de <strong className="text-red-800 dark:text-red-300">{assignmentToDelete?.holder}</strong> au cours <strong className="text-red-800 dark:text-red-300">{assignmentToDelete?.course}</strong> ?
+                                <br/><br/>
+                                Cette action est irréversible.
                             </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
+                        </div>
+                        <DialogFooter className="bg-white dark:bg-gray-950 px-6 py-4 gap-3 sm:justify-center">
                             <Button
                                 variant="outline"
                                 onClick={() => {
@@ -899,13 +1037,14 @@ export default function AssignmentManager({
                                     setIsDeleting(false);
                                 }}
                                 disabled={isDeleting}
+                                className="w-full sm:w-auto h-11"
                             >
                                 Annuler
                             </Button>
                             <Button
                                 variant="destructive"
                                 onClick={confirmDelete}
-                                className="flex min-w-[120px] items-center justify-center gap-2"
+                                className="w-full sm:w-auto h-11 min-w-[140px] gap-2 shadow-md"
                                 disabled={isDeleting}
                             >
                                 {isDeleting ? (
@@ -916,7 +1055,7 @@ export default function AssignmentManager({
                                 ) : (
                                     <>
                                         <Trash2 className="h-4 w-4" />
-                                        Supprimer
+                                        Oui, supprimer
                                     </>
                                 )}
                             </Button>
@@ -924,21 +1063,30 @@ export default function AssignmentManager({
                     </DialogContent>
                 </Dialog>
 
-                {/* Modal Importation Excel */}
+                {/* Import Excel Modal */}
                 <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
-                    <DialogContent className="sm:max-w-[600px]">
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2 text-xl">
-                                <Upload className="h-5 w-5" />
+                    <DialogContent className="sm:max-w-[550px] rounded-xl border-0 shadow-2xl p-0 overflow-hidden">
+                        <DialogHeader className="bg-gray-50 dark:bg-gray-900 px-6 py-5 border-b">
+                            <DialogTitle className="flex items-center gap-3 text-xl font-bold">
+                                <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                    <Upload className="h-5 w-5" />
+                                </div>
                                 Importer des attributions
                             </DialogTitle>
-                            <DialogDescription>Téléversez un fichier Excel contenant la liste des attributions</DialogDescription>
+                            <DialogDescription className="mt-1.5 text-base">
+                                Téléversez un fichier Excel (.xlsx, .xls) contenant la liste des attributions à traiter.
+                            </DialogDescription>
                         </DialogHeader>
-                        <form onSubmit={handleImportSubmit} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Fichier Excel *</Label>
+                        <form id="import-form" onSubmit={handleImportSubmit} className="p-6 bg-white dark:bg-gray-950">
+                            <div className="space-y-4">
+                                <Label className="text-base font-semibold">Fichier source <span className="text-red-500">*</span></Label>
                                 <div
-                                    className="cursor-pointer rounded-lg border-2 border-dashed bg-gray-50 p-6 text-center"
+                                    className={cn(
+                                        "cursor-pointer rounded-xl border-2 border-dashed transition-all duration-200 p-8 text-center flex flex-col items-center justify-center gap-4",
+                                        importFile 
+                                            ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/10 dark:border-emerald-700" 
+                                            : "border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 dark:border-gray-800 dark:bg-gray-900/50 dark:hover:bg-gray-900"
+                                    )}
                                     onClick={() => document.getElementById('import-file')?.click()}
                                 >
                                     <input
@@ -953,30 +1101,44 @@ export default function AssignmentManager({
                                         }}
                                     />
                                     {importFile ? (
-                                        <p className="font-medium">{importFile.name}</p>
+                                        <>
+                                            <div className="h-14 w-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm">
+                                                <Check className="h-6 w-6" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-lg text-emerald-800 dark:text-emerald-300">{importFile.name}</p>
+                                                <p className="text-sm text-emerald-600/80 dark:text-emerald-400/80">{(importFile.size / 1024).toFixed(1)} KB</p>
+                                            </div>
+                                            <Button type="button" variant="outline" className="mt-2 text-emerald-700 border-emerald-200 hover:bg-emerald-100" onClick={(e) => { e.stopPropagation(); setImportFile(null); }}>
+                                                Changer de fichier
+                                            </Button>
+                                        </>
                                     ) : (
                                         <>
-                                            <Download className="mx-auto h-8 w-8 text-gray-400" />
-                                            <p className="mt-2 font-medium">Glissez votre fichier ici</p>
-                                            <p className="text-sm text-gray-500">Formats supportés: XLSX, XLS, CSV</p>
-                                            <Button type="button" variant="outline" className="mt-2">
-                                                Sélectionner un fichier
+                                            <div className="h-16 w-16 rounded-full bg-white dark:bg-gray-800 shadow-sm border flex items-center justify-center">
+                                                <Download className="h-7 w-7 text-gray-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-lg font-medium">Glissez votre fichier ici</p>
+                                                <p className="text-sm text-gray-500 mt-1">Formats supportés: XLSX, XLS, CSV</p>
+                                            </div>
+                                            <Button type="button" variant="secondary" className="mt-2 rounded-full px-6 pointer-events-none">
+                                                Parcourir les fichiers
                                             </Button>
                                         </>
                                     )}
                                 </div>
                             </div>
-
-                            <DialogFooter>
-                                <Button type="button" variant="outline" onClick={() => setIsImportModalOpen(false)}>
-                                    Annuler
-                                </Button>
-                                <Button type="submit" disabled={isImporting} className="gap-2">
-                                    {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                                    Importer
-                                </Button>
-                            </DialogFooter>
                         </form>
+                        <DialogFooter className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-t gap-3 sm:justify-end">
+                            <Button type="button" variant="outline" onClick={() => setIsImportModalOpen(false)} className="h-11 px-6">
+                                Annuler
+                            </Button>
+                            <Button type="submit" form="import-form" disabled={isImporting || !importFile} className="h-11 px-8 gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md">
+                                {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                Lancer l'import
+                            </Button>
+                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </div>

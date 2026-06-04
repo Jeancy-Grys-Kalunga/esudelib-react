@@ -266,8 +266,10 @@ class TeacherController extends Controller
             abort(403, "Vous n'êtes pas associé à un enseignant");
         }
 
-        // Récupérer tous les cours assignés à l'enseignant
-        $assignedCourseIds = $user->teacher->courses()->pluck('courses.id');
+        // Récupérer tous les cours assignés à l'enseignant (en tant que titulaire ou collaborateur)
+        $assignedCourseIds = \Modules\Institution\Entities\Assignment::where('holder_id', $user->teacher->id)
+            ->orWhere('collaborator_id', $user->teacher->id)
+            ->pluck('course_id');
 
         // Récupérer les détails des cours avec eager loading
         $courses = Course::with(['courseProgramDetails.program', 'courseProgramDetails.category'])

@@ -137,6 +137,7 @@ class AssignmentController extends Controller
                 'academic_year' => $assignment->academicYear?->title ?? 'Année non définie',
                 'observation' => $assignment->observation,
                 'institution' => $assignment->institution?->name ?? 'Institution inconnue',
+                'promotion_id' => $assignment->promotion_id,
             ];
         });
 
