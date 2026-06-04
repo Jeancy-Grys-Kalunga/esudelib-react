@@ -28,13 +28,35 @@ class StudentService
     {
         $courses = $this->getFormattedCourses($student);
         $totalCredits = $courses->where('selected', true)->sum('credits');
+        
+        $studentNotes = Note::where('student_id', $student->id)->get()->groupBy('course_id');
+        $validatedCredits = 0;
+        $validatedCourses = collect();
+        $nonValidatedCourses = collect();
+
+        foreach ($courses as $course) {
+            $notes = $studentNotes[$course['id']] ?? collect([]);
+            $lastNote = $notes->last();
+            $cote = $lastNote ? $lastNote->cote : 0;
+
+            if ($cote >= 10) {
+                $validatedCredits += $course['credits'];
+                $validatedCourses->push($course);
+            } else {
+                $nonValidatedCourses->push($course);
+            }
+        }
+
         $averageGrade = Note::where('student_id', $student->id)->avg('cote') ?? 0;
-        $progressPercentage = min(100, ($totalCredits / 30) * 100);
+        $progressPercentage = min(100, ($totalCredits > 0 ? ($validatedCredits / $totalCredits) * 100 : 0));
 
         return [
             'totalCourses'       => $courses->count(),
             'selectedCourses'    => $courses->where('selected', true)->count(),
             'totalCredits'       => $totalCredits,
+            'validatedCredits'   => $validatedCredits,
+            'validatedCourses'   => $validatedCourses->values(),
+            'nonValidatedCourses'=> $nonValidatedCourses->values(),
             'averageGrade'       => round((float) $averageGrade, 2),
             'pendingAppeals'     => $student->appeals()->where('status', 'pending')->count(),
             'progressPercentage' => round($progressPercentage),

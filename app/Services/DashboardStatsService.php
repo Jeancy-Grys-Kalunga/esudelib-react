@@ -14,6 +14,10 @@ use Modules\Teacher\Entities\Teacher;
 
 class DashboardStatsService
 {
+    public function __construct(
+        private \App\Services\StudentService $studentService
+    ) {}
+
     /**
      * Get statistics for a student dashboard.
      *
@@ -29,10 +33,10 @@ class DashboardStatsService
     {
         $student = Student::findOrFail($studentId);
 
-        $coursesCount = $student->courses()->count();
+        $detailedStats = $this->studentService->getDashboardStats($student);
 
-        $notes = $student->notes;
-        $averageNote = $notes->count() > 0 ? round($notes->avg('cote'), 2) : 0.0;
+        $coursesCount = $detailedStats['totalCourses'] ?? $student->courses()->count();
+        $averageNote = $detailedStats['averageGrade'] ?? 0;
 
         $recentNotes = $student->notes()
             ->with('course')
@@ -50,7 +54,9 @@ class DashboardStatsService
         return [
             'courses_count'      => $coursesCount,
             'average_note'       => $averageNote,
-            'credits_validated'  => 0, // à implémenter selon votre logique métier
+            'credits_validated'  => $detailedStats['validatedCredits'] ?? 0,
+            'validated_courses'  => $detailedStats['validatedCourses'] ?? [],
+            'non_validated_courses' => $detailedStats['nonValidatedCourses'] ?? [],
             'recent_notes'       => $recentNotes,
         ];
     }
