@@ -82,7 +82,12 @@ class SimulateDeliberation extends Command
         ]);
         $this->info("Promotions BAC1, BAC2 et BAC3 configurées.");
 
-        // 3. Récupérer 10 étudiants (qu'ils soient encore dans BAC 1 CSI ou déjà basculés)
+        // S'assurer que le rôle Etudiant a bien les permissions requises
+        $roleStudent = Role::firstOrCreate(['name' => 'Etudiant']);
+        $permissionStudent = Permission::firstOrCreate(['name' => 'access_student_features']);
+        $roleStudent->givePermissionTo($permissionStudent);
+
+        // 3. Trouver ou créer 10 étudiants en BAC1 (2023-2024)qu'ils soient encore dans BAC 1 CSI ou déjà basculés)
         $inscriptions = Inscription::whereIn('promotion_id', [$promoBac1CSI->id, $promoBac1Info->id])
                                    ->with('student.user')
                                    ->take(10)
@@ -104,7 +109,6 @@ class SimulateDeliberation extends Command
         // Compléter si < 10 (utile pour le test local si la BDD est vide)
         if ($students->count() < 10) {
             $this->warn("Seulement {$students->count()} étudiants trouvés. Création des manquants...");
-            $roleStudent = Role::firstOrCreate(['name' => 'Etudiant']);
             
             for ($i = $students->count(); $i < 10; $i++) {
                 $email = 'etudiant' . ($i + 1) . '_' . time() . '@iss-lubumbashi.cd';

@@ -21,6 +21,8 @@ interface StudentStats {
     average_note: number;
     credits_validated: number;
     recent_notes: Note[];
+    validated_courses: any[];
+    non_validated_courses: any[];
 }
 
 export default function StudentDashboard({ stats }: { stats: StudentStats }) {
@@ -140,6 +142,61 @@ export default function StudentDashboard({ stats }: { stats: StudentStats }) {
                                 <p>Aucun résultat récent disponible</p>
                             </div>
                         )}
+                    </div>
+
+                    {/* Courses Validation Status */}
+                    <div className="dark:bg-sidebar-accent/10 dark:border-sidebar-border col-span-2 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm md:col-span-3">
+                        <div className="mb-6 flex items-center justify-between">
+                            <h2 className="flex items-center gap-2 text-lg font-semibold">
+                                <BookOpen className="h-5 w-5 text-purple-500" />
+                                Bilan des Cours
+                            </h2>
+                        </div>
+                        <div className="grid gap-6 md:grid-cols-2">
+                            {/* Validated Courses */}
+                            <div>
+                                <h3 className="mb-3 text-sm font-semibold text-green-700 dark:text-green-400">
+                                    Cours Validés ({stats.validated_courses?.length || 0})
+                                </h3>
+                                {stats.validated_courses?.length > 0 ? (
+                                    <ul className="space-y-2">
+                                        {stats.validated_courses.map((course, idx) => (
+                                            <li key={idx} className="flex flex-col justify-between rounded-lg border border-gray-100 p-3 bg-green-50/30 dark:bg-green-900/10 dark:border-green-900/30">
+                                                <span className="font-medium text-sm text-gray-800 dark:text-gray-200">{course.title}</span>
+                                                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                                    <span>{course.promotion_name}</span>
+                                                    <span>{course.credits} Crédits</span>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="text-sm text-gray-500 italic">Aucun cours validé pour le moment.</p>
+                                )}
+                            </div>
+
+                            {/* Non-Validated Courses */}
+                            <div>
+                                <h3 className="mb-3 text-sm font-semibold text-red-700 dark:text-red-400">
+                                    Cours Non-Validés ({stats.non_validated_courses?.length || 0})
+                                </h3>
+                                {stats.non_validated_courses?.length > 0 ? (
+                                    <ul className="space-y-2">
+                                        {stats.non_validated_courses.map((course, idx) => (
+                                            <li key={idx} className="flex flex-col justify-between rounded-lg border border-gray-100 p-3 bg-red-50/30 dark:bg-red-900/10 dark:border-red-900/30">
+                                                <span className="font-medium text-sm text-gray-800 dark:text-gray-200">{course.title}</span>
+                                                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                                    <span>{course.promotion_name}</span>
+                                                    <span>{course.credits} Crédits</span>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="text-sm text-gray-500 italic">Aucun cours non-validé.</p>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
                     {/* Quick Actions or Notifications */}
