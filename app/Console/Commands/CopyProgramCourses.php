@@ -31,7 +31,7 @@ class CopyProgramCourses extends Command
         $sourceInstitutionName = 'ISS Lubumbashi';
         $destInstitutionName = 'ISC Lubumbashi';
         $sourceProgramName = 'GESTION COMMERCIALE ET ADMINISTRATIVE';
-        $destProgramName = 'COMMERCIALE ET ADMINISTRATIVE';
+        $destProgramName = 'GESTION COMMERCIALE ET ADMINISTRATIVE';
 
         // 1. Trouver les institutions
         $sourceInstitution = DB::table('institutions')->where('name', 'LIKE', "%$sourceInstitutionName%")->first();
