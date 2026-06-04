@@ -182,13 +182,16 @@ class SimulateDeliberation extends Command
                 
                 // Coter l'étudiant pour ces cours (de 5 à 18)
                 foreach ($coursesToTake as $courseId) {
+                    $cote = rand(5, 18);
                     Note::updateOrCreate([
                         'student_id' => $student->id,
                         'course_id' => $courseId,
                         'academic_year_id' => $data['year']->id,
                         'exam_session_id' => $session->id,
                     ], [
-                        'cote' => rand(5, 18)
+                        'cote' => $cote,
+                        'observation' => $cote >= 10 ? 'Réussite' : 'Échec',
+                        'situation' => 'Première session'
                     ]);
                 }
             }
@@ -225,7 +228,8 @@ class SimulateDeliberation extends Command
         ], [
             'institution_id' => $institution->id,
             'secretary_id' => $teacher->id,
-            'president_id' => $teacher->id
+            'president_id' => $teacher->id,
+            'member_id' => $teacher->id
         ]);
         $this->info("Jury créé pour BAC3. Secrétaire : Nkulu Masangu Patrick.");
 
