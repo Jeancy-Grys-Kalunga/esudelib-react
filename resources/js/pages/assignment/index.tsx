@@ -633,7 +633,10 @@ export default function AssignmentManager({
                                                         <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 font-medium whitespace-nowrap">
                                                             {assignment.promotion}
                                                         </Badge>
-                                                        <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{assignment.semester}</span>
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{assignment.semester}</span>
+                                                            <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[180px]" title={assignment.institution}>{assignment.institution}</span>
+                                                        </div>
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
