@@ -42,51 +42,60 @@ class SimulateDeliberation extends Command
 
         // 1. Années Académiques
         $years = [
-            '2023-2024' => AcademicYear::firstOrCreate(['title' => '2023-2024'], ['status' => 'Clôturée']),
-            '2024-2025' => AcademicYear::firstOrCreate(['title' => '2024-2025'], ['status' => 'Clôturée']),
-            '2025-2026' => AcademicYear::firstOrCreate(['title' => '2025-2026'], ['status' => 'En cours']),
+            '2023-2024' => AcademicYear::firstOrCreate(['title' => '2023-2024']),
+            '2024-2025' => AcademicYear::firstOrCreate(['title' => '2024-2025']),
+            '2025-2026' => AcademicYear::firstOrCreate(['title' => '2025-2026']),
         ];
         $this->info("Années académiques configurées.");
 
-        // 2. Trouver la promotion BAC 1 CSI (et modifier son nom)
-        $promoBac1 = Promotion::where('title', 'BAC 1 CSI')->first();
-        if (!$promoBac1) {
+        // 2. Trouver la promotion BAC 1 CSI
+        $promoBac1CSI = Promotion::where('title', 'BAC 1 CSI')->first();
+        if (!$promoBac1CSI) {
             $this->warn("La promotion 'BAC 1 CSI' stricte non trouvée. Recherche partielle...");
-            $promoBac1 = Promotion::where('title', 'LIKE', '%BAC 1 CSI%')->first();
+            $promoBac1CSI = Promotion::where('title', 'LIKE', '%BAC 1 CSI%')->first();
         }
 
-        if (!$promoBac1) {
-            $this->warn("Promotion introuvable. Création d'une promotion de test pour permettre la démo locale.");
-            $institution = Institution::firstOrCreate(['name' => 'ISS Lubumbashi']);
-            $promoBac1 = Promotion::create(['title' => 'BAC 1 CSI', 'institution_id' => $institution->id]);
+        if (!$promoBac1CSI) {
+            $this->error("Promotion BAC 1 CSI introuvable.");
+            return;
         }
         
-        $institution = $promoBac1->institution;
-        $promoBac1->update(['title' => 'BAC1 INFORMATIQUE DE GESTION']);
-        $this->info("Promotion mise à jour en : BAC1 INFORMATIQUE DE GESTION.");
+        $institution = $promoBac1CSI->institution;
 
-        // Création BAC 2 et BAC 3
+        // Récupérer ou créer les vraies promotions
+        $promoBac1Info = Promotion::firstOrCreate([
+            'title' => 'BAC1 INFORMATIQUE DE GESTION',
+            'institution_id' => $institution->id,
+            'faculty_id' => $promoBac1CSI->faculty_id
+        ]);
+        
         $promoBac2 = Promotion::firstOrCreate([
             'title' => 'BAC2 INFORMATIQUE DE GESTION',
             'institution_id' => $institution->id,
-            'faculty_id' => $promoBac1->faculty_id
+            'faculty_id' => $promoBac1CSI->faculty_id
         ]);
         
         $promoBac3 = Promotion::firstOrCreate([
             'title' => 'BAC3 INFORMATIQUE DE GESTION',
             'institution_id' => $institution->id,
-            'faculty_id' => $promoBac1->faculty_id
+            'faculty_id' => $promoBac1CSI->faculty_id
         ]);
-        $this->info("Promotions BAC 2 et BAC 3 configurées.");
+        $this->info("Promotions BAC1, BAC2 et BAC3 configurées.");
 
-        // 3. Récupérer 10 étudiants inscrits en BAC1
-        $inscriptions = Inscription::where('promotion_id', $promoBac1->id)
+        // 3. Récupérer 10 étudiants inscrits en BAC1 CSI
+        $inscriptions = Inscription::where('promotion_id', $promoBac1CSI->id)
                                    ->with('student.user')
                                    ->take(10)
                                    ->get();
                                    
         $students = collect();
         foreach ($inscriptions as $insc) {
+            // Modification de l'inscription dans la table sans toucher au nom de la promotion source
+            $insc->update([
+                'promotion_id' => $promoBac1Info->id,
+                'academic_year_id' => $years['2023-2024']->id
+            ]);
+
             if ($insc->student) {
                 $students->push($insc->student);
             }
@@ -125,19 +134,18 @@ class SimulateDeliberation extends Command
         $this->info("10 étudiants récupérés (Mot de passe réinitialisé à 12345678).");
 
         // 4. Inscription et Cours + Notes (BAC1, BAC2, BAC3)
-        $coursesBac1 = CourseProgramDetail::where('promotion_id', $promoBac1->id)->pluck('course_id');
+        $coursesBac1 = CourseProgramDetail::where('promotion_id', $promoBac1Info->id)->pluck('course_id');
         $coursesBac2 = CourseProgramDetail::where('promotion_id', $promoBac2->id)->pluck('course_id');
         $coursesBac3 = CourseProgramDetail::where('promotion_id', $promoBac3->id)->pluck('course_id');
         
         $allPromoCourses = [
-            'BAC1' => ['promo_id' => $promoBac1->id, 'year' => $years['2023-2024'], 'courses' => $coursesBac1],
+            'BAC1' => ['promo_id' => $promoBac1Info->id, 'year' => $years['2023-2024'], 'courses' => $coursesBac1],
             'BAC2' => ['promo_id' => $promoBac2->id, 'year' => $years['2024-2025'], 'courses' => $coursesBac2],
             'BAC3' => ['promo_id' => $promoBac3->id, 'year' => $years['2025-2026'], 'courses' => $coursesBac3],
         ];
 
         $session = ExamSession::firstOrCreate(
-            ['title' => 'Première session', 'institution_id' => $institution->id],
-            ['status' => 'Active']
+            ['title' => 'Première session', 'institution_id' => $institution->id]
         );
 
         $this->info("Inscription des étudiants, assignation des cours et génération des notes...");
@@ -152,8 +160,7 @@ class SimulateDeliberation extends Command
                     'promotion_id' => $data['promo_id'],
                     'academic_year_id' => $data['year']->id,
                 ], [
-                    'institution_id' => $institution->id,
-                    'status' => 'Validé'
+                    'institution_id' => $institution->id
                 ]);
 
                 if ($data['courses']->isEmpty()) {
@@ -188,27 +195,34 @@ class SimulateDeliberation extends Command
 
         // 5. Création du Jury pour BAC3 (Nkulu Masangu Patrick)
         $roleTeacher = Role::firstOrCreate(['name' => 'Enseignant']);
-        $teacherUser = User::firstOrCreate(
-            ['email' => 'nkulu.masangu@iss-lubumbashi.cd'],
-            ['name' => 'Nkulu Masangu Patrick', 'password' => Hash::make('password')]
-        );
-        $teacherUser->assignRole($roleTeacher);
         
-        $teacher = Teacher::firstOrCreate(
-            ['user_id' => $teacherUser->id],
-            ['name' => 'Nkulu Masangu Patrick', 'institution_id' => $institution->id]
-        );
+        $teacher = Teacher::where('name', 'LIKE', '%Nkulu Masangu Patrick%')->first();
+        $teacherUser = null;
+        
+        if ($teacher && $teacher->user_id) {
+            $teacherUser = User::find($teacher->user_id);
+            $this->info("Enseignant Nkulu Masangu Patrick trouvé. Identifiants de l'enseignant conservés.");
+        } else {
+            $teacherUser = User::firstOrCreate(
+                ['email' => 'nkulu.masangu@iss-lubumbashi.cd'],
+                ['name' => 'Nkulu Masangu Patrick', 'password' => Hash::make('password')]
+            );
+            $teacherUser->assignRole($roleTeacher);
+            
+            $teacher = Teacher::firstOrCreate(
+                ['user_id' => $teacherUser->id],
+                ['name' => 'Nkulu Masangu Patrick', 'institution_id' => $institution->id]
+            );
+            $this->info("Enseignant Nkulu Masangu Patrick créé.");
+        }
         
         $jury = Jury::updateOrCreate([
             'promotion_id' => $promoBac3->id,
             'academic_year_id' => $years['2025-2026']->id,
-            'exam_session_id' => $session->id,
         ], [
             'institution_id' => $institution->id,
             'secretary_id' => $teacher->id,
-            'president_id' => $teacher->id,
-            'date_session' => now(),
-            'status' => 'En cours'
+            'president_id' => $teacher->id
         ]);
         $this->info("Jury créé pour BAC3. Secrétaire : Nkulu Masangu Patrick.");
 
@@ -217,8 +231,8 @@ class SimulateDeliberation extends Command
         $this->info("       RÉSUMÉ ET IDENTIFIANTS DE TEST       ");
         $this->info("=============================================");
         $this->info("\nENSEIGNANT (SECRÉTAIRE DU JURY BAC3) :");
-        $this->info("  Email : nkulu.masangu@iss-lubumbashi.cd");
-        $this->info("  Mot de passe : password");
+        $this->info("  Email : " . ($teacherUser ? $teacherUser->email : 'nkulu.masangu@iss-lubumbashi.cd'));
+        $this->info("  Mot de passe : [Non modifié, utilisez ses identifiants existants]");
         $this->info("\nÉTUDIANTS (Mot de passe : 12345678) :");
         foreach ($students as $student) {
             $email = $student->user ? $student->user->email : 'N/A';
