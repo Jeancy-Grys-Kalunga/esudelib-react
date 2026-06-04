@@ -495,12 +495,18 @@ class MasterPredictionService
     /**
      * Calcule les statistiques de prédiction pour un contexte donné
      */
-    public function calculatePredictionStats(array $context): array
+    public function calculatePredictionStats(array $context = null): array
     {
-        $predictions = MasterPrediction::whereHas('student.notes', function ($query) use ($context) {
-            $query->where('academic_year_id', $context['academic_year_id'])
-                ->where('promotion_id', $context['promotion_id']);
-        })->get();
+        $query = MasterPrediction::query();
+
+        if ($context) {
+            $query->whereHas('student.notes', function ($q) use ($context) {
+                $q->where('academic_year_id', $context['academic_year_id'])
+                  ->where('promotion_id', $context['promotion_id']);
+            });
+        }
+
+        $predictions = $query->get();
 
         if ($predictions->count() === 0) {
             return [
@@ -537,18 +543,26 @@ class MasterPredictionService
     /**
      * Prédit l'orientation pour tous les étudiants d'une promotion
      */
-    public function predictBatch(array $context): array
+    public function predictBatch(array $context = null): array
     {
         // Vérifier si le modèle existe
         if (!file_exists($this->modelPath)) {
             throw new Exception("Modèle non entraîné. Veuillez d'abord entraîner le modèle.");
         }
 
-        // Récupérer tous les étudiants de la promotion
-        $students = Student::whereHas('notes', function ($query) use ($context) {
-            $query->where('academic_year_id', $context['academic_year_id'])
-                ->where('promotion_id', $context['promotion_id']);
-        })->get();
+        // Récupérer les étudiants concernés
+        $query = Student::query();
+
+        if ($context) {
+            $query->whereHas('notes', function ($q) use ($context) {
+                $q->where('academic_year_id', $context['academic_year_id'])
+                    ->where('promotion_id', $context['promotion_id']);
+            });
+        } else {
+            $query->has('notes');
+        }
+
+        $students = $query->get();
 
         $results = [
             'successful' => 0,

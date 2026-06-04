@@ -29,30 +29,18 @@ class OrientationPredictionController extends Controller
     public function showPredictionInterface(Request $request)
     {
         try {
-            $context = $request->session()->get('jury_context');
-
-            if (!$context) {
-                abort(403, 'Jury context not set.');
-            }
-
-            $academicYear = AcademicYear::findOrFail($context['academic_year_id']);
-            $promotion = Promotion::findOrFail($context['promotion_id']);
+            // Get the most recent academic year and any promotion as fallback for the UI
+            $academicYear = AcademicYear::latest()->first() ?? new AcademicYear();
+            $promotion = Promotion::first() ?? new Promotion();
 
             // Récupérer les étudiants avec leurs moyennes et prédictions
-            $students = Student::whereHas('notes', function ($query) use ($context) {
-                $query->where('academic_year_id', $context['academic_year_id'])
-                    ->where('promotion_id', $context['promotion_id']);
-            })
+            $students = Student::has('notes')
                 ->with(['masterPrediction'])
-                ->with(['notes' => function ($query) use ($context) {
-                    $query->where('academic_year_id', $context['academic_year_id'])
-                        ->where('promotion_id', $context['promotion_id']);
-                }])
+                ->with('notes')
                 ->paginate(20);
 
             // Récupérer les crédits pour le calcul de la moyenne
             $coursesWithCredits = DB::table('course_program_details')
-                ->where('promotion_id', $promotion->id)
                 ->pluck('credits', 'course_id')
                 ->toArray();
 
@@ -62,8 +50,7 @@ class OrientationPredictionController extends Controller
                 return $student;
             });
 
-            // Calculer les statistiques
-            $stats = $this->predictionService->calculatePredictionStats($context);
+            $stats = $this->predictionService->calculatePredictionStats();
 
             return Inertia::render('jury/orientation-prediction', [
                 'academicYear' => $academicYear,
@@ -135,14 +122,7 @@ class OrientationPredictionController extends Controller
     {
         try {
             $context = $request->session()->get('jury_context');
-
-            if (!$context) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Contexte de jury non défini'
-                ], 400);
-            }
-
+            
             $results = $this->predictionService->predictBatch($context);
 
             // Sanitize UTF-8 for response
