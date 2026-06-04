@@ -29,20 +29,37 @@ class OrientationPredictionController extends Controller
     public function showPredictionInterface(Request $request)
     {
         try {
-            // Get the most recent academic year and any promotion as fallback for the UI
-            $academicYear = AcademicYear::latest()->first() ?? new AcademicYear();
-            $promotion = Promotion::first() ?? new Promotion();
+            $academicYears = AcademicYear::all();
+            $promotions = Promotion::all();
+
+            $academicYearId = $request->get('academic_year_id') ?? AcademicYear::latest()->first()->id ?? null;
+            $promotionId = $request->get('promotion_id');
+
+            $academicYear = $academicYearId ? AcademicYear::find($academicYearId) : new AcademicYear();
+            $promotion = $promotionId ? Promotion::find($promotionId) : new Promotion();
+
+            $query = Student::query();
+            
+            if ($academicYearId || $promotionId) {
+                $query->whereHas('notes', function ($q) use ($academicYearId, $promotionId) {
+                    if ($academicYearId) $q->where('academic_year_id', $academicYearId);
+                    if ($promotionId) $q->where('promotion_id', $promotionId);
+                });
+            } else {
+                $query->has('notes');
+            }
 
             // Récupérer les étudiants avec leurs moyennes et prédictions
-            $students = Student::has('notes')
-                ->with(['masterPrediction'])
+            $students = $query->with(['masterPrediction'])
                 ->with('notes')
                 ->paginate(20);
 
             // Récupérer les crédits pour le calcul de la moyenne
-            $coursesWithCredits = DB::table('course_program_details')
-                ->pluck('credits', 'course_id')
-                ->toArray();
+            $coursesQuery = DB::table('course_program_details');
+            if ($promotionId) {
+                $coursesQuery->where('promotion_id', $promotionId);
+            }
+            $coursesWithCredits = $coursesQuery->pluck('credits', 'course_id')->toArray();
 
             // Calculer la moyenne pondérée pour chaque étudiant
             $students->getCollection()->transform(function ($student) use ($coursesWithCredits) {
@@ -50,9 +67,19 @@ class OrientationPredictionController extends Controller
                 return $student;
             });
 
-            $stats = $this->predictionService->calculatePredictionStats();
+            $context = [];
+            if ($academicYearId) $context['academic_year_id'] = $academicYearId;
+            if ($promotionId) $context['promotion_id'] = $promotionId;
+
+            $stats = $this->predictionService->calculatePredictionStats(empty($context) ? null : $context);
 
             return Inertia::render('jury/orientation-prediction', [
+                'academicYears' => $academicYears,
+                'promotions' => $promotions,
+                'filters' => [
+                    'academic_year_id' => $academicYearId,
+                    'promotion_id' => $promotionId,
+                ],
                 'academicYear' => $academicYear,
                 'promotion' => $promotion,
                 'students' => $students,
@@ -121,9 +148,15 @@ class OrientationPredictionController extends Controller
     public function predictBatch(Request $request)
     {
         try {
-            $context = $request->session()->get('jury_context');
+            $context = [];
+            if ($request->has('academic_year_id') && $request->get('academic_year_id')) {
+                $context['academic_year_id'] = $request->get('academic_year_id');
+            }
+            if ($request->has('promotion_id') && $request->get('promotion_id')) {
+                $context['promotion_id'] = $request->get('promotion_id');
+            }
             
-            $results = $this->predictionService->predictBatch($context);
+            $results = $this->predictionService->predictBatch(empty($context) ? null : $context);
 
             // Sanitize UTF-8 for response
             array_walk_recursive($results, function (&$item, $key) {

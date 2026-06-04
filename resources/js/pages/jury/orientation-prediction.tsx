@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Head, router } from '@inertiajs/react';
 import axios, { AxiosError } from 'axios';
 import {
@@ -130,6 +131,12 @@ interface PredictionResponse {
 }
 
 interface OrientationPredictionProps {
+    academicYears: AcademicYear[];
+    promotions: Promotion[];
+    filters: {
+        academic_year_id: number | null;
+        promotion_id: number | null;
+    };
     academicYear: AcademicYear;
     promotion: Promotion;
     students: PaginatedStudents;
@@ -147,7 +154,7 @@ interface ModelStatus {
     };
 }
 
-export default function OrientationPrediction({ academicYear, promotion, students, stats }: OrientationPredictionProps) {
+export default function OrientationPrediction({ academicYears, promotions, filters, academicYear, promotion, students, stats }: OrientationPredictionProps) {
     const [predictions, setPredictions] = useState<Record<number, PredictionResponse>>({});
     const [loadingPredictions, setLoadingPredictions] = useState<Record<number, boolean>>({}); // Renamed from 'loading'
     const [activeStudent, setActiveStudent] = useState<number | null>(null);
@@ -170,6 +177,16 @@ export default function OrientationPrediction({ academicYear, promotion, student
         intention: '',
     });
     const [isSavingVariables, setIsSavingVariables] = useState(false);
+
+    const handleFilterChange = (key: 'academic_year_id' | 'promotion_id', value: string) => {
+        const parsedValue = (value === 'all_years' || value === 'all_promos' || value === '') ? null : Number(value);
+        const newFilters = { ...filters, [key]: parsedValue };
+        router.get(
+            route('jury.prediction.interface'),
+            { ...newFilters },
+            { preserveState: true, replace: true }
+        );
+    };
 
     // Vérifier le statut du modèle au chargement
     useEffect(() => {
@@ -281,9 +298,13 @@ export default function OrientationPrediction({ academicYear, promotion, student
         setShowBatchConfirm(false);
         setIsBatchPredicting(true);
         try {
+            const batchParams = {};
+            if (filters?.academic_year_id) batchParams['academic_year_id'] = filters.academic_year_id;
+            if (filters?.promotion_id) batchParams['promotion_id'] = filters.promotion_id;
+
             const response = await axios.post(
                 '/jury/predictions/predict-batch',
-                {},
+                batchParams,
                 {
                     timeout: 180000, // 3 minutes
                 },
@@ -473,16 +494,45 @@ export default function OrientationPrediction({ academicYear, promotion, student
                                 </div>
                                 <div>
                                     <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Analyse Prédictive des Filières de Master</h1>
-                                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                                        <Badge variant="outline" className="bg-indigo-100 text-indigo-800">
-                                            <GraduationCap className="mr-1 h-4 w-4" />
-                                            {academicYear.title}
-                                        </Badge>
-                                        <Badge variant="outline" className="bg-purple-100 text-purple-800">
-                                            {promotion.title}
-                                        </Badge>
+                                    <div className="mt-4 flex flex-wrap items-center gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <Select
+                                                value={filters?.academic_year_id?.toString() || ''}
+                                                onValueChange={(val) => handleFilterChange('academic_year_id', val)}
+                                            >
+                                                <SelectTrigger className="w-[200px] bg-white">
+                                                    <GraduationCap className="mr-2 h-4 w-4 text-indigo-500" />
+                                                    <SelectValue placeholder="Toutes les années" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all_years">Toutes les années</SelectItem>
+                                                    {academicYears.map((ay) => (
+                                                        <SelectItem key={ay.id} value={ay.id.toString()}>{ay.title}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-2">
+                                            <Select
+                                                value={filters?.promotion_id?.toString() || ''}
+                                                onValueChange={(val) => handleFilterChange('promotion_id', val)}
+                                            >
+                                                <SelectTrigger className="w-[250px] bg-white">
+                                                    <BookOpen className="mr-2 h-4 w-4 text-purple-500" />
+                                                    <SelectValue placeholder="Toutes les promotions" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all_promos">Toutes les promotions</SelectItem>
+                                                    {promotions.map((p) => (
+                                                        <SelectItem key={p.id} value={p.id.toString()}>{p.title}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        
                                         {modelStatus?.model_exists && (
-                                            <Badge className="bg-green-100 text-green-800">
+                                            <Badge className="bg-green-100 text-green-800 ml-auto border-green-200">
                                                 <Cpu className="mr-1 h-4 w-4" />
                                                 Modèle disponible
                                             </Badge>
