@@ -82,8 +82,8 @@ class SimulateDeliberation extends Command
         ]);
         $this->info("Promotions BAC1, BAC2 et BAC3 configurées.");
 
-        // 3. Récupérer 10 étudiants inscrits en BAC1 CSI
-        $inscriptions = Inscription::where('promotion_id', $promoBac1CSI->id)
+        // 3. Récupérer 10 étudiants (qu'ils soient encore dans BAC 1 CSI ou déjà basculés)
+        $inscriptions = Inscription::whereIn('promotion_id', [$promoBac1CSI->id, $promoBac1Info->id])
                                    ->with('student.user')
                                    ->take(10)
                                    ->get();
@@ -121,6 +121,7 @@ class SimulateDeliberation extends Command
                     'matricule' => 'MAT' . rand(1000, 9999) . '-' . $i,
                     'name' => 'Test Etudiant ' . ($i + 1),
                     'institution_id' => $institution->id,
+                    'gendre' => 'M',
                 ]);
                 $students->push($student);
             }
