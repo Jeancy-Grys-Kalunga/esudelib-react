@@ -76,10 +76,49 @@ class CopyProgramCourses extends Command
 
             if (!$destPromo) {
                 $this->warn("Promotion '{$sourcePromo->title}' introuvable dans ISC. Création automatique...");
+                
+                // 1. Trouver la faculté source
+                $sourceFaculty = DB::table('faculties')->where('id', $sourcePromo->faculty_id)->first();
+                $destFacultyId = null;
+
+                if ($sourceFaculty) {
+                    // 2. Chercher la faculté destination avec le même titre
+                    $destFaculty = DB::table('faculties')
+                        ->where('institution_id', $destInstitution->id)
+                        ->where('title', $sourceFaculty->title)
+                        ->first();
+                        
+                    if ($destFaculty) {
+                        $destFacultyId = $destFaculty->id;
+                    } else {
+                        $this->warn("Faculté '{$sourceFaculty->title}' introuvable dans ISC. Création...");
+                        $destFacultyId = DB::table('faculties')->insertGetId([
+                            'title' => $sourceFaculty->title,
+                            'institution_id' => $destInstitution->id,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                } else {
+                    // Si on ne trouve pas de faculté source (théoriquement impossible si Not Null)
+                    // on assigne une faculté par défaut ou on crée une générique.
+                    $fallbackFaculty = DB::table('faculties')->where('institution_id', $destInstitution->id)->first();
+                    if ($fallbackFaculty) {
+                        $destFacultyId = $fallbackFaculty->id;
+                    } else {
+                        $destFacultyId = DB::table('faculties')->insertGetId([
+                            'title' => 'Faculté Générale',
+                            'institution_id' => $destInstitution->id,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                }
+
                 $destPromoId = DB::table('promotions')->insertGetId([
                     'title' => $sourcePromo->title,
                     'institution_id' => $destInstitution->id,
-                    'faculty_id' => null, // S'il y a des erreurs de nullité ici, assurez-vous d'avoir une faculty_id par défaut ou de la rendre nullable
+                    'faculty_id' => $destFacultyId,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
