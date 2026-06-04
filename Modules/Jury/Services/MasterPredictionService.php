@@ -501,8 +501,12 @@ class MasterPredictionService
 
         if ($context) {
             $query->whereHas('student.notes', function ($q) use ($context) {
-                $q->where('academic_year_id', $context['academic_year_id'])
-                  ->where('promotion_id', $context['promotion_id']);
+                if (isset($context['academic_year_id'])) {
+                    $q->where('academic_year_id', $context['academic_year_id']);
+                }
+                if (isset($context['promotion_id'])) {
+                    $q->where('promotion_id', $context['promotion_id']);
+                }
             });
         }
 
