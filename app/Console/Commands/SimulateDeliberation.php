@@ -122,6 +122,7 @@ class SimulateDeliberation extends Command
                     'name' => 'Test Etudiant ' . ($i + 1),
                     'institution_id' => $institution->id,
                     'gendre' => 'M',
+                    'date_of_birth' => '2000-01-01',
                 ]);
                 $students->push($student);
             }
