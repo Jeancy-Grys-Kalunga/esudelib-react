@@ -112,6 +112,7 @@ class SimulateDeliberation extends Command
                     'name' => 'Test Etudiant ' . ($i + 1),
                     'email' => $email,
                     'password' => Hash::make('12345678'),
+                    'is_active' => 1,
                 ]);
                 $user->assignRole($roleStudent);
                 
@@ -205,7 +206,7 @@ class SimulateDeliberation extends Command
         } else {
             $teacherUser = User::firstOrCreate(
                 ['email' => 'nkulu.masangu@iss-lubumbashi.cd'],
-                ['name' => 'Nkulu Masangu Patrick', 'password' => Hash::make('password')]
+                ['name' => 'Nkulu Masangu Patrick', 'password' => Hash::make('password'), 'is_active' => 1]
             );
             $teacherUser->assignRole($roleTeacher);
             
