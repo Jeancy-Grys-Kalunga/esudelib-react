@@ -1,6 +1,6 @@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Head, router, useForm } from '@inertiajs/react';
-import { ArrowLeftRight, BookOpen, Download, Edit, Loader2, Plus, Scale, Search, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeftRight, BookOpen, BrainCircuit, Download, Edit, Loader2, Plus, Scale, Search, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 
@@ -455,6 +455,14 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                 >
                                     <Scale size={16} className="text-blue-600" />
                                     Équivalence de Formation
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="gap-2 border-indigo-200 shadow-sm hover:bg-indigo-50"
+                                    onClick={() => (window.location.href = route('jury.prediction.interface'))}
+                                >
+                                    <BrainCircuit size={16} className="text-indigo-600" />
+                                    Analyse Prédictive Master
                                 </Button>
                             </>
                         )}

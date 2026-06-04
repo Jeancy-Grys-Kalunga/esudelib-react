@@ -16,6 +16,7 @@ use Modules\Teacher\Entities\Teacher;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\Models\Permission;
 
 class SimulateDeliberation extends Command
 {
@@ -127,7 +128,7 @@ class SimulateDeliberation extends Command
                     'institution_id' => $institution->id,
                     'gendre' => 'M',
                     'date_of_birth' => '2000-01-01',
-                    'phone' => '+24384971029' . rand(10, 99) . $i,
+                    'phone' => '+24384971029' . rand(10, 99) . uniqid(),
                 ]);
                 $students->push($student);
             }
@@ -195,7 +196,8 @@ class SimulateDeliberation extends Command
                     ], [
                         'cote' => $cote,
                         'observation' => $cote >= 10 ? 'Réussite' : 'Échec',
-                        'situation' => 'Première session'
+                        'situation' => 'Première session',
+                        'promotion_id' => $data['promo_id']
                     ]);
                 }
             }
