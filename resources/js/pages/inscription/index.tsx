@@ -69,6 +69,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isGeneralImportModalOpen, setIsGeneralImportModalOpen] = useState(false);
     const [isStandaloneEquivalenceModalOpen, setIsStandaloneEquivalenceModalOpen] = useState(false);
+    const [isPredictionModalOpen, setIsPredictionModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [inscriptionToDelete, setInscriptionToDelete] = useState<Inscription | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -459,7 +460,7 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                                 <Button
                                     variant="outline"
                                     className="gap-2 border-indigo-200 shadow-sm hover:bg-indigo-50"
-                                    onClick={() => (window.location.href = route('jury.prediction.interface'))}
+                                    onClick={() => setIsPredictionModalOpen(true)}
                                 >
                                     <BrainCircuit size={16} className="text-indigo-600" />
                                     Analyse Prédictive Master
@@ -1298,6 +1299,37 @@ export default function InscriptionIndex({ inscriptions: allInscriptions, can, f
                             >
                                 {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Scale className="mr-2 h-4 w-4" />}
                                 Lancer la Comparaison
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Modal Analyse Prédictive Master */}
+                <Dialog open={isPredictionModalOpen} onOpenChange={setIsPredictionModalOpen}>
+                    <DialogContent className="max-h-[95vh] h-[95vh] w-[95vw] max-w-[1400px] overflow-hidden p-0 flex flex-col sm:max-w-[1400px]">
+                        <DialogHeader className="px-6 py-4 border-b bg-white flex-shrink-0">
+                            <DialogTitle className="flex items-center gap-2 text-xl text-indigo-700">
+                                <BrainCircuit className="h-5 w-5" />
+                                Analyse Prédictive Master
+                            </DialogTitle>
+                            <DialogDescription className="sr-only">
+                                Interface d'analyse prédictive pour les filières de Master.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="flex-1 overflow-hidden bg-gray-50">
+                            {isPredictionModalOpen && (
+                                <iframe
+                                    src={route('jury.prediction.interface') + '?embedded=true'}
+                                    className="w-full h-full border-0"
+                                    title="Analyse Prédictive"
+                                />
+                            )}
+                        </div>
+
+                        <DialogFooter className="px-6 py-4 border-t bg-white flex-shrink-0">
+                            <Button variant="outline" onClick={() => setIsPredictionModalOpen(false)}>
+                                Fermer
                             </Button>
                         </DialogFooter>
                     </DialogContent>
