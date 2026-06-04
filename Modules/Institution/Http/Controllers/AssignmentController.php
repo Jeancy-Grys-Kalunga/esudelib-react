@@ -158,9 +158,14 @@ class AssignmentController extends Controller
                     'name' => $course->title ?? $course->name,
                     'details' => $course->details,
                     'promotions' => $course->promotions->map(function ($promotion) {
+                        $institutionName = $promotion->institution ? $promotion->institution->name : '';
+                        $displayName = $promotion->title;
+                        if ($institutionName) {
+                            $displayName .= ' (' . $institutionName . ')';
+                        }
                         return [
                             'id' => $promotion->id,
-                            'name' => $promotion->title
+                            'name' => $displayName
                         ];
                     })->values()
                 ];
