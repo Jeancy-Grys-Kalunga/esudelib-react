@@ -29,7 +29,7 @@ class StudentService
         $courses = $this->getFormattedCourses($student);
         $totalCredits = $courses->where('selected', true)->sum('credits');
         
-        $studentNotes = Note::where('student_id', $student->id)->get()->groupBy('course_id');
+        $studentNotes = Note::with('examSession')->where('student_id', $student->id)->get()->groupBy('course_id');
         $validatedCredits = 0;
         $validatedCourses = collect();
         $nonValidatedCourses = collect();
@@ -107,7 +107,7 @@ class StudentService
         }
 
         $selectedCourseIds = $student->courses()->pluck('courses.id')->toArray();
-        $studentNotes = Note::where('student_id', $student->id)->get()->groupBy('course_id');
+        $studentNotes = Note::with('examSession')->where('student_id', $student->id)->get()->groupBy('course_id');
 
         return $allCourses->map(function ($course) use ($selectedCourseIds, $studentNotes) {
             $notes = $studentNotes[$course->id] ?? collect([]);
@@ -141,7 +141,7 @@ class StudentService
 
     public function getResults(Student $student)
     {
-        return Note::with('course')
+        return Note::with(['course', 'examSession'])
             ->where('student_id', $student->id)
             ->get()
             ->map(function ($note) use ($student) {
@@ -166,7 +166,7 @@ class StudentService
 
     public function getFailedCourses(Student $student)
     {
-        return Note::with('course')
+        return Note::with(['course', 'examSession'])
             ->where('student_id', $student->id)
             ->where('cote', '<', 10)
             ->whereDoesntHave('course.appeals', function ($query) use ($student) {
