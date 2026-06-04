@@ -188,8 +188,7 @@ class SimulateDeliberation extends Command
                         'academic_year_id' => $data['year']->id,
                         'exam_session_id' => $session->id,
                     ], [
-                        'cote' => rand(5, 18),
-                        'institution_id' => $institution->id
+                        'cote' => rand(5, 18)
                     ]);
                 }
             }
