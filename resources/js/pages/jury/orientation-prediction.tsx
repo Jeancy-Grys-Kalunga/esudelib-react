@@ -479,9 +479,10 @@ export default function OrientationPrediction({ academicYears, promotions, filte
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
-    return (
-        <AppLayout>
-            <div className="container mx-auto px-4 py-8">
+    const isEmbedded = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('embedded') === 'true';
+
+    const content = (
+        <div className="container mx-auto px-4 py-8">
                 <Head title="Analyse Prédictive - Filières de Master" />
 
                 {/* En-tête moderne */}
@@ -1478,6 +1479,14 @@ export default function OrientationPrediction({ academicYears, promotions, filte
                     </DialogContent>
                 </Dialog>
             </div>
-        </AppLayout>
     );
+    if (isEmbedded) {
+        return (
+            <div className="min-h-screen bg-white">
+                {content}
+            </div>
+        );
+    }
+
+    return <AppLayout>{content}</AppLayout>;
 }
