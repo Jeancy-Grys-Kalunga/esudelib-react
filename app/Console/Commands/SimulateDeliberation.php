@@ -123,7 +123,7 @@ class SimulateDeliberation extends Command
                     'institution_id' => $institution->id,
                     'gendre' => 'M',
                     'date_of_birth' => '2000-01-01',
-                    'phone' => '+24384971029',
+                    'phone' => '+24384971029' . rand(10, 99) . $i,
                 ]);
                 $students->push($student);
             }
