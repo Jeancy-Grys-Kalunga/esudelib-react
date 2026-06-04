@@ -1138,15 +1138,6 @@ export default function ResultsGrid({ students, academicYear, promotion, allCour
                                 {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                                 Exporter Excel
                             </Button>
-
-                            <Button
-                                variant="outline"
-                                className="flex items-center gap-2 border-indigo-500 text-indigo-600 hover:bg-indigo-50"
-                                onClick={() => (window.location.href = route('jury.prediction.interface'))}
-                            >
-                                <BrainCircuit className="h-4 w-4" />
-                                Analyse Prédictive Master
-                            </Button>
                         </div>
                     </div>
                 </div>
